@@ -22,6 +22,7 @@ from PySide6.QtCore import Qt
 
 from src.core.definition_parser import load_definition
 from src.core.rom_reader import RomReader
+from src.core.rom_detector import RomDetector
 from src.ui.table_browser import TableBrowser
 from src.ui.table_viewer import TableViewer
 
@@ -39,15 +40,20 @@ class MainWindow(QMainWindow):
         self.rom_definition = None
         self.rom_reader = None
 
-        # Path to definition file (for NC Miata)
-        self.definition_path = "metadata/lf9veb.xml"
+        # ROM detector for automatic XML matching
+        try:
+            self.rom_detector = RomDetector("metadata")
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Initialization Error",
+                f"Failed to initialize ROM detector:\n{str(e)}"
+            )
+            self.rom_detector = None
 
         # Initialize UI
         self.init_ui()
         self.init_menu()
-
-        # Load definition at startup
-        self.load_definition()
 
     def init_ui(self):
         """Initialize the user interface"""
@@ -101,11 +107,16 @@ class MainWindow(QMainWindow):
         about_action = help_menu.addAction("About")
         about_action.triggered.connect(self.show_about)
 
-    def load_definition(self):
-        """Load ROM definition file"""
+    def load_definition(self, definition_path: str):
+        """
+        Load ROM definition file
+
+        Args:
+            definition_path: Path to XML definition file
+        """
         try:
             self.statusBar().showMessage("Loading ROM definition...")
-            self.rom_definition = load_definition(self.definition_path)
+            self.rom_definition = load_definition(definition_path)
 
             # Populate table browser
             self.table_browser.load_definition(self.rom_definition)
@@ -133,28 +144,55 @@ class MainWindow(QMainWindow):
 
         if file_path:
             try:
-                self.statusBar().showMessage(f"Loading ROM: {file_path}...")
+                self.statusBar().showMessage(f"Detecting ROM ID...")
+
+                # Detect ROM ID and find matching XML definition
+                if not self.rom_detector:
+                    QMessageBox.critical(
+                        self,
+                        "Error",
+                        "ROM detector not initialized. Cannot auto-detect ROM type."
+                    )
+                    return
+
+                rom_id, xml_path = self.rom_detector.detect_rom_id(file_path)
+
+                if not rom_id or not xml_path:
+                    QMessageBox.critical(
+                        self,
+                        "Unknown ROM",
+                        "Could not identify ROM type. No matching definition found.\n\n"
+                        "Supported ROM IDs:\n" +
+                        "\n".join([f"  - {info['xmlid']} ({info['make']} {info['model']})"
+                                   for info in self.rom_detector.get_definitions_summary()])
+                    )
+                    return
+
+                # Load the matching definition
+                self.statusBar().showMessage(f"Detected ROM ID: {rom_id}, loading definition...")
+                self.load_definition(xml_path)
 
                 # Create ROM reader
+                self.statusBar().showMessage(f"Loading ROM data...")
                 self.rom_reader = RomReader(file_path, self.rom_definition)
 
-                # Verify ROM ID
+                # Verify ROM ID (should always pass now, but kept as sanity check)
                 if not self.rom_reader.verify_rom_id():
-                    reply = QMessageBox.question(
+                    QMessageBox.warning(
                         self,
-                        "ROM ID Mismatch",
-                        f"ROM ID does not match expected value for {self.rom_definition.romid.xmlid}.\n"
-                        f"Continue anyway?",
-                        QMessageBox.Yes | QMessageBox.No
+                        "ROM ID Warning",
+                        f"ROM ID verification failed. This should not happen after auto-detection.\n"
+                        f"Expected: {self.rom_definition.romid.internalidstring}\n"
+                        f"This may indicate a detection bug."
                     )
-                    if reply == QMessageBox.No:
-                        self.rom_reader = None
-                        return
 
                 self.current_rom_path = file_path
                 file_name = Path(file_path).name
-                self.setWindowTitle(f"NC ROM Editor - {file_name}")
-                self.statusBar().showMessage(f"Loaded: {file_name}")
+                self.setWindowTitle(f"NC ROM Editor - {file_name} ({rom_id})")
+                self.statusBar().showMessage(
+                    f"Loaded: {file_name} - {self.rom_definition.romid.xmlid} "
+                    f"({len(self.rom_definition.tables)} tables)"
+                )
 
             except Exception as e:
                 QMessageBox.critical(
