@@ -7,6 +7,8 @@ Handles loading, saving, and accessing application settings using QSettings.
 from pathlib import Path
 from PySide6.QtCore import QSettings
 
+from .constants import MAX_RECENT_FILES
+
 
 class AppSettings:
     """Application settings manager using QSettings for persistence"""
@@ -69,7 +71,7 @@ class AppSettings:
             return [files] if files else []
         return files
 
-    def add_recent_file(self, file_path: str, max_recent: int = 10):
+    def add_recent_file(self, file_path: str, max_recent: int = MAX_RECENT_FILES):
         """
         Add a file to the recent files list
 

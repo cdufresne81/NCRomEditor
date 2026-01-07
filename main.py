@@ -26,6 +26,11 @@ from PySide6.QtCore import Qt
 
 from src.utils.logging_config import setup_logging, get_logger
 from src.utils.settings import get_settings
+from src.utils.constants import (
+    APP_NAME, APP_VERSION_STRING, APP_DESCRIPTION,
+    MAIN_WINDOW_X, MAIN_WINDOW_Y, MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT,
+    MAIN_SPLITTER_LEFT, MAIN_SPLITTER_RIGHT
+)
 from src.core.definition_parser import load_definition
 from src.core.rom_reader import RomReader
 from src.core.rom_detector import RomDetector
@@ -37,7 +42,6 @@ from src.core.exceptions import (
     RomReadError
 )
 from src.ui.table_browser import TableBrowser
-from src.ui.table_viewer import TableViewer
 from src.ui.table_viewer_window import TableViewerWindow
 from src.ui.log_console import LogConsole
 from src.ui.settings_dialog import SettingsDialog
@@ -47,13 +51,27 @@ from src.ui.rom_document import RomDocument
 logger = get_logger(__name__)
 
 
+def handle_rom_operation_error(parent, operation: str, exception: Exception):
+    """
+    Handle common ROM operation errors with consistent logging and user feedback
+
+    Args:
+        parent: Parent widget for message box
+        operation: Description of operation that failed (e.g., "open ROM file")
+        exception: The exception that was raised
+    """
+    error_msg = f"Failed to {operation}:\n{str(exception)}"
+    logger.error(error_msg.replace('\n', ' '))
+    QMessageBox.critical(parent, "Error", error_msg)
+
+
 class MainWindow(QMainWindow):
     """Main application window"""
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("NC ROM Editor")
-        self.setGeometry(100, 100, 1400, 900)
+        self.setWindowTitle(APP_NAME)
+        self.setGeometry(MAIN_WINDOW_X, MAIN_WINDOW_Y, MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT)
 
         logger.info("Initializing NC ROM Editor")
 
@@ -72,7 +90,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(
                     self,
                     "Setup Required",
-                    "NC ROM Editor requires a metadata directory to function.\n"
+                    f"{APP_NAME} requires a metadata directory to function.\n"
                     "Application will now exit."
                 )
                 sys.exit(1)
@@ -173,32 +191,39 @@ class MainWindow(QMainWindow):
 
         # Set initial splitter sizes (30% tabs, 70% log)
         # Matches longest table name width on left, rest for activity log
-        main_splitter.setSizes([420, 980])
+        main_splitter.setSizes([MAIN_SPLITTER_LEFT, MAIN_SPLITTER_RIGHT])
 
     def init_menu(self):
         """Initialize the menu bar"""
         menubar = self.menuBar()
 
         # File menu
-        file_menu = menubar.addMenu("File")
+        self.file_menu = menubar.addMenu("File")
 
-        open_action = file_menu.addAction("Open ROM...")
+        open_action = self.file_menu.addAction("Open ROM...")
         open_action.triggered.connect(self.open_rom)
 
-        save_action = file_menu.addAction("Save ROM")
+        save_action = self.file_menu.addAction("Save ROM")
         save_action.triggered.connect(self.save_rom)
 
-        save_as_action = file_menu.addAction("Save ROM As...")
+        save_as_action = self.file_menu.addAction("Save ROM As...")
         save_as_action.triggered.connect(self.save_rom_as)
 
-        file_menu.addSeparator()
+        self.file_menu.addSeparator()
 
-        close_tab_action = file_menu.addAction("Close Tab")
+        close_tab_action = self.file_menu.addAction("Close Tab")
         close_tab_action.triggered.connect(self.close_current_tab)
 
-        file_menu.addSeparator()
+        self.file_menu.addSeparator()
 
-        exit_action = file_menu.addAction("Exit")
+        # Recent files section (will be populated dynamically)
+        self.recent_files_separator = self.file_menu.addSeparator()
+        self.recent_files_actions = []
+        self.update_recent_files_menu()
+
+        self.file_menu.addSeparator()
+
+        exit_action = self.file_menu.addAction("Exit")
         exit_action.triggered.connect(self.close)
 
         # Edit menu
@@ -213,12 +238,74 @@ class MainWindow(QMainWindow):
         about_action = help_menu.addAction("About")
         about_action.triggered.connect(self.show_about)
 
-    def update_no_roms_visibility(self):
-        """Update visibility - placeholder for future use"""
-        # Just update window title based on tab count
+    def update_recent_files_menu(self):
+        """Update the recent files menu with current list"""
+        # Remove existing recent file actions
+        for action in self.recent_files_actions:
+            self.file_menu.removeAction(action)
+        self.recent_files_actions.clear()
+
+        # Get recent files from settings
+        recent_files = self.settings.get_recent_files()
+
+        if recent_files:
+            # Add each recent file
+            for i, file_path in enumerate(recent_files, 1):
+                # Show just the filename, but store full path
+                file_name = Path(file_path).name
+                action_text = f"{i}. {file_name}"
+
+                action = self.file_menu.addAction(action_text)
+                action.setData(file_path)  # Store full path in action data
+                action.setStatusTip(file_path)  # Show full path in status bar
+                action.triggered.connect(lambda checked=False, path=file_path: self.open_recent_file(path))
+
+                # Insert before the separator
+                self.file_menu.insertAction(self.recent_files_separator, action)
+                self.recent_files_actions.append(action)
+
+            # Add "Clear Recent Files" option
+            clear_action = self.file_menu.addAction("Clear Recent Files")
+            clear_action.triggered.connect(self.clear_recent_files)
+            self.file_menu.insertAction(self.recent_files_separator, clear_action)
+            self.recent_files_actions.append(clear_action)
+
+    def open_recent_file(self, file_path: str):
+        """
+        Open a ROM file from recent files list
+
+        Args:
+            file_path: Full path to ROM file
+        """
+        if not Path(file_path).exists():
+            QMessageBox.warning(
+                self,
+                "File Not Found",
+                f"The file no longer exists:\n{file_path}\n\n"
+                "It will be removed from recent files."
+            )
+            # Remove from recent files
+            recent = self.settings.get_recent_files()
+            if file_path in recent:
+                recent.remove(file_path)
+                self.settings.settings.setValue("recent_files", recent)
+                self.settings.settings.sync()
+                self.update_recent_files_menu()
+            return
+
+        # Open the file (reuse existing logic by calling the internal open method)
+        self._open_rom_file(file_path)
+
+    def clear_recent_files(self):
+        """Clear the recent files list"""
+        self.settings.clear_recent_files()
+        self.update_recent_files_menu()
+        logger.info("Recent files list cleared")
+
+    def update_window_title(self):
+        """Update window title based on tab count"""
         if self.tab_widget.count() == 0:
-            self.setWindowTitle("NC ROM Editor")
-        pass
+            self.setWindowTitle(APP_NAME)
 
     def get_current_document(self):
         """
@@ -255,12 +342,11 @@ class MainWindow(QMainWindow):
             if response == QMessageBox.Cancel:
                 return
             elif response == QMessageBox.Save:
-                # TODO: Implement save before close
-                pass
+                document.save()
 
         # Remove the tab
         self.tab_widget.removeTab(index)
-        self.update_no_roms_visibility()
+        self.update_window_title()
 
         logger.info(f"Closed ROM tab: {document.file_name if document else 'unknown'}")
 
@@ -275,14 +361,13 @@ class MainWindow(QMainWindow):
         if index >= 0:
             document = self.tab_widget.widget(index)
             if document:
-                self.setWindowTitle(f"NC ROM Editor - {document.get_tab_title()}")
+                self.setWindowTitle(f"{APP_NAME} - {document.get_tab_title()}")
                 logger.info(f"Switched to ROM: {document.file_name}")
         else:
-            self.setWindowTitle("NC ROM Editor")
-            self.update_no_roms_visibility()
+            self.update_window_title()
 
     def open_rom(self):
-        """Open a ROM file in a new tab"""
+        """Open a ROM file via file dialog"""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Open ROM File",
@@ -291,97 +376,95 @@ class MainWindow(QMainWindow):
         )
 
         if file_path:
-            try:
-                logger.info(f"Opening ROM file: {file_path}")
-                self.statusBar().showMessage(f"Detecting ROM ID...")
+            self._open_rom_file(file_path)
 
-                # Detect ROM ID and find matching XML definition
-                if not self.rom_detector:
-                    logger.error("ROM detector not initialized")
-                    QMessageBox.critical(
-                        self,
-                        "Error",
-                        "ROM detector not initialized. Cannot auto-detect ROM type."
-                    )
-                    return
+    def _open_rom_file(self, file_path: str):
+        """
+        Open a ROM file from a given path
 
-                rom_id, xml_path = self.rom_detector.detect_rom_id(file_path)
+        Args:
+            file_path: Full path to ROM file
+        """
+        try:
+            logger.info(f"Opening ROM file: {file_path}")
+            self.statusBar().showMessage(f"Detecting ROM ID...")
 
-                if not rom_id or not xml_path:
-                    logger.warning(f"No matching ROM definition found for {file_path}")
-                    QMessageBox.critical(
-                        self,
-                        "Unknown ROM",
-                        "Could not identify ROM type. No matching definition found.\n\n"
-                        "Supported ROM IDs:\n" +
-                        "\n".join([f"  - {info['xmlid']} ({info['make']} {info['model']})"
-                                   for info in self.rom_detector.get_definitions_summary()])
-                    )
-                    return
-
-                # Load the matching definition
-                logger.info(f"Detected ROM ID: {rom_id}")
-                self.statusBar().showMessage(f"Detected ROM ID: {rom_id}, loading definition...")
-                rom_definition = load_definition(xml_path)
-
-                # Create ROM reader
-                self.statusBar().showMessage(f"Loading ROM data...")
-                rom_reader = RomReader(file_path, rom_definition)
-
-                # Verify ROM ID (should always pass now, but kept as sanity check)
-                if not rom_reader.verify_rom_id():
-                    logger.warning("ROM ID verification failed after auto-detection")
-                    QMessageBox.warning(
-                        self,
-                        "ROM ID Warning",
-                        f"ROM ID verification failed. This should not happen after auto-detection.\n"
-                        f"Expected: {rom_definition.romid.internalidstring}\n"
-                        f"This may indicate a detection bug."
-                    )
-
-                # Create ROM document widget
-                rom_document = RomDocument(file_path, rom_definition, rom_reader, self)
-                rom_document.table_selected.connect(self.on_table_selected)
-
-                # Add as new tab
-                file_name = Path(file_path).name
-                tab_index = self.tab_widget.addTab(rom_document, file_name)
-                self.tab_widget.setTabToolTip(tab_index, file_path)
-                self.tab_widget.setCurrentIndex(tab_index)
-
-                # Update visibility
-                self.update_no_roms_visibility()
-
-                # Log to console
-                logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                logger.info(f"ROM LOADED: {file_name}")
-                logger.info(f"  ROM ID: {rom_id}")
-                logger.info(f"  Definition: {rom_definition.romid.xmlid}")
-                logger.info(f"  Make/Model: {rom_definition.romid.make} {rom_definition.romid.model}")
-                logger.info(f"  Tables: {len(rom_definition.tables)}")
-                logger.info(f"  Size: {len(rom_reader.rom_data):,} bytes")
-                logger.info(f"  Tab: {tab_index + 1}")
-                logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-                self.statusBar().showMessage(
-                    f"Loaded: {file_name} - {rom_definition.romid.xmlid} "
-                    f"({len(rom_definition.tables)} tables)"
-                )
-
-            except (DetectionError, RomFileError, DefinitionError) as e:
-                logger.error(f"Failed to open ROM file: {e}")
+            # Detect ROM ID and find matching XML definition
+            if not self.rom_detector:
+                logger.error("ROM detector not initialized")
                 QMessageBox.critical(
                     self,
                     "Error",
-                    f"Failed to open ROM file:\n{str(e)}"
+                    "ROM detector not initialized. Cannot auto-detect ROM type."
                 )
-            except Exception as e:
-                logger.error(f"Unexpected error opening ROM file: {e}")
+                return
+
+            rom_id, xml_path = self.rom_detector.detect_rom_id(file_path)
+
+            if not rom_id or not xml_path:
+                logger.warning(f"No matching ROM definition found for {file_path}")
                 QMessageBox.critical(
                     self,
-                    "Error",
-                    f"Failed to open ROM file:\n{str(e)}"
+                    "Unknown ROM",
+                    "Could not identify ROM type. No matching definition found.\n\n"
+                    "Supported ROM IDs:\n" +
+                    "\n".join([f"  - {info['xmlid']} ({info['make']} {info['model']})"
+                               for info in self.rom_detector.get_definitions_summary()])
                 )
+                return
+
+            # Load the matching definition
+            logger.info(f"Detected ROM ID: {rom_id}")
+            self.statusBar().showMessage(f"Detected ROM ID: {rom_id}, loading definition...")
+            rom_definition = load_definition(xml_path)
+
+            # Create ROM reader
+            self.statusBar().showMessage(f"Loading ROM data...")
+            rom_reader = RomReader(file_path, rom_definition)
+
+            # Verify ROM ID (should always pass now, but kept as sanity check)
+            if not rom_reader.verify_rom_id():
+                logger.warning("ROM ID verification failed after auto-detection")
+                QMessageBox.warning(
+                    self,
+                    "ROM ID Warning",
+                    f"ROM ID verification failed. This should not happen after auto-detection.\n"
+                    f"Expected: {rom_definition.romid.internalidstring}\n"
+                    f"This may indicate a detection bug."
+                )
+
+            # Create ROM document widget
+            rom_document = RomDocument(file_path, rom_definition, rom_reader, self)
+            rom_document.table_selected.connect(self.on_table_selected)
+
+            # Add as new tab
+            file_name = Path(file_path).name
+            tab_index = self.tab_widget.addTab(rom_document, file_name)
+            self.tab_widget.setTabToolTip(tab_index, file_path)
+            self.tab_widget.setCurrentIndex(tab_index)
+
+            # Add to recent files list
+            self.settings.add_recent_file(file_path)
+            self.update_recent_files_menu()
+
+            # Log to console
+            logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            logger.info(f"ROM LOADED: {file_name}")
+            logger.info(f"  ROM ID: {rom_id}")
+            logger.info(f"  Definition: {rom_definition.romid.xmlid}")
+            logger.info(f"  Make/Model: {rom_definition.romid.make} {rom_definition.romid.model}")
+            logger.info(f"  Tables: {len(rom_definition.tables)}")
+            logger.info(f"  Size: {len(rom_reader.rom_data):,} bytes")
+            logger.info(f"  Tab: {tab_index + 1}")
+            logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+            self.statusBar().showMessage(
+                f"Loaded: {file_name} - {rom_definition.romid.xmlid} "
+                f"({len(rom_definition.tables)} tables)"
+            )
+
+        except (DetectionError, RomFileError, DefinitionError, Exception) as e:
+            handle_rom_operation_error(self, "open ROM file", e)
 
     def save_rom(self):
         """Save the current ROM file"""
@@ -407,20 +490,8 @@ class MainWindow(QMainWindow):
                 "Success",
                 f"ROM saved successfully to:\n{document.rom_path}"
             )
-        except RomFileError as e:
-            logger.error(f"Failed to save ROM file: {e}")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to save ROM file:\n{str(e)}"
-            )
-        except Exception as e:
-            logger.error(f"Unexpected error saving ROM file: {e}")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to save ROM file:\n{str(e)}"
-            )
+        except (RomFileError, Exception) as e:
+            handle_rom_operation_error(self, "save ROM file", e)
 
     def save_rom_as(self):
         """Save the ROM to a new file"""
@@ -459,20 +530,8 @@ class MainWindow(QMainWindow):
                     "Success",
                     f"ROM saved successfully to:\n{file_path}"
                 )
-            except RomFileError as e:
-                logger.error(f"Failed to save ROM file: {e}")
-                QMessageBox.critical(
-                    self,
-                    "Error",
-                    f"Failed to save ROM file:\n{str(e)}"
-                )
-            except Exception as e:
-                logger.error(f"Unexpected error saving ROM file: {e}")
-                QMessageBox.critical(
-                    self,
-                    "Error",
-                    f"Failed to save ROM file:\n{str(e)}"
-                )
+            except (RomFileError, Exception) as e:
+                handle_rom_operation_error(self, "save ROM file", e)
 
     def on_table_selected(self, table, rom_reader):
         """Handle table selection from browser - opens table in new window"""
@@ -512,26 +571,14 @@ class MainWindow(QMainWindow):
                     f"Failed to read table data for: {table.name}"
                 )
 
-        except (ScalingNotFoundError, RomReadError) as e:
-            logger.error(f"Failed to load table {table.name}: {e}")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to load table:\n{str(e)}"
-            )
-        except Exception as e:
-            logger.error(f"Unexpected error loading table {table.name}: {e}")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to load table:\n{str(e)}"
-            )
+        except (ScalingNotFoundError, RomReadError, Exception) as e:
+            handle_rom_operation_error(self, "load table", e)
 
     def log_startup_message(self):
         """Log application startup message to console"""
         logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        logger.info("NC ROM Editor v0.1.0")
-        logger.info("An open-source ROM editor for NC Miata ECUs")
+        logger.info(f"{APP_NAME} {APP_VERSION_STRING}")
+        logger.info(APP_DESCRIPTION)
         logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         logger.info("")
         logger.info("Ready. Open a ROM file to begin.")
@@ -570,9 +617,9 @@ class MainWindow(QMainWindow):
         """Show about dialog"""
         QMessageBox.about(
             self,
-            "About NC ROM Editor",
-            "NC ROM Editor v0.1.0\n\n"
-            "An open-source ROM editor for NC Miata ECUs\n\n"
+            f"About {APP_NAME}",
+            f"{APP_NAME} {APP_VERSION_STRING}\n\n"
+            f"{APP_DESCRIPTION}\n\n"
             "Designed to replace EcuFlash for ROM editing tasks.\n"
             "Works with RomDrop for ECU flashing."
         )
@@ -591,11 +638,11 @@ def main():
     )
 
     logger.info("=" * 60)
-    logger.info("NC ROM Editor v0.1.0 starting")
+    logger.info(f"{APP_NAME} {APP_VERSION_STRING} starting")
     logger.info("=" * 60)
 
     app = QApplication(sys.argv)
-    app.setApplicationName("NC ROM Editor")
+    app.setApplicationName(APP_NAME)
 
     window = MainWindow()
     window.show()

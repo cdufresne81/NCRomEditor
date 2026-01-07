@@ -6,7 +6,12 @@ Similar to ECUFlash's message window.
 """
 
 import logging
-from datetime import datetime
+from ..utils.constants import (
+    LOG_CONSOLE_MAX_LINES,
+    LOG_CONSOLE_CLEAR_BUTTON_WIDTH,
+    LOG_CONSOLE_FONT_FAMILY,
+    LOG_CONSOLE_FONT_SIZE
+)
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -15,7 +20,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QHBoxLayout
 )
-from PySide6.QtGui import QTextCursor, QFont, QColor
+from PySide6.QtGui import QTextCursor, QFont
 from PySide6.QtCore import Qt, Signal, QObject
 
 
@@ -40,11 +45,21 @@ class LogConsole(QWidget):
     Console widget for displaying application logs and messages
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, auto_register=True):
+        """
+        Initialize log console
+
+        Args:
+            parent: Parent widget
+            auto_register: If True, automatically register with root logger
+        """
         super().__init__(parent)
-        self.max_lines = 1000  # Maximum lines to keep in console
+        self.max_lines = LOG_CONSOLE_MAX_LINES
+        self.log_handler = None
         self.init_ui()
-        self.setup_logging()
+
+        if auto_register:
+            self.setup_logging()
 
     def init_ui(self):
         """Initialize the user interface"""
@@ -63,7 +78,7 @@ class LogConsole(QWidget):
 
         # Clear button
         clear_button = QPushButton("Clear")
-        clear_button.setMaximumWidth(80)
+        clear_button.setMaximumWidth(LOG_CONSOLE_CLEAR_BUTTON_WIDTH)
         clear_button.clicked.connect(self.clear)
         header_layout.addWidget(clear_button)
 
@@ -75,7 +90,7 @@ class LogConsole(QWidget):
         self.console.setLineWrapMode(QTextEdit.NoWrap)
 
         # Use monospace font for console-like appearance
-        font = QFont("Courier New", 9)
+        font = QFont(LOG_CONSOLE_FONT_FAMILY, LOG_CONSOLE_FONT_SIZE)
         self.console.setFont(font)
 
         # Style the console
@@ -97,7 +112,15 @@ class LogConsole(QWidget):
         layout.addWidget(self.status_label)
 
     def setup_logging(self):
-        """Setup custom logging handler to display logs in console"""
+        """
+        Setup custom logging handler to display logs in console
+
+        Note: This modifies the root logger. Call unregister_logging() to clean up.
+        """
+        if self.log_handler is not None:
+            # Already registered
+            return
+
         self.log_handler = QtLogHandler()
         self.log_handler.setFormatter(
             logging.Formatter('%(asctime)s - %(levelname)s - %(message)s',
@@ -107,6 +130,12 @@ class LogConsole(QWidget):
 
         # Add handler to root logger
         logging.getLogger().addHandler(self.log_handler)
+
+    def unregister_logging(self):
+        """Remove log handler from root logger"""
+        if self.log_handler is not None:
+            logging.getLogger().removeHandler(self.log_handler)
+            self.log_handler = None
 
     def append_log(self, message: str, level: int):
         """
@@ -177,5 +206,5 @@ class LogConsole(QWidget):
 
     def closeEvent(self, event):
         """Remove log handler when widget is closed"""
-        logging.getLogger().removeHandler(self.log_handler)
+        self.unregister_logging()
         event.accept()

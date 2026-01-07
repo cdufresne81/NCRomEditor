@@ -9,6 +9,8 @@ import logging.handlers
 from pathlib import Path
 from typing import Optional
 
+from .constants import LOG_FILE_MAX_BYTES, LOG_FILE_BACKUP_COUNT
+
 
 # Default log format
 DEFAULT_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -55,8 +57,8 @@ def setup_logging(
 
         file_handler = logging.handlers.RotatingFileHandler(
             log_file,
-            maxBytes=10 * 1024 * 1024,  # 10MB
-            backupCount=5,
+            maxBytes=LOG_FILE_MAX_BYTES,
+            backupCount=LOG_FILE_BACKUP_COUNT,
             encoding='utf-8'
         )
         file_handler.setLevel(level)

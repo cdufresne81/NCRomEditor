@@ -8,7 +8,7 @@ Extracts and scales table data based on definitions.
 import struct
 import numpy as np
 from pathlib import Path
-from typing import Optional, Union, List
+from typing import Optional, Union
 import logging
 from simpleeval import simple_eval
 
@@ -168,9 +168,27 @@ class RomReader:
 
         Returns:
             NumPy array of raw values
+
+        Raises:
+            RomReadError: If address is out of bounds
         """
         bytes_per_elem = scaling.bytes_per_element
         total_bytes = count * bytes_per_elem
+
+        # Validate bounds
+        if address < 0:
+            raise RomReadError(f"Invalid address: {hex(address)} (negative)")
+        if address >= len(self.rom_data):
+            raise RomReadError(
+                f"Address out of bounds: {hex(address)} "
+                f"(ROM size: {len(self.rom_data)} bytes)"
+            )
+        if address + total_bytes > len(self.rom_data):
+            raise RomReadError(
+                f"Read operation exceeds ROM bounds: "
+                f"trying to read {total_bytes} bytes from {hex(address)} "
+                f"(ROM size: {len(self.rom_data)} bytes)"
+            )
 
         # Extract bytes
         data_bytes = self.rom_data[address:address + total_bytes]
@@ -332,6 +350,22 @@ class RomReader:
 
         try:
             packed_data = struct.pack(format_string, *raw_values)
+
+            # Validate bounds before writing
+            if address < 0:
+                raise RomWriteError(f"Invalid address: {hex(address)} (negative)")
+            if address >= len(self.rom_data):
+                raise RomWriteError(
+                    f"Address out of bounds: {hex(address)} "
+                    f"(ROM size: {len(self.rom_data)} bytes)"
+                )
+            if address + len(packed_data) > len(self.rom_data):
+                raise RomWriteError(
+                    f"Write operation exceeds ROM bounds: "
+                    f"trying to write {len(packed_data)} bytes at {hex(address)} "
+                    f"(ROM size: {len(self.rom_data)} bytes)"
+                )
+
             # Modify ROM data in memory
             self.rom_data = (
                 self.rom_data[:address] +
@@ -339,6 +373,9 @@ class RomReader:
                 self.rom_data[address + len(packed_data):]
             )
             logger.info(f"Successfully wrote table data: {table.name}")
+        except RomWriteError:
+            # Re-raise our own exceptions
+            raise
         except Exception as e:
             logger.error(f"Error writing table data for '{table.name}': {e}")
             raise RomWriteError(f"Failed to write table data: {e}")

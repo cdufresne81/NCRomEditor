@@ -82,6 +82,7 @@ src/
     table_viewer.py
   utils/
     __init__.py
+    constants.py
     logging_config.py
     settings.py
   __init__.py
@@ -99,578 +100,52 @@ pytest.ini
 README.md
 requirements.txt
 run.bat
-test_detector.py
-test_parser.py
 WINDOWS_SETUP.md
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
 
-<file path="src/ui/rom_document.py">
+<file path="src/utils/constants.py">
 """
-ROM Document Widget
+Application Constants
 
-Represents a single ROM file with its own table browser and state.
-Each ROM is displayed in its own tab.
-"""
-
-from pathlib import Path
-from PySide6.QtWidgets import (
-    QWidget,
-    QSplitter,
-    QHBoxLayout
-)
-from PySide6.QtCore import Qt, Signal
-
-from .table_browser import TableBrowser
-from .log_console import LogConsole
-from ..core.rom_definition import RomDefinition, Table
-from ..core.rom_reader import RomReader
-
-
-class RomDocument(QWidget):
-    """Widget representing a single open ROM document"""
-
-    # Signal emitted when a table is selected
-    table_selected = Signal(Table, object)  # table, rom_reader
-
-    def __init__(self, rom_path: str, rom_definition: RomDefinition, rom_reader: RomReader, parent=None):
-        super().__init__(parent)
-        self.rom_path = rom_path
-        self.rom_definition = rom_definition
-        self.rom_reader = rom_reader
-        self.file_name = Path(rom_path).name
-        self.init_ui()
-
-    def init_ui(self):
-        """Initialize the user interface"""
-        layout = QHBoxLayout()
-        self.setLayout(layout)
-
-        # Table browser takes full width (log console is now shared at bottom of main window)
-        self.table_browser = TableBrowser()
-        self.table_browser.load_definition(self.rom_definition)
-        self.table_browser.table_selected.connect(self.on_table_selected)
-        layout.addWidget(self.table_browser)
-
-    def on_table_selected(self, table: Table):
-        """Handle table selection from browser"""
-        # Emit signal with both table and this document's rom_reader
-        self.table_selected.emit(table, self.rom_reader)
-
-    def get_tab_title(self) -> str:
-        """
-        Get the title for this document's tab
-
-        Returns:
-            str: Tab title (filename + ROM ID)
-        """
-        return f"{self.file_name} ({self.rom_definition.romid.xmlid})"
-
-    def get_short_title(self) -> str:
-        """
-        Get short title for tab (just filename)
-
-        Returns:
-            str: Short filename
-        """
-        return self.file_name
-
-    def is_modified(self) -> bool:
-        """
-        Check if this ROM has been modified
-
-        Returns:
-            bool: True if modified (TODO: implement tracking)
-        """
-        # TODO: Implement modification tracking
-        return False
-
-    def save(self, file_path: str = None):
-        """
-        Save this ROM
-
-        Args:
-            file_path: Optional new path for save-as
-        """
-        save_path = file_path if file_path else self.rom_path
-        self.rom_reader.save_rom(save_path)
-
-        # Update path if it changed
-        if file_path:
-            self.rom_path = file_path
-            self.file_name = Path(file_path).name
-</file>
-
-<file path="src/ui/settings_dialog.py">
-"""
-Settings Dialog
-
-Configuration window for application settings.
+Centralized location for all magic numbers and configuration constants.
 """
 
-from pathlib import Path
-from PySide6.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QFormLayout,
-    QTabWidget,
-    QWidget,
-    QLabel,
-    QPushButton,
-    QDialogButtonBox,
-    QLineEdit,
-    QFileDialog,
-    QGroupBox
-)
-from PySide6.QtCore import Qt, Signal
-
-from ..utils.settings import get_settings
-
-
-class SettingsDialog(QDialog):
-    """Application settings dialog"""
-
-    # Signal emitted when settings are applied
-    settings_changed = Signal()
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Settings")
-        self.setMinimumSize(600, 400)
-        self.settings = get_settings()
-        self.init_ui()
-        self.load_settings()
-
-    def init_ui(self):
-        """Initialize the user interface"""
-        layout = QVBoxLayout()
-        self.setLayout(layout)
-
-        # Tab widget for different settings categories
-        self.tabs = QTabWidget()
-        layout.addWidget(self.tabs)
-
-        # Create placeholder tabs
-        self.create_general_tab()
-        self.create_appearance_tab()
-        self.create_editor_tab()
-
-        # Dialog buttons (OK, Cancel, Apply)
-        button_box = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.Apply
-        )
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        button_box.button(QDialogButtonBox.Apply).clicked.connect(self.apply_settings)
-        layout.addWidget(button_box)
-
-    def create_general_tab(self):
-        """Create the General settings tab"""
-        tab = QWidget()
-        layout = QVBoxLayout()
-        tab.setLayout(layout)
-
-        # Paths group
-        paths_group = QGroupBox("Paths")
-        paths_layout = QFormLayout()
-        paths_group.setLayout(paths_layout)
-
-        # Metadata directory setting
-        metadata_layout = QHBoxLayout()
-        self.metadata_path_edit = QLineEdit()
-        self.metadata_path_edit.setPlaceholderText("Path to ROM definition XML files")
-        metadata_layout.addWidget(self.metadata_path_edit)
-
-        browse_button = QPushButton("Browse...")
-        browse_button.clicked.connect(self.browse_metadata_directory)
-        metadata_layout.addWidget(browse_button)
-
-        paths_layout.addRow("Metadata Directory:", metadata_layout)
-
-        # Add help text
-        help_label = QLabel("Location of ROM definition XML files (e.g., lf9veb.xml)")
-        help_label.setStyleSheet("color: gray; font-size: 10px;")
-        paths_layout.addRow("", help_label)
-
-        layout.addWidget(paths_group)
-        layout.addStretch()
-
-        self.tabs.addTab(tab, "General")
-
-    def create_appearance_tab(self):
-        """Create the Appearance settings tab"""
-        tab = QWidget()
-        layout = QVBoxLayout()
-        tab.setLayout(layout)
-
-        # Placeholder label
-        label = QLabel("Appearance settings will be added here\n(Theme, colors, fonts, etc.)")
-        label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(label)
-
-        layout.addStretch()
-
-        self.tabs.addTab(tab, "Appearance")
-
-    def create_editor_tab(self):
-        """Create the Editor settings tab"""
-        tab = QWidget()
-        layout = QVBoxLayout()
-        tab.setLayout(layout)
-
-        # Placeholder label
-        label = QLabel("Table editor settings will be added here")
-        label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(label)
-
-        layout.addStretch()
-
-        self.tabs.addTab(tab, "Editor")
-
-    def load_settings(self):
-        """Load current settings into the UI"""
-        # Load metadata directory
-        metadata_dir = self.settings.get_metadata_directory()
-        self.metadata_path_edit.setText(metadata_dir)
-
-    def browse_metadata_directory(self):
-        """Open directory browser for metadata directory"""
-        current_path = self.metadata_path_edit.text()
-        if not current_path:
-            current_path = str(Path.cwd())
-
-        directory = QFileDialog.getExistingDirectory(
-            self,
-            "Select Metadata Directory",
-            current_path,
-            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
-        )
-
-        if directory:
-            self.metadata_path_edit.setText(directory)
-
-    def apply_settings(self):
-        """Apply settings without closing the dialog"""
-        # Save metadata directory
-        metadata_dir = self.metadata_path_edit.text().strip()
-        if metadata_dir:
-            self.settings.set_metadata_directory(metadata_dir)
-
-        # Emit signal that settings changed
-        self.settings_changed.emit()
-
-    def accept(self):
-        """OK button clicked - apply and close"""
-        self.apply_settings()
-        super().accept()
-</file>
-
-<file path="src/ui/setup_wizard.py">
-"""
-Setup Wizard
-
-First-run wizard to configure essential application settings.
-"""
-
-from pathlib import Path
-from PySide6.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QLineEdit,
-    QFileDialog,
-    QDialogButtonBox,
-    QMessageBox
-)
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
-
-from ..utils.settings import get_settings
-
-
-class SetupWizard(QDialog):
-    """First-run setup wizard for configuring metadata directory"""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("NC ROM Editor - First Run Setup")
-        self.setMinimumSize(600, 300)
-        self.setModal(True)
-        self.settings = get_settings()
-        self.init_ui()
-
-    def init_ui(self):
-        """Initialize the user interface"""
-        layout = QVBoxLayout()
-        self.setLayout(layout)
-
-        # Welcome header
-        header_label = QLabel("Welcome to NC ROM Editor!")
-        header_font = QFont()
-        header_font.setPointSize(14)
-        header_font.setBold(True)
-        header_label.setFont(header_font)
-        header_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(header_label)
-
-        layout.addSpacing(20)
-
-        # Description
-        desc_label = QLabel(
-            "Before you begin, please configure the location of your ROM definition files.\n\n"
-            "This is typically the 'metadata' directory from your RomDrop installation,\n"
-            "which contains XML files that define ROM structures (e.g., lf9veb.xml)."
-        )
-        desc_label.setWordWrap(True)
-        desc_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(desc_label)
-
-        layout.addSpacing(20)
-
-        # Metadata directory input
-        path_layout = QHBoxLayout()
-
-        path_label = QLabel("Metadata Directory:")
-        path_layout.addWidget(path_label)
-
-        self.metadata_path_edit = QLineEdit()
-        self.metadata_path_edit.setPlaceholderText("Path to ROM definition XML files...")
-        path_layout.addWidget(self.metadata_path_edit)
-
-        browse_button = QPushButton("Browse...")
-        browse_button.clicked.connect(self.browse_metadata_directory)
-        path_layout.addWidget(browse_button)
-
-        layout.addLayout(path_layout)
-
-        # Help text
-        help_label = QLabel(
-            "Example: C:/Projets/MiataNC/romdrop_rev_21053000/metadata"
-        )
-        help_label.setStyleSheet("color: gray; font-size: 10px; font-style: italic;")
-        help_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(help_label)
-
-        layout.addStretch()
-
-        # Buttons
-        button_box = QDialogButtonBox()
-        self.ok_button = button_box.addButton("Continue", QDialogButtonBox.AcceptRole)
-        cancel_button = button_box.addButton("Cancel", QDialogButtonBox.RejectRole)
-
-        self.ok_button.clicked.connect(self.validate_and_accept)
-        cancel_button.clicked.connect(self.reject)
-
-        layout.addWidget(button_box)
-
-        # Set focus to text field
-        self.metadata_path_edit.setFocus()
-
-    def browse_metadata_directory(self):
-        """Open directory browser for metadata directory"""
-        current_path = self.metadata_path_edit.text()
-        if not current_path:
-            current_path = str(Path.home())
-
-        directory = QFileDialog.getExistingDirectory(
-            self,
-            "Select Metadata Directory",
-            current_path,
-            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
-        )
-
-        if directory:
-            self.metadata_path_edit.setText(directory)
-
-    def validate_and_accept(self):
-        """Validate the metadata directory before accepting"""
-        metadata_dir = self.metadata_path_edit.text().strip()
-
-        if not metadata_dir:
-            QMessageBox.warning(
-                self,
-                "Path Required",
-                "Please select a metadata directory to continue."
-            )
-            return
-
-        metadata_path = Path(metadata_dir)
-
-        if not metadata_path.exists():
-            QMessageBox.warning(
-                self,
-                "Directory Not Found",
-                f"The specified directory does not exist:\n{metadata_dir}\n\n"
-                "Please select a valid directory."
-            )
-            return
-
-        if not metadata_path.is_dir():
-            QMessageBox.warning(
-                self,
-                "Invalid Path",
-                f"The specified path is not a directory:\n{metadata_dir}\n\n"
-                "Please select a valid directory."
-            )
-            return
-
-        # Check if directory contains any XML files
-        xml_files = list(metadata_path.glob("*.xml"))
-        if not xml_files:
-            response = QMessageBox.question(
-                self,
-                "No XML Files Found",
-                f"No XML files found in:\n{metadata_dir}\n\n"
-                "ROM definition files should be XML files.\n\n"
-                "Do you want to use this directory anyway?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
-            )
-            if response == QMessageBox.No:
-                return
-
-        # Save the metadata directory
-        self.settings.set_metadata_directory(metadata_dir)
-
-        # Accept the dialog
-        self.accept()
-
-    def reject(self):
-        """Handle cancel button"""
-        response = QMessageBox.question(
-            self,
-            "Exit Setup",
-            "You need to configure the metadata directory to use NC ROM Editor.\n\n"
-            "Are you sure you want to exit?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-
-        if response == QMessageBox.Yes:
-            super().reject()
-</file>
-
-<file path="src/utils/settings.py">
-"""
-Application Settings Management
-
-Handles loading, saving, and accessing application settings using QSettings.
-"""
-
-from pathlib import Path
-from PySide6.QtCore import QSettings
-
-
-class AppSettings:
-    """Application settings manager using QSettings for persistence"""
-
-    def __init__(self):
-        """Initialize settings manager"""
-        self.settings = QSettings("NCRomEditor", "NCRomEditor")
-
-    def get_metadata_directory(self) -> str:
-        """
-        Get the configured metadata directory path
-
-        Returns:
-            str: Path to metadata directory (defaults to ./metadata relative to app)
-        """
-        # Default to 'metadata' directory in the application root
-        default_path = str(Path.cwd() / "metadata")
-        return self.settings.value("paths/metadata_directory", default_path)
-
-    def set_metadata_directory(self, path: str):
-        """
-        Set the metadata directory path
-
-        Args:
-            path: Path to metadata directory
-        """
-        self.settings.setValue("paths/metadata_directory", path)
-        self.settings.sync()
-
-    def get_window_geometry(self):
-        """Get saved window geometry"""
-        return self.settings.value("window/geometry")
-
-    def set_window_geometry(self, geometry):
-        """Save window geometry"""
-        self.settings.setValue("window/geometry", geometry)
-        self.settings.sync()
-
-    def get_splitter_state(self):
-        """Get saved splitter state"""
-        return self.settings.value("window/splitter_state")
-
-    def set_splitter_state(self, state):
-        """Save splitter state"""
-        self.settings.setValue("window/splitter_state", state)
-        self.settings.sync()
-
-    def get_recent_files(self) -> list:
-        """
-        Get list of recently opened ROM files
-
-        Returns:
-            list: List of file paths
-        """
-        files = self.settings.value("recent_files", [])
-        if files is None:
-            return []
-        # Ensure it's always a list
-        if isinstance(files, str):
-            return [files] if files else []
-        return files
-
-    def add_recent_file(self, file_path: str, max_recent: int = 10):
-        """
-        Add a file to the recent files list
-
-        Args:
-            file_path: Path to ROM file
-            max_recent: Maximum number of recent files to keep
-        """
-        recent = self.get_recent_files()
-
-        # Remove if already in list
-        if file_path in recent:
-            recent.remove(file_path)
-
-        # Add to front of list
-        recent.insert(0, file_path)
-
-        # Limit to max_recent
-        recent = recent[:max_recent]
-
-        self.settings.setValue("recent_files", recent)
-        self.settings.sync()
-
-    def clear_recent_files(self):
-        """Clear the recent files list"""
-        self.settings.setValue("recent_files", [])
-        self.settings.sync()
-
-
-# Global settings instance
-_settings = None
-
-
-def get_settings() -> AppSettings:
-    """
-    Get the global settings instance
-
-    Returns:
-        AppSettings: Global settings instance
-    """
-    global _settings
-    if _settings is None:
-        _settings = AppSettings()
-    return _settings
+# Application metadata
+APP_NAME = "NC ROM Editor"
+APP_VERSION = "0.1.0"
+APP_VERSION_STRING = f"v{APP_VERSION}"
+APP_DESCRIPTION = "An open-source ROM editor for NC Miata ECUs"
+
+# Main window settings
+MAIN_WINDOW_X = 100
+MAIN_WINDOW_Y = 100
+MAIN_WINDOW_WIDTH = 1400
+MAIN_WINDOW_HEIGHT = 900
+MAIN_SPLITTER_LEFT = 420  # Table browser width (30%)
+MAIN_SPLITTER_RIGHT = 980  # Activity log width (70%)
+
+# Table browser settings
+TABLE_BROWSER_COLUMN_WIDTH = 300  # Width of name column
+
+# Log console settings
+LOG_CONSOLE_MAX_LINES = 1000  # Maximum lines kept in console
+LOG_CONSOLE_CLEAR_BUTTON_WIDTH = 80
+LOG_CONSOLE_FONT_FAMILY = "Courier New"
+LOG_CONSOLE_FONT_SIZE = 9
+
+# Logging configuration
+LOG_FILE_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+LOG_FILE_BACKUP_COUNT = 5
+
+# Settings
+MAX_RECENT_FILES = 10
+
+# Table viewer window
+TABLE_VIEWER_DEFAULT_WIDTH = 800
+TABLE_VIEWER_DEFAULT_HEIGHT = 600
 </file>
 
 <file path=".beads/.gitignore">
@@ -6286,7 +5761,12 @@ Similar to ECUFlash's message window.
 """
 
 import logging
-from datetime import datetime
+from ..utils.constants import (
+    LOG_CONSOLE_MAX_LINES,
+    LOG_CONSOLE_CLEAR_BUTTON_WIDTH,
+    LOG_CONSOLE_FONT_FAMILY,
+    LOG_CONSOLE_FONT_SIZE
+)
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -6295,7 +5775,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QHBoxLayout
 )
-from PySide6.QtGui import QTextCursor, QFont, QColor
+from PySide6.QtGui import QTextCursor, QFont
 from PySide6.QtCore import Qt, Signal, QObject
 
 
@@ -6320,11 +5800,21 @@ class LogConsole(QWidget):
     Console widget for displaying application logs and messages
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, auto_register=True):
+        """
+        Initialize log console
+
+        Args:
+            parent: Parent widget
+            auto_register: If True, automatically register with root logger
+        """
         super().__init__(parent)
-        self.max_lines = 1000  # Maximum lines to keep in console
+        self.max_lines = LOG_CONSOLE_MAX_LINES
+        self.log_handler = None
         self.init_ui()
-        self.setup_logging()
+
+        if auto_register:
+            self.setup_logging()
 
     def init_ui(self):
         """Initialize the user interface"""
@@ -6343,7 +5833,7 @@ class LogConsole(QWidget):
 
         # Clear button
         clear_button = QPushButton("Clear")
-        clear_button.setMaximumWidth(80)
+        clear_button.setMaximumWidth(LOG_CONSOLE_CLEAR_BUTTON_WIDTH)
         clear_button.clicked.connect(self.clear)
         header_layout.addWidget(clear_button)
 
@@ -6355,7 +5845,7 @@ class LogConsole(QWidget):
         self.console.setLineWrapMode(QTextEdit.NoWrap)
 
         # Use monospace font for console-like appearance
-        font = QFont("Courier New", 9)
+        font = QFont(LOG_CONSOLE_FONT_FAMILY, LOG_CONSOLE_FONT_SIZE)
         self.console.setFont(font)
 
         # Style the console
@@ -6377,7 +5867,15 @@ class LogConsole(QWidget):
         layout.addWidget(self.status_label)
 
     def setup_logging(self):
-        """Setup custom logging handler to display logs in console"""
+        """
+        Setup custom logging handler to display logs in console
+
+        Note: This modifies the root logger. Call unregister_logging() to clean up.
+        """
+        if self.log_handler is not None:
+            # Already registered
+            return
+
         self.log_handler = QtLogHandler()
         self.log_handler.setFormatter(
             logging.Formatter('%(asctime)s - %(levelname)s - %(message)s',
@@ -6387,6 +5885,12 @@ class LogConsole(QWidget):
 
         # Add handler to root logger
         logging.getLogger().addHandler(self.log_handler)
+
+    def unregister_logging(self):
+        """Remove log handler from root logger"""
+        if self.log_handler is not None:
+            logging.getLogger().removeHandler(self.log_handler)
+            self.log_handler = None
 
     def append_log(self, message: str, level: int):
         """
@@ -6457,8 +5961,455 @@ class LogConsole(QWidget):
 
     def closeEvent(self, event):
         """Remove log handler when widget is closed"""
-        logging.getLogger().removeHandler(self.log_handler)
+        self.unregister_logging()
         event.accept()
+</file>
+
+<file path="src/ui/rom_document.py">
+"""
+ROM Document Widget
+
+Represents a single ROM file with its own table browser and state.
+Each ROM is displayed in its own tab.
+"""
+
+from pathlib import Path
+from PySide6.QtWidgets import (
+    QWidget,
+    QSplitter,
+    QHBoxLayout
+)
+from PySide6.QtCore import Qt, Signal
+
+from .table_browser import TableBrowser
+from ..core.rom_definition import RomDefinition, Table
+from ..core.rom_reader import RomReader
+
+
+class RomDocument(QWidget):
+    """Widget representing a single open ROM document"""
+
+    # Signal emitted when a table is selected
+    table_selected = Signal(Table, object)  # table, rom_reader
+
+    def __init__(self, rom_path: str, rom_definition: RomDefinition, rom_reader: RomReader, parent=None):
+        super().__init__(parent)
+        self.rom_path = rom_path
+        self.rom_definition = rom_definition
+        self.rom_reader = rom_reader
+        self.file_name = Path(rom_path).name
+        self.init_ui()
+
+    def init_ui(self):
+        """Initialize the user interface"""
+        layout = QHBoxLayout()
+        self.setLayout(layout)
+
+        # Table browser takes full width (log console is now shared at bottom of main window)
+        self.table_browser = TableBrowser()
+        self.table_browser.load_definition(self.rom_definition)
+        self.table_browser.table_selected.connect(self.on_table_selected)
+        layout.addWidget(self.table_browser)
+
+    def on_table_selected(self, table: Table):
+        """Handle table selection from browser"""
+        # Emit signal with both table and this document's rom_reader
+        self.table_selected.emit(table, self.rom_reader)
+
+    def get_tab_title(self) -> str:
+        """
+        Get the title for this document's tab
+
+        Returns:
+            str: Tab title (filename + ROM ID)
+        """
+        return f"{self.file_name} ({self.rom_definition.romid.xmlid})"
+
+    def get_short_title(self) -> str:
+        """
+        Get short title for tab (just filename)
+
+        Returns:
+            str: Short filename
+        """
+        return self.file_name
+
+    def is_modified(self) -> bool:
+        """
+        Check if this ROM has been modified
+
+        Returns:
+            bool: True if modified (TODO: implement tracking)
+        """
+        # TODO: Implement modification tracking
+        return False
+
+    def save(self, file_path: str = None):
+        """
+        Save this ROM
+
+        Args:
+            file_path: Optional new path for save-as
+        """
+        save_path = file_path if file_path else self.rom_path
+        self.rom_reader.save_rom(save_path)
+
+        # Update path if it changed
+        if file_path:
+            self.rom_path = file_path
+            self.file_name = Path(file_path).name
+</file>
+
+<file path="src/ui/settings_dialog.py">
+"""
+Settings Dialog
+
+Configuration window for application settings.
+"""
+
+from pathlib import Path
+from PySide6.QtWidgets import (
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QFormLayout,
+    QTabWidget,
+    QWidget,
+    QLabel,
+    QPushButton,
+    QDialogButtonBox,
+    QLineEdit,
+    QFileDialog,
+    QGroupBox
+)
+from PySide6.QtCore import Qt, Signal
+
+from ..utils.settings import get_settings
+
+
+class SettingsDialog(QDialog):
+    """Application settings dialog"""
+
+    # Signal emitted when settings are applied
+    settings_changed = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Settings")
+        self.setMinimumSize(600, 400)
+        self.settings = get_settings()
+        self.init_ui()
+        self.load_settings()
+
+    def init_ui(self):
+        """Initialize the user interface"""
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        # Tab widget for different settings categories
+        self.tabs = QTabWidget()
+        layout.addWidget(self.tabs)
+
+        # Create placeholder tabs
+        self.create_general_tab()
+        self.create_appearance_tab()
+        self.create_editor_tab()
+
+        # Dialog buttons (OK, Cancel, Apply)
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.Apply
+        )
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        button_box.button(QDialogButtonBox.Apply).clicked.connect(self.apply_settings)
+        layout.addWidget(button_box)
+
+    def create_general_tab(self):
+        """Create the General settings tab"""
+        tab = QWidget()
+        layout = QVBoxLayout()
+        tab.setLayout(layout)
+
+        # Paths group
+        paths_group = QGroupBox("Paths")
+        paths_layout = QFormLayout()
+        paths_group.setLayout(paths_layout)
+
+        # Metadata directory setting
+        metadata_layout = QHBoxLayout()
+        self.metadata_path_edit = QLineEdit()
+        self.metadata_path_edit.setPlaceholderText("Path to ROM definition XML files")
+        metadata_layout.addWidget(self.metadata_path_edit)
+
+        browse_button = QPushButton("Browse...")
+        browse_button.clicked.connect(self.browse_metadata_directory)
+        metadata_layout.addWidget(browse_button)
+
+        paths_layout.addRow("Metadata Directory:", metadata_layout)
+
+        # Add help text
+        help_label = QLabel("Location of ROM definition XML files (e.g., lf9veb.xml)")
+        help_label.setStyleSheet("color: gray; font-size: 10px;")
+        paths_layout.addRow("", help_label)
+
+        layout.addWidget(paths_group)
+        layout.addStretch()
+
+        self.tabs.addTab(tab, "General")
+
+    def create_appearance_tab(self):
+        """Create the Appearance settings tab"""
+        tab = QWidget()
+        layout = QVBoxLayout()
+        tab.setLayout(layout)
+
+        # Placeholder label
+        label = QLabel("Appearance settings will be added here\n(Theme, colors, fonts, etc.)")
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label)
+
+        layout.addStretch()
+
+        self.tabs.addTab(tab, "Appearance")
+
+    def create_editor_tab(self):
+        """Create the Editor settings tab"""
+        tab = QWidget()
+        layout = QVBoxLayout()
+        tab.setLayout(layout)
+
+        # Placeholder label
+        label = QLabel("Table editor settings will be added here")
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label)
+
+        layout.addStretch()
+
+        self.tabs.addTab(tab, "Editor")
+
+    def load_settings(self):
+        """Load current settings into the UI"""
+        # Load metadata directory
+        metadata_dir = self.settings.get_metadata_directory()
+        self.metadata_path_edit.setText(metadata_dir)
+
+    def browse_metadata_directory(self):
+        """Open directory browser for metadata directory"""
+        current_path = self.metadata_path_edit.text()
+        if not current_path:
+            current_path = str(Path.cwd())
+
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Select Metadata Directory",
+            current_path,
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+        )
+
+        if directory:
+            self.metadata_path_edit.setText(directory)
+
+    def apply_settings(self):
+        """Apply settings without closing the dialog"""
+        # Save metadata directory
+        metadata_dir = self.metadata_path_edit.text().strip()
+        if metadata_dir:
+            self.settings.set_metadata_directory(metadata_dir)
+
+        # Emit signal that settings changed
+        self.settings_changed.emit()
+
+    def accept(self):
+        """OK button clicked - apply and close"""
+        self.apply_settings()
+        super().accept()
+</file>
+
+<file path="src/ui/setup_wizard.py">
+"""
+Setup Wizard
+
+First-run wizard to configure essential application settings.
+"""
+
+from pathlib import Path
+from PySide6.QtWidgets import (
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QLineEdit,
+    QFileDialog,
+    QDialogButtonBox,
+    QMessageBox
+)
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
+
+from ..utils.settings import get_settings
+
+
+class SetupWizard(QDialog):
+    """First-run setup wizard for configuring metadata directory"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("NC ROM Editor - First Run Setup")
+        self.setMinimumSize(600, 300)
+        self.setModal(True)
+        self.settings = get_settings()
+        self.init_ui()
+
+    def init_ui(self):
+        """Initialize the user interface"""
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        # Welcome header
+        header_label = QLabel("Welcome to NC ROM Editor!")
+        header_font = QFont()
+        header_font.setPointSize(14)
+        header_font.setBold(True)
+        header_label.setFont(header_font)
+        header_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(header_label)
+
+        layout.addSpacing(20)
+
+        # Description
+        desc_label = QLabel(
+            "Before you begin, please configure the location of your ROM definition files.\n\n"
+            "This is typically the 'metadata' directory from your RomDrop installation,\n"
+            "which contains XML files that define ROM structures (e.g., lf9veb.xml)."
+        )
+        desc_label.setWordWrap(True)
+        desc_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(desc_label)
+
+        layout.addSpacing(20)
+
+        # Metadata directory input
+        path_layout = QHBoxLayout()
+
+        path_label = QLabel("Metadata Directory:")
+        path_layout.addWidget(path_label)
+
+        self.metadata_path_edit = QLineEdit()
+        self.metadata_path_edit.setPlaceholderText("Path to ROM definition XML files...")
+        path_layout.addWidget(self.metadata_path_edit)
+
+        browse_button = QPushButton("Browse...")
+        browse_button.clicked.connect(self.browse_metadata_directory)
+        path_layout.addWidget(browse_button)
+
+        layout.addLayout(path_layout)
+
+        # Help text
+        help_label = QLabel(
+            "Example: C:/Projets/MiataNC/romdrop_rev_21053000/metadata"
+        )
+        help_label.setStyleSheet("color: gray; font-size: 10px; font-style: italic;")
+        help_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(help_label)
+
+        layout.addStretch()
+
+        # Buttons
+        button_box = QDialogButtonBox()
+        self.ok_button = button_box.addButton("Continue", QDialogButtonBox.AcceptRole)
+        cancel_button = button_box.addButton("Cancel", QDialogButtonBox.RejectRole)
+
+        self.ok_button.clicked.connect(self.validate_and_accept)
+        cancel_button.clicked.connect(self.reject)
+
+        layout.addWidget(button_box)
+
+        # Set focus to text field
+        self.metadata_path_edit.setFocus()
+
+    def browse_metadata_directory(self):
+        """Open directory browser for metadata directory"""
+        current_path = self.metadata_path_edit.text()
+        if not current_path:
+            current_path = str(Path.home())
+
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Select Metadata Directory",
+            current_path,
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+        )
+
+        if directory:
+            self.metadata_path_edit.setText(directory)
+
+    def validate_and_accept(self):
+        """Validate the metadata directory before accepting"""
+        metadata_dir = self.metadata_path_edit.text().strip()
+
+        if not metadata_dir:
+            QMessageBox.warning(
+                self,
+                "Path Required",
+                "Please select a metadata directory to continue."
+            )
+            return
+
+        metadata_path = Path(metadata_dir)
+
+        if not metadata_path.exists():
+            QMessageBox.warning(
+                self,
+                "Directory Not Found",
+                f"The specified directory does not exist:\n{metadata_dir}\n\n"
+                "Please select a valid directory."
+            )
+            return
+
+        if not metadata_path.is_dir():
+            QMessageBox.warning(
+                self,
+                "Invalid Path",
+                f"The specified path is not a directory:\n{metadata_dir}\n\n"
+                "Please select a valid directory."
+            )
+            return
+
+        # Check if directory contains any XML files
+        xml_files = list(metadata_path.glob("*.xml"))
+        if not xml_files:
+            response = QMessageBox.question(
+                self,
+                "No XML Files Found",
+                f"No XML files found in:\n{metadata_dir}\n\n"
+                "ROM definition files should be XML files.\n\n"
+                "Do you want to use this directory anyway?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            if response == QMessageBox.No:
+                return
+
+        # Save the metadata directory
+        self.settings.set_metadata_directory(metadata_dir)
+
+        # Accept the dialog
+        self.accept()
+
+    def reject(self):
+        """Handle cancel button"""
+        response = QMessageBox.question(
+            self,
+            "Exit Setup",
+            "You need to configure the metadata directory to use NC ROM Editor.\n\n"
+            "Are you sure you want to exit?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if response == QMessageBox.Yes:
+            super().reject()
 </file>
 
 <file path="src/ui/table_viewer_window.py">
@@ -6472,6 +6423,7 @@ Allows opening multiple tables simultaneously for comparison.
 from PySide6.QtWidgets import QMainWindow, QVBoxLayout, QWidget
 from PySide6.QtCore import Qt
 
+from ..utils.constants import TABLE_VIEWER_DEFAULT_WIDTH, TABLE_VIEWER_DEFAULT_HEIGHT, APP_NAME
 from .table_viewer import TableViewer
 from ..core.rom_definition import Table
 
@@ -6502,8 +6454,8 @@ class TableViewerWindow(QMainWindow):
         self.data = data
 
         # Set window properties
-        self.setWindowTitle(f"{table.name} - NC ROM Editor")
-        self.resize(800, 600)
+        self.setWindowTitle(f"{table.name} - {APP_NAME}")
+        self.resize(TABLE_VIEWER_DEFAULT_WIDTH, TABLE_VIEWER_DEFAULT_HEIGHT)
 
         # Create central widget
         central_widget = QWidget()
@@ -6518,9 +6470,6 @@ class TableViewerWindow(QMainWindow):
 
         # Display the table data
         self.viewer.display_table(table, data)
-
-        # Make window stay on top initially (user can change this)
-        # self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
 
     def closeEvent(self, event):
         """Handle window close event"""
@@ -6690,6 +6639,8 @@ import logging.handlers
 from pathlib import Path
 from typing import Optional
 
+from .constants import LOG_FILE_MAX_BYTES, LOG_FILE_BACKUP_COUNT
+
 
 # Default log format
 DEFAULT_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -6736,8 +6687,8 @@ def setup_logging(
 
         file_handler = logging.handlers.RotatingFileHandler(
             log_file,
-            maxBytes=10 * 1024 * 1024,  # 10MB
-            backupCount=5,
+            maxBytes=LOG_FILE_MAX_BYTES,
+            backupCount=LOG_FILE_BACKUP_COUNT,
             encoding='utf-8'
         )
         file_handler.setLevel(level)
@@ -6773,6 +6724,126 @@ def set_log_level(level: int) -> None:
 
 # Default configuration on import
 setup_logging(level=logging.INFO, console=True, detailed=False)
+</file>
+
+<file path="src/utils/settings.py">
+"""
+Application Settings Management
+
+Handles loading, saving, and accessing application settings using QSettings.
+"""
+
+from pathlib import Path
+from PySide6.QtCore import QSettings
+
+from .constants import MAX_RECENT_FILES
+
+
+class AppSettings:
+    """Application settings manager using QSettings for persistence"""
+
+    def __init__(self):
+        """Initialize settings manager"""
+        self.settings = QSettings("NCRomEditor", "NCRomEditor")
+
+    def get_metadata_directory(self) -> str:
+        """
+        Get the configured metadata directory path
+
+        Returns:
+            str: Path to metadata directory (defaults to ./metadata relative to app)
+        """
+        # Default to 'metadata' directory in the application root
+        default_path = str(Path.cwd() / "metadata")
+        return self.settings.value("paths/metadata_directory", default_path)
+
+    def set_metadata_directory(self, path: str):
+        """
+        Set the metadata directory path
+
+        Args:
+            path: Path to metadata directory
+        """
+        self.settings.setValue("paths/metadata_directory", path)
+        self.settings.sync()
+
+    def get_window_geometry(self):
+        """Get saved window geometry"""
+        return self.settings.value("window/geometry")
+
+    def set_window_geometry(self, geometry):
+        """Save window geometry"""
+        self.settings.setValue("window/geometry", geometry)
+        self.settings.sync()
+
+    def get_splitter_state(self):
+        """Get saved splitter state"""
+        return self.settings.value("window/splitter_state")
+
+    def set_splitter_state(self, state):
+        """Save splitter state"""
+        self.settings.setValue("window/splitter_state", state)
+        self.settings.sync()
+
+    def get_recent_files(self) -> list:
+        """
+        Get list of recently opened ROM files
+
+        Returns:
+            list: List of file paths
+        """
+        files = self.settings.value("recent_files", [])
+        if files is None:
+            return []
+        # Ensure it's always a list
+        if isinstance(files, str):
+            return [files] if files else []
+        return files
+
+    def add_recent_file(self, file_path: str, max_recent: int = MAX_RECENT_FILES):
+        """
+        Add a file to the recent files list
+
+        Args:
+            file_path: Path to ROM file
+            max_recent: Maximum number of recent files to keep
+        """
+        recent = self.get_recent_files()
+
+        # Remove if already in list
+        if file_path in recent:
+            recent.remove(file_path)
+
+        # Add to front of list
+        recent.insert(0, file_path)
+
+        # Limit to max_recent
+        recent = recent[:max_recent]
+
+        self.settings.setValue("recent_files", recent)
+        self.settings.sync()
+
+    def clear_recent_files(self):
+        """Clear the recent files list"""
+        self.settings.setValue("recent_files", [])
+        self.settings.sync()
+
+
+# Global settings instance
+_settings = None
+
+
+def get_settings() -> AppSettings:
+    """
+    Get the global settings instance
+
+    Returns:
+        AppSettings: Global settings instance
+    """
+    global _settings
+    if _settings is None:
+        _settings = AppSettings()
+    return _settings
 </file>
 
 <file path="src/__init__.py">
@@ -6827,70 +6898,6 @@ def sample_xml_path(metadata_dir):
 <file path=".gitattributes">
 # Use bd merge for beads JSONL files
 .beads/issues.jsonl merge=beads
-</file>
-
-<file path="AGENTS.md">
-# Agent Instructions
-
-This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
-
-## Session Start Checklist
-
-**EVERY NEW SESSION, you MUST:**
-
-1. **Refresh Repomix** - Get latest codebase snapshot:
-   ```bash
-   repomix mix
-   ```
-   This creates/updates `repomix-output.xml` with the entire codebase in AI-friendly format
-
-2. **Check available work:**
-   ```bash
-   bd ready
-   ```
-
-## Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --status in_progress  # Claim work
-bd close <id>         # Complete work
-bd sync               # Sync with git
-repomix mix           # Refresh codebase snapshot for AI consumption
-```
-
-## Landing the Plane (Session Completion)
-
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **Refresh Repomix** - Update codebase snapshot for next session:
-   ```bash
-   repomix mix
-   git add repomix-output.xml
-   git commit -m "Update repomix snapshot"
-   ```
-5. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd sync
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-6. **Clean up** - Clear stashes, prune remote branches
-7. **Verify** - All changes committed AND pushed, repomix refreshed
-8. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
 </file>
 
 <file path="pytest.ini">
@@ -7018,175 +7025,6 @@ if errorlevel 1 (
 )
 </file>
 
-<file path="test_detector.py">
-#!/usr/bin/env python3
-"""
-Test ROM detector integration
-"""
-
-from src.core.rom_detector import RomDetector
-from src.core.definition_parser import load_definition
-from src.core.rom_reader import RomReader
-
-print("=== ROM Detector Test ===\n")
-
-# Initialize detector
-print("1. Initializing ROM detector...")
-detector = RomDetector('metadata')
-print(f"   Found {len(detector.rom_definitions)} ROM definition(s)\n")
-
-# Show available definitions
-print("2. Available ROM definitions:")
-for info in detector.get_definitions_summary():
-    print(f"   - {info['xmlid']}: {info['make']} {info['model']}")
-    print(f"     Internal ID: {info['internalid']}")
-    print(f"     XML file: {info['xml_file']}")
-print()
-
-# Test detection
-rom_file = 'examples/lf9veb.bin'
-print(f"3. Detecting ROM ID from {rom_file}...")
-rom_id, xml_path = detector.detect_rom_id(rom_file)
-print(f"   Detected ROM ID: {rom_id}")
-print(f"   Matched XML: {xml_path}\n")
-
-if rom_id and xml_path:
-    # Load definition
-    print("4. Loading matched definition...")
-    definition = load_definition(xml_path)
-    print(f"   Loaded: {definition.romid.xmlid}")
-    print(f"   Tables: {len(definition.tables)}")
-    print(f"   Scalings: {len(definition.scalings)}\n")
-
-    # Create ROM reader
-    print("5. Creating ROM reader...")
-    reader = RomReader(rom_file, definition)
-    print(f"   ROM loaded: {rom_file}\n")
-
-    # Verify ROM ID
-    print("6. Verifying ROM ID...")
-    if reader.verify_rom_id():
-        print("   ✓ ROM ID verification passed!")
-    else:
-        print("   ✗ ROM ID verification failed!")
-    print()
-
-    # Read a sample table
-    print("7. Reading sample table data...")
-    sample_table = definition.tables[0]
-    print(f"   Table: {sample_table.name}")
-    print(f"   Category: {sample_table.category}")
-    data = reader.read_table_data(sample_table)
-    if data:
-        print(f"   ✓ Successfully read {len(data['values'])} values")
-    else:
-        print("   ✗ Failed to read table data")
-    print()
-
-    print("=== Test Complete ===")
-    print("✓ All tests passed! ROM auto-detection is working correctly.")
-else:
-    print("✗ ROM detection failed!")
-</file>
-
-<file path="test_parser.py">
-#!/usr/bin/env python3
-"""
-Quick test of the ROM definition parser
-"""
-
-import sys
-from src.core.definition_parser import load_definition
-
-def main():
-    xml_path = "metadata/lf9veb.xml"
-
-    print("Loading ROM definition from:", xml_path)
-    print()
-
-    try:
-        definition = load_definition(xml_path)
-
-        # Print ROM ID info
-        print("=== ROM ID ===")
-        print(f"  XML ID: {definition.romid.xmlid}")
-        print(f"  Make/Model: {definition.romid.make} {definition.romid.model}")
-        print(f"  ECU ID: {definition.romid.ecuid}")
-        print(f"  Memory Model: {definition.romid.memmodel}")
-        print(f"  Checksum Module: {definition.romid.checksummodule}")
-        print(f"  Internal ID Address: {definition.romid.internalidaddress}")
-        print()
-
-        # Print scaling stats
-        print("=== Scalings ===")
-        print(f"  Total scalings: {len(definition.scalings)}")
-
-        # Show a few example scalings
-        print("  Example scalings:")
-        for i, (name, scaling) in enumerate(list(definition.scalings.items())[:3]):
-            print(f"    {name}: {scaling.storagetype} ({scaling.endian}), "
-                  f"toexpr='{scaling.toexpr}', range=[{scaling.min}, {scaling.max}]")
-        print()
-
-        # Print table stats
-        print("=== Tables ===")
-        print(f"  Total tables: {len(definition.tables)}")
-
-        # Count by type
-        type_counts = {}
-        for table in definition.tables:
-            if not table.is_axis:  # Don't count axis tables
-                type_str = table.type.value
-                type_counts[type_str] = type_counts.get(type_str, 0) + 1
-
-        print("  By type:")
-        for table_type, count in sorted(type_counts.items()):
-            print(f"    {table_type}: {count}")
-        print()
-
-        # Group by category
-        categories = definition.get_tables_by_category()
-        print(f"  Categories: {len(categories)}")
-        print("  Top categories by table count:")
-        sorted_cats = sorted(categories.items(), key=lambda x: len(x[1]), reverse=True)
-        for category, tables in sorted_cats[:10]:
-            print(f"    {category}: {len(tables)} tables")
-        print()
-
-        # Show a few example tables
-        print("=== Example Tables ===")
-
-        # Find some interesting tables
-        for table in definition.tables:
-            if table.is_axis:
-                continue
-            if "Spark Target" in table.name and table.type.value == "3D":
-                print(f"  {table.name}")
-                print(f"    Type: {table.type.value}")
-                print(f"    Category: {table.category}")
-                print(f"    Address: 0x{table.address}")
-                print(f"    Elements: {table.elements}")
-                print(f"    Scaling: {table.scaling}")
-                if table.x_axis:
-                    print(f"    X Axis: {table.x_axis.elements} elements at 0x{table.x_axis.address}")
-                if table.y_axis:
-                    print(f"    Y Axis: {table.y_axis.elements} elements at 0x{table.y_axis.address}")
-                print()
-                break
-
-        print("✓ Parser test successful!")
-        return 0
-
-    except Exception as e:
-        print(f"✗ Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
-
-if __name__ == "__main__":
-    sys.exit(main())
-</file>
-
 <file path="WINDOWS_SETUP.md">
 # Windows Setup Guide
 
@@ -7281,276 +7119,6 @@ For development work:
 - Use WSL for command-line development
 - Use Windows for GUI testing
 - Files in `C:\Projets\AI\nc-rom-editor` are accessible from both
-</file>
-
-<file path="src/core/definition_parser.py">
-"""
-ROM Definition XML Parser
-
-Parses RomDrop-style XML definition files into RomDefinition objects.
-"""
-
-from lxml import etree
-from typing import Optional
-from pathlib import Path
-import logging
-
-from .rom_definition import (
-    RomDefinition,
-    RomID,
-    Scaling,
-    Table,
-    TableType,
-    AxisType
-)
-from .exceptions import (
-    DefinitionNotFoundError,
-    DefinitionParseError,
-    InvalidDefinitionError
-)
-
-logger = logging.getLogger(__name__)
-
-
-class DefinitionParser:
-    """
-    Parser for ROM definition XML files
-    """
-
-    def __init__(self, xml_path: str):
-        """
-        Initialize parser with path to XML definition file
-
-        Args:
-            xml_path: Path to ROM definition XML file
-
-        Raises:
-            DefinitionNotFoundError: If definition file doesn't exist
-        """
-        self.xml_path = Path(xml_path)
-        if not self.xml_path.exists():
-            logger.error(f"Definition file not found: {xml_path}")
-            raise DefinitionNotFoundError(f"Definition file not found: {xml_path}")
-
-    def parse(self) -> RomDefinition:
-        """
-        Parse the XML file and return a RomDefinition object
-
-        Returns:
-            RomDefinition: Complete ROM definition
-
-        Raises:
-            DefinitionParseError: If XML parsing fails
-            InvalidDefinitionError: If ROM definition structure is invalid
-        """
-        logger.info(f"Parsing ROM definition from {self.xml_path}")
-
-        try:
-            tree = etree.parse(str(self.xml_path))
-            root = tree.getroot()
-        except etree.XMLSyntaxError as e:
-            logger.error(f"XML syntax error in {self.xml_path}: {e}")
-            raise DefinitionParseError(f"Failed to parse XML file: {e}")
-        except Exception as e:
-            logger.error(f"Unexpected error parsing {self.xml_path}: {e}")
-            raise DefinitionParseError(f"Failed to parse definition file: {e}")
-
-        # Parse ROM element
-        # Handle two formats:
-        # 1. <roms><rom>...</rom></roms> (our format with wrapper)
-        # 2. <rom>...</rom> (standard RomDrop format)
-        if root.tag == 'rom':
-            # Root is the rom element (RomDrop format)
-            rom_element = root
-        else:
-            # Look for rom element inside wrapper (our format)
-            rom_element = root.find('.//rom')
-            if rom_element is None:
-                logger.error(f"No <rom> element found in {self.xml_path}")
-                raise InvalidDefinitionError("No <rom> element found in XML")
-
-        # Parse ROM ID
-        romid = self._parse_romid(rom_element)
-
-        # Parse all scaling definitions
-        scalings = self._parse_scalings(rom_element)
-        logger.info(f"Parsed {len(scalings)} scaling definitions")
-
-        # Parse all table definitions
-        tables = self._parse_tables(rom_element)
-        logger.info(f"Parsed {len(tables)} table definitions")
-
-        logger.info(f"Successfully parsed ROM definition: {romid.xmlid}")
-        return RomDefinition(
-            romid=romid,
-            scalings=scalings,
-            tables=tables
-        )
-
-    def _parse_romid(self, rom_element) -> RomID:
-        """
-        Parse ROM identification section
-
-        Args:
-            rom_element: The <rom> XML element
-
-        Returns:
-            RomID: Parsed ROM identification
-
-        Raises:
-            InvalidDefinitionError: If <romid> element is missing
-        """
-        romid_elem = rom_element.find('romid')
-        if romid_elem is None:
-            logger.error("No <romid> element found in ROM definition")
-            raise InvalidDefinitionError("No <romid> element found")
-
-        def get_text(tag: str, default: str = "") -> str:
-            elem = romid_elem.find(tag)
-            return elem.text.strip() if elem is not None and elem.text else default
-
-        return RomID(
-            xmlid=get_text('xmlid'),
-            internalidaddress=get_text('internalidaddress'),
-            internalidstring=get_text('internalidstring'),
-            ecuid=get_text('ecuid'),
-            make=get_text('make'),
-            model=get_text('model'),
-            flashmethod=get_text('flashmethod'),
-            memmodel=get_text('memmodel'),
-            checksummodule=get_text('checksummodule'),
-            market=get_text('market') or None,
-            submodel=get_text('submodel') or None,
-            transmission=get_text('transmission') or None,
-            year=get_text('year') or None,
-        )
-
-    def _parse_scalings(self, rom_element) -> dict:
-        """
-        Parse all scaling definitions into a dictionary
-
-        Args:
-            rom_element: The <rom> XML element
-
-        Returns:
-            dict: Dictionary mapping scaling names to Scaling objects
-        """
-        scalings = {}
-
-        for scaling_elem in rom_element.findall('.//scaling'):
-            name = scaling_elem.get('name')
-            if not name:
-                logger.debug("Skipping scaling element without name attribute")
-                continue  # Skip scalings without names
-
-            try:
-                scaling = Scaling(
-                    name=name,
-                    units=scaling_elem.get('units', ''),
-                    toexpr=scaling_elem.get('toexpr', 'x'),
-                    frexpr=scaling_elem.get('frexpr', 'x'),
-                    format=scaling_elem.get('format', '%0.2f'),
-                    min=float(scaling_elem.get('min', '0')),
-                    max=float(scaling_elem.get('max', '0')),
-                    inc=float(scaling_elem.get('inc', '1')),
-                    storagetype=scaling_elem.get('storagetype', 'float'),
-                    endian=scaling_elem.get('endian', 'big'),
-                )
-
-                scalings[name] = scaling
-                logger.debug(f"Parsed scaling: {name}")
-            except (ValueError, TypeError) as e:
-                logger.warning(f"Failed to parse scaling '{name}': {e}")
-                continue
-
-        return scalings
-
-    def _parse_tables(self, rom_element) -> list:
-        """
-        Parse all table definitions
-
-        Args:
-            rom_element: The <rom> XML element
-
-        Returns:
-            list: List of top-level Table objects (not axis children)
-        """
-        tables = []
-
-        # Find all top-level table elements (direct children of rom, not nested in other tables)
-        # We need to handle the hierarchy: some tables contain child axis tables
-        for table_elem in rom_element.findall('./table'):
-            # Only parse if it has required attributes (top-level tables)
-            if table_elem.get('address') and table_elem.get('type'):
-                table = self._parse_table(table_elem)
-                if table:
-                    tables.append(table)
-                    logger.debug(f"Parsed table: {table.name}")
-
-        return tables
-
-    def _parse_table(self, table_elem) -> Optional[Table]:
-        """
-        Parse a single table element and its children
-
-        Args:
-            table_elem: The <table> XML element
-
-        Returns:
-            Table object if successful, None if table is invalid
-        """
-        # Get table type
-        type_str = table_elem.get('type')
-        if not type_str:
-            logger.debug("Skipping table element without type attribute")
-            return None
-
-        # Determine if this is an axis table
-        axis_type = None
-        if type_str in ['X Axis', 'Y Axis']:
-            axis_type = AxisType.X_AXIS if type_str == 'X Axis' else AxisType.Y_AXIS
-            table_type = TableType.ONE_D  # Axes are always 1D
-        else:
-            try:
-                table_type = TableType(type_str)
-            except ValueError:
-                logger.debug(f"Skipping table with unknown type: {type_str}")
-                return None  # Unknown type
-
-        # Parse basic attributes
-        table = Table(
-            name=table_elem.get('name', 'Unnamed'),
-            address=table_elem.get('address', '0'),
-            elements=int(table_elem.get('elements', '0')),
-            scaling=table_elem.get('scaling', ''),
-            type=table_type,
-            level=int(table_elem.get('level', '1')),
-            category=table_elem.get('category', ''),
-            swapxy=table_elem.get('swapxy', 'false').lower() == 'true',
-            axis_type=axis_type,
-        )
-
-        # Parse child tables (axes for 2D/3D tables)
-        for child_elem in table_elem.findall('./table'):
-            child_table = self._parse_table(child_elem)
-            if child_table:
-                table.children.append(child_table)
-
-        return table
-
-
-def load_definition(xml_path: str) -> RomDefinition:
-    """
-    Convenience function to load a ROM definition from XML file
-
-    Args:
-        xml_path: Path to XML definition file
-
-    Returns:
-        RomDefinition: Parsed ROM definition
-    """
-    parser = DefinitionParser(xml_path)
-    return parser.parse()
 </file>
 
 <file path="src/core/rom_detector.py">
@@ -7806,7 +7374,7 @@ Extracts and scales table data based on definitions.
 import struct
 import numpy as np
 from pathlib import Path
-from typing import Optional, Union, List
+from typing import Optional, Union
 import logging
 from simpleeval import simple_eval
 
@@ -7966,9 +7534,27 @@ class RomReader:
 
         Returns:
             NumPy array of raw values
+
+        Raises:
+            RomReadError: If address is out of bounds
         """
         bytes_per_elem = scaling.bytes_per_element
         total_bytes = count * bytes_per_elem
+
+        # Validate bounds
+        if address < 0:
+            raise RomReadError(f"Invalid address: {hex(address)} (negative)")
+        if address >= len(self.rom_data):
+            raise RomReadError(
+                f"Address out of bounds: {hex(address)} "
+                f"(ROM size: {len(self.rom_data)} bytes)"
+            )
+        if address + total_bytes > len(self.rom_data):
+            raise RomReadError(
+                f"Read operation exceeds ROM bounds: "
+                f"trying to read {total_bytes} bytes from {hex(address)} "
+                f"(ROM size: {len(self.rom_data)} bytes)"
+            )
 
         # Extract bytes
         data_bytes = self.rom_data[address:address + total_bytes]
@@ -8130,6 +7716,22 @@ class RomReader:
 
         try:
             packed_data = struct.pack(format_string, *raw_values)
+
+            # Validate bounds before writing
+            if address < 0:
+                raise RomWriteError(f"Invalid address: {hex(address)} (negative)")
+            if address >= len(self.rom_data):
+                raise RomWriteError(
+                    f"Address out of bounds: {hex(address)} "
+                    f"(ROM size: {len(self.rom_data)} bytes)"
+                )
+            if address + len(packed_data) > len(self.rom_data):
+                raise RomWriteError(
+                    f"Write operation exceeds ROM bounds: "
+                    f"trying to write {len(packed_data)} bytes at {hex(address)} "
+                    f"(ROM size: {len(self.rom_data)} bytes)"
+                )
+
             # Modify ROM data in memory
             self.rom_data = (
                 self.rom_data[:address] +
@@ -8137,6 +7739,9 @@ class RomReader:
                 self.rom_data[address + len(packed_data):]
             )
             logger.info(f"Successfully wrote table data: {table.name}")
+        except RomWriteError:
+            # Re-raise our own exceptions
+            raise
         except Exception as e:
             logger.error(f"Error writing table data for '{table.name}': {e}")
             raise RomWriteError(f"Failed to write table data: {e}")
@@ -8163,339 +7768,6 @@ class RomReader:
         except IOError as e:
             logger.error(f"Failed to save ROM file to {output_path}: {e}")
             raise RomWriteError(f"Failed to save ROM file: {e}")
-</file>
-
-<file path="src/ui/table_browser.py">
-"""
-Table Browser Widget
-
-Shows a tree view of all available tables organized by category.
-"""
-
-from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QTreeWidget,
-    QTreeWidgetItem,
-    QLabel,
-    QLineEdit,
-    QPushButton,
-    QStyledItemDelegate
-)
-from PySide6.QtCore import Signal, Qt
-from PySide6.QtGui import QShortcut, QKeySequence, QBrush, QColor, QPalette
-
-from ..core.rom_definition import RomDefinition, Table
-
-
-class HtmlDelegate(QStyledItemDelegate):
-    """Custom delegate to render HTML in tree widget items"""
-
-    def paint(self, painter, option, index):
-        """Paint the item with HTML support"""
-        from PySide6.QtGui import QTextDocument
-        from PySide6.QtCore import QRectF
-
-        options = option
-        self.initStyleOption(options, index)
-
-        # Check if text contains HTML tags
-        if '<span' not in options.text:
-            # No HTML, use default painting
-            super().paint(painter, option, index)
-            return
-
-        painter.save()
-
-        # Create a text document for HTML rendering
-        doc = QTextDocument()
-        doc.setHtml(options.text)
-        doc.setDefaultFont(options.font)
-
-        # Clear the text so the default drawing doesn't happen
-        options.text = ""
-
-        # Draw the item background
-        if options.widget:
-            style = options.widget.style()
-        else:
-            from PySide6.QtWidgets import QApplication
-            style = QApplication.style()
-
-        style.drawControl(style.CE_ItemViewItem, options, painter)
-
-        # Calculate text rect
-        text_rect = style.subElementRect(style.SE_ItemViewItemText, options)
-
-        # Draw the HTML text
-        painter.translate(text_rect.topLeft())
-        clip = QRectF(0, 0, text_rect.width(), text_rect.height())
-        doc.drawContents(painter, clip)
-
-        painter.restore()
-
-    def sizeHint(self, option, index):
-        """Return size hint for the item"""
-        # Use default size hint
-        return super().sizeHint(option, index)
-
-
-class TableBrowser(QWidget):
-    """Widget for browsing tables by category"""
-
-    # Signal emitted when a table is selected
-    table_selected = Signal(Table)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.definition = None
-        self.init_ui()
-
-    def init_ui(self):
-        """Initialize the user interface"""
-        layout = QVBoxLayout()
-        self.setLayout(layout)
-
-        # Label
-        label = QLabel("Tables")
-        layout.addWidget(label)
-
-        # Search box
-        search_layout = QHBoxLayout()
-        self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("Search tables... (Ctrl+F)")
-        self.search_box.textChanged.connect(self._filter_tables)
-        self.search_box.setClearButtonEnabled(True)
-        search_layout.addWidget(self.search_box)
-
-        clear_button = QPushButton("Clear")
-        clear_button.clicked.connect(self.search_box.clear)
-        search_layout.addWidget(clear_button)
-
-        layout.addLayout(search_layout)
-
-        # Tree widget for categories and tables
-        self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Name", "Type", "Address"])
-        self.tree.setColumnWidth(0, 300)  # Reduced from 400 to fit table names more efficiently
-        self.tree.itemClicked.connect(self._on_item_clicked)
-
-        # Set custom delegate for HTML rendering
-        self.html_delegate = HtmlDelegate(self.tree)
-        self.tree.setItemDelegate(self.html_delegate)
-
-        layout.addWidget(self.tree)
-
-        # Keyboard shortcut for search (Ctrl+F)
-        self.search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
-        self.search_shortcut.activated.connect(self._focus_search)
-
-    def load_definition(self, definition: RomDefinition):
-        """
-        Load ROM definition and populate tree
-
-        Args:
-            definition: ROM definition with tables
-        """
-        self.definition = definition
-        self.tree.clear()
-
-        # Get tables grouped by category
-        categories = definition.get_tables_by_category()
-
-        # Sort categories alphabetically
-        for category in sorted(categories.keys()):
-            tables = categories[category]
-
-            # Create category item
-            category_item = QTreeWidgetItem([category, "", ""])
-            category_item.setData(0, 100, None)  # Store None for category items
-            self.tree.addTopLevelItem(category_item)
-
-            # Sort tables by name within category
-            for table in sorted(tables, key=lambda t: t.name):
-                # Create table item
-                table_item = QTreeWidgetItem([
-                    table.name,
-                    table.type.value,
-                    f"0x{table.address}"
-                ])
-                # Store table object
-                table_item.setData(0, 100, table)
-                category_item.addChild(table_item)
-
-            # Collapse categories initially
-            category_item.setExpanded(False)
-
-    def _on_item_clicked(self, item, column):
-        """Handle item click in tree"""
-        # Get table object stored in item
-        table = item.data(0, 100)
-        if table is not None:  # Not a category
-            self.table_selected.emit(table)
-
-    def _focus_search(self):
-        """Focus the search box and select all text"""
-        self.search_box.setFocus()
-        self.search_box.selectAll()
-
-    def _highlight_text(self, text: str, search_text: str) -> str:
-        """
-        Highlight matching portions of text with HTML
-
-        Args:
-            text: Original text
-            search_text: Text to highlight
-
-        Returns:
-            str: Text with HTML highlighting
-        """
-        if not search_text:
-            return text
-
-        # Case-insensitive search for position
-        lower_text = text.lower()
-        lower_search = search_text.lower()
-
-        result = text
-        pos = 0
-        highlighted = []
-
-        while True:
-            index = lower_text.find(lower_search, pos)
-            if index == -1:
-                # Add remaining text
-                highlighted.append(result[pos:])
-                break
-
-            # Add text before match
-            highlighted.append(result[pos:index])
-
-            # Add highlighted match (subtle background color)
-            match_text = result[index:index + len(search_text)]
-            highlighted.append(f'<span style="background-color: #E3F2FD; color: #1976D2; font-weight: 500;">{match_text}</span>')
-
-            pos = index + len(search_text)
-
-        return ''.join(highlighted)
-
-    def _filter_tables(self, search_text: str):
-        """
-        Filter the table tree based on search text and highlight matches
-
-        Args:
-            search_text: Text to search for in table names and categories
-        """
-        search_text = search_text.lower().strip()
-
-        # If search is empty, show all items and clear highlighting
-        if not search_text:
-            self._show_all_items()
-            return
-
-        # Iterate through all category items
-        for i in range(self.tree.topLevelItemCount()):
-            category_item = self.tree.topLevelItem(i)
-            # Get original text (stored in data)
-            original_category = category_item.data(0, Qt.UserRole)
-            if original_category is None:
-                original_category = category_item.text(0)
-                category_item.setData(0, Qt.UserRole, original_category)
-
-            category_name_lower = original_category.lower()
-            category_has_match = False
-
-            # Check if category name matches
-            category_matches = search_text in category_name_lower
-
-            # Set category text with or without highlighting
-            if category_matches:
-                category_item.setText(0, self._highlight_text(original_category, search_text))
-            else:
-                category_item.setText(0, original_category)
-
-            # Check all table children
-            for j in range(category_item.childCount()):
-                table_item = category_item.child(j)
-
-                # Get original texts (stored in data)
-                original_name = table_item.data(0, Qt.UserRole)
-                original_type = table_item.data(1, Qt.UserRole)
-                original_address = table_item.data(2, Qt.UserRole)
-
-                if original_name is None:
-                    original_name = table_item.text(0)
-                    original_type = table_item.text(1)
-                    original_address = table_item.text(2)
-                    table_item.setData(0, Qt.UserRole, original_name)
-                    table_item.setData(1, Qt.UserRole, original_type)
-                    table_item.setData(2, Qt.UserRole, original_address)
-
-                # Match against table name, type, or address
-                name_matches = search_text in original_name.lower()
-                type_matches = search_text in original_type.lower()
-                address_matches = search_text in original_address.lower()
-                matches = name_matches or type_matches or address_matches
-
-                # Set text with highlighting for matching columns
-                if name_matches:
-                    table_item.setText(0, self._highlight_text(original_name, search_text))
-                else:
-                    table_item.setText(0, original_name)
-
-                if type_matches:
-                    table_item.setText(1, self._highlight_text(original_type, search_text))
-                else:
-                    table_item.setText(1, original_type)
-
-                if address_matches:
-                    table_item.setText(2, self._highlight_text(original_address, search_text))
-                else:
-                    table_item.setText(2, original_address)
-
-                # Show/hide table item
-                table_item.setHidden(not matches and not category_matches)
-
-                if matches:
-                    category_has_match = True
-
-            # Show category if it matches or has matching children
-            category_item.setHidden(not (category_matches or category_has_match))
-
-            # Expand categories that have matches
-            if category_has_match or category_matches:
-                category_item.setExpanded(True)
-
-    def _show_all_items(self):
-        """Show all items in the tree, collapse categories, and clear highlighting"""
-        for i in range(self.tree.topLevelItemCount()):
-            category_item = self.tree.topLevelItem(i)
-            category_item.setHidden(False)
-
-            # Restore original text without highlighting
-            original_category = category_item.data(0, Qt.UserRole)
-            if original_category:
-                category_item.setText(0, original_category)
-
-            for j in range(category_item.childCount()):
-                table_item = category_item.child(j)
-                table_item.setHidden(False)
-
-                # Restore original texts without highlighting
-                original_name = table_item.data(0, Qt.UserRole)
-                original_type = table_item.data(1, Qt.UserRole)
-                original_address = table_item.data(2, Qt.UserRole)
-
-                if original_name:
-                    table_item.setText(0, original_name)
-                if original_type:
-                    table_item.setText(1, original_type)
-                if original_address:
-                    table_item.setText(2, original_address)
-
-            # Collapse categories when search is cleared
-            category_item.setExpanded(False)
 </file>
 
 <file path="tests/test_definition_parser.py">
@@ -9508,6 +8780,70 @@ coverage.xml
 .tox/
 </file>
 
+<file path="AGENTS.md">
+# Agent Instructions
+
+This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
+
+## Session Start Checklist
+
+**EVERY NEW SESSION, you MUST:**
+
+1. **Refresh Repomix** - Get latest codebase snapshot:
+   ```bash
+   repomix mix
+   ```
+   This creates/updates `repomix-output.xml` with the entire codebase in AI-friendly format
+
+2. **Check available work:**
+   ```bash
+   bd ready
+   ```
+
+## Quick Reference
+
+```bash
+bd ready              # Find available work
+bd show <id>          # View issue details
+bd update <id> --status in_progress  # Claim work
+bd close <id>         # Complete work
+bd sync               # Sync with git
+repomix mix           # Refresh codebase snapshot for AI consumption
+```
+
+## Landing the Plane (Session Completion)
+
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+
+**MANDATORY WORKFLOW:**
+
+1. **File issues for remaining work** - Create issues for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds
+3. **Update issue status** - Close finished work, update in-progress items
+4. **Refresh Repomix** - Update codebase snapshot for next session:
+   ```bash
+   repomix mix
+   git add repomix-output.xml
+   git commit -m "Update repomix snapshot"
+   ```
+5. **PUSH TO REMOTE** - This is MANDATORY:
+   ```bash
+   git pull --rebase
+   bd sync
+   git push
+   git status  # MUST show "up to date with origin"
+   ```
+6. **Clean up** - Clear stashes, prune remote branches
+7. **Verify** - All changes committed AND pushed, repomix refreshed
+8. **Hand off** - Provide context for next session
+
+**CRITICAL RULES:**
+- Work is NOT complete until `git push` succeeds
+- NEVER stop before pushing - that leaves work stranded locally
+- NEVER say "ready to push when you are" - YOU must push
+- If push fails, resolve and retry until it succeeds
+</file>
+
 <file path="requirements.txt">
 # GUI Framework
 PySide6~=6.6.0
@@ -9530,618 +8866,608 @@ black==24.1.1
 flake8==7.0.0
 </file>
 
-<file path="main.py">
-#!/usr/bin/env python3
+<file path="src/core/definition_parser.py">
 """
-NC ROM Editor - Main Application Entry Point
+ROM Definition XML Parser
 
-An open-source ROM editor for NC Miata ECUs
+Parses RomDrop-style XML definition files into RomDefinition objects.
 """
 
-import sys
-import logging
+from lxml import etree
+from typing import Optional
 from pathlib import Path
-from datetime import datetime
+import logging
+
+from .rom_definition import (
+    RomDefinition,
+    RomID,
+    Scaling,
+    Table,
+    TableType,
+    AxisType
+)
+from .exceptions import (
+    DefinitionNotFoundError,
+    DefinitionParseError,
+    InvalidDefinitionError
+)
+
+logger = logging.getLogger(__name__)
+
+
+class DefinitionParser:
+    """
+    Parser for ROM definition XML files
+    """
+
+    def __init__(self, xml_path: str):
+        """
+        Initialize parser with path to XML definition file
+
+        Args:
+            xml_path: Path to ROM definition XML file
+
+        Raises:
+            DefinitionNotFoundError: If definition file doesn't exist
+        """
+        self.xml_path = Path(xml_path)
+        if not self.xml_path.exists():
+            logger.error(f"Definition file not found: {xml_path}")
+            raise DefinitionNotFoundError(f"Definition file not found: {xml_path}")
+
+    def parse(self) -> RomDefinition:
+        """
+        Parse the XML file and return a RomDefinition object
+
+        Returns:
+            RomDefinition: Complete ROM definition
+
+        Raises:
+            DefinitionParseError: If XML parsing fails
+            InvalidDefinitionError: If ROM definition structure is invalid
+        """
+        logger.info(f"Parsing ROM definition from {self.xml_path}")
+
+        try:
+            tree = etree.parse(str(self.xml_path))
+            root = tree.getroot()
+        except etree.XMLSyntaxError as e:
+            logger.error(f"XML syntax error in {self.xml_path}: {e}")
+            raise DefinitionParseError(f"Failed to parse XML file: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error parsing {self.xml_path}: {e}")
+            raise DefinitionParseError(f"Failed to parse definition file: {e}")
+
+        # Parse ROM element
+        # Handle two formats:
+        # 1. <roms><rom>...</rom></roms> (our format with wrapper)
+        # 2. <rom>...</rom> (standard RomDrop format)
+        if root.tag == 'rom':
+            # Root is the rom element (RomDrop format)
+            rom_element = root
+        else:
+            # Look for rom element inside wrapper (our format)
+            rom_element = root.find('.//rom')
+            if rom_element is None:
+                logger.error(f"No <rom> element found in {self.xml_path}")
+                raise InvalidDefinitionError("No <rom> element found in XML")
+
+        # Parse ROM ID
+        romid = self._parse_romid(rom_element)
+
+        # Parse all scaling definitions
+        scalings = self._parse_scalings(rom_element)
+        logger.info(f"Parsed {len(scalings)} scaling definitions")
+
+        # Parse all table definitions
+        tables = self._parse_tables(rom_element)
+        logger.info(f"Parsed {len(tables)} table definitions")
+
+        logger.info(f"Successfully parsed ROM definition: {romid.xmlid}")
+        return RomDefinition(
+            romid=romid,
+            scalings=scalings,
+            tables=tables
+        )
+
+    def _parse_romid(self, rom_element) -> RomID:
+        """
+        Parse ROM identification section
+
+        Args:
+            rom_element: The <rom> XML element
+
+        Returns:
+            RomID: Parsed ROM identification
+
+        Raises:
+            InvalidDefinitionError: If <romid> element is missing
+        """
+        romid_elem = rom_element.find('romid')
+        if romid_elem is None:
+            logger.error("No <romid> element found in ROM definition")
+            raise InvalidDefinitionError("No <romid> element found")
+
+        def get_text(tag: str, default: str = "") -> str:
+            elem = romid_elem.find(tag)
+            return elem.text.strip() if elem is not None and elem.text else default
+
+        return RomID(
+            xmlid=get_text('xmlid'),
+            internalidaddress=get_text('internalidaddress'),
+            internalidstring=get_text('internalidstring'),
+            ecuid=get_text('ecuid'),
+            make=get_text('make'),
+            model=get_text('model'),
+            flashmethod=get_text('flashmethod'),
+            memmodel=get_text('memmodel'),
+            checksummodule=get_text('checksummodule'),
+            market=get_text('market') or None,
+            submodel=get_text('submodel') or None,
+            transmission=get_text('transmission') or None,
+            year=get_text('year') or None,
+        )
+
+    def _parse_scalings(self, rom_element) -> dict:
+        """
+        Parse all scaling definitions into a dictionary
+
+        Args:
+            rom_element: The <rom> XML element
+
+        Returns:
+            dict: Dictionary mapping scaling names to Scaling objects
+        """
+        scalings = {}
+
+        for scaling_elem in rom_element.findall('.//scaling'):
+            name = scaling_elem.get('name')
+            if not name:
+                logger.debug("Skipping scaling element without name attribute")
+                continue  # Skip scalings without names
+
+            try:
+                scaling = Scaling(
+                    name=name,
+                    units=scaling_elem.get('units', ''),
+                    toexpr=scaling_elem.get('toexpr', 'x'),
+                    frexpr=scaling_elem.get('frexpr', 'x'),
+                    format=scaling_elem.get('format', '%0.2f'),
+                    min=float(scaling_elem.get('min', '0')),
+                    max=float(scaling_elem.get('max', '0')),
+                    inc=float(scaling_elem.get('inc', '1')),
+                    storagetype=scaling_elem.get('storagetype', 'float'),
+                    endian=scaling_elem.get('endian', 'big'),
+                )
+
+                scalings[name] = scaling
+                logger.debug(f"Parsed scaling: {name}")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Failed to parse scaling '{name}': {e}")
+                continue
+
+        return scalings
+
+    def _parse_tables(self, rom_element) -> list:
+        """
+        Parse all table definitions
+
+        Args:
+            rom_element: The <rom> XML element
+
+        Returns:
+            list: List of top-level Table objects (not axis children)
+        """
+        tables = []
+
+        # Find all top-level table elements (direct children of rom, not nested in other tables)
+        # We need to handle the hierarchy: some tables contain child axis tables
+        for table_elem in rom_element.findall('./table'):
+            # Only parse if it has required attributes (top-level tables)
+            if table_elem.get('address') and table_elem.get('type'):
+                table = self._parse_table(table_elem)
+                if table:
+                    tables.append(table)
+                    logger.debug(f"Parsed table: {table.name}")
+
+        return tables
+
+    def _parse_table(self, table_elem) -> Optional[Table]:
+        """
+        Parse a single table element and its children
+
+        Args:
+            table_elem: The <table> XML element
+
+        Returns:
+            Table object if successful, None if table is invalid
+        """
+        # Get table type
+        type_str = table_elem.get('type')
+        if not type_str:
+            logger.debug("Skipping table element without type attribute")
+            return None
+
+        # Determine if this is an axis table
+        axis_type = None
+        if type_str in ['X Axis', 'Y Axis']:
+            axis_type = AxisType.X_AXIS if type_str == 'X Axis' else AxisType.Y_AXIS
+            table_type = TableType.ONE_D  # Axes are always 1D
+        else:
+            try:
+                table_type = TableType(type_str)
+            except ValueError:
+                logger.debug(f"Skipping table with unknown type: {type_str}")
+                return None  # Unknown type
+
+        # Parse basic attributes
+        table = Table(
+            name=table_elem.get('name', 'Unnamed'),
+            address=table_elem.get('address', '0'),
+            elements=int(table_elem.get('elements', '0')),
+            scaling=table_elem.get('scaling', ''),
+            type=table_type,
+            level=int(table_elem.get('level', '1')),
+            category=table_elem.get('category', ''),
+            swapxy=table_elem.get('swapxy', 'false').lower() == 'true',
+            axis_type=axis_type,
+        )
+
+        # Parse child tables (axes for 2D/3D tables)
+        for child_elem in table_elem.findall('./table'):
+            child_table = self._parse_table(child_elem)
+            if child_table:
+                table.children.append(child_table)
+
+        return table
+
+
+def load_definition(xml_path: str) -> RomDefinition:
+    """
+    Convenience function to load a ROM definition from XML file
+
+    Args:
+        xml_path: Path to XML definition file
+
+    Returns:
+        RomDefinition: Parsed ROM definition
+    """
+    parser = DefinitionParser(xml_path)
+    return parser.parse()
+</file>
+
+<file path="src/ui/table_browser.py">
+"""
+Table Browser Widget
+
+Shows a tree view of all available tables organized by category.
+"""
+
 from PySide6.QtWidgets import (
-    QDialog,
-    QApplication,
-    QMainWindow,
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
-    QSplitter,
-    QFileDialog,
-    QMessageBox,
+    QTreeWidget,
+    QTreeWidgetItem,
     QLabel,
-    QTabWidget
+    QLineEdit,
+    QPushButton,
+    QStyledItemDelegate
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Signal, Qt
+from PySide6.QtGui import QShortcut, QKeySequence
 
-from src.utils.logging_config import setup_logging, get_logger
-from src.utils.settings import get_settings
-from src.core.definition_parser import load_definition
-from src.core.rom_reader import RomReader
-from src.core.rom_detector import RomDetector
-from src.core.exceptions import (
-    DefinitionError,
-    RomFileError,
-    DetectionError,
-    ScalingNotFoundError,
-    RomReadError
-)
-from src.ui.table_browser import TableBrowser
-from src.ui.table_viewer import TableViewer
-from src.ui.table_viewer_window import TableViewerWindow
-from src.ui.log_console import LogConsole
-from src.ui.settings_dialog import SettingsDialog
-from src.ui.setup_wizard import SetupWizard
-from src.ui.rom_document import RomDocument
-
-logger = get_logger(__name__)
+from ..utils.constants import TABLE_BROWSER_COLUMN_WIDTH
+from ..core.rom_definition import RomDefinition, Table
 
 
-class MainWindow(QMainWindow):
-    """Main application window"""
+class HtmlDelegate(QStyledItemDelegate):
+    """Custom delegate to render HTML in tree widget items"""
 
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("NC ROM Editor")
-        self.setGeometry(100, 100, 1400, 900)
+    def paint(self, painter, option, index):
+        """Paint the item with HTML support"""
+        from PySide6.QtGui import QTextDocument
+        from PySide6.QtCore import QRectF
 
-        logger.info("Initializing NC ROM Editor")
+        options = option
+        self.initStyleOption(options, index)
 
-        # Track open table viewer windows
-        self.open_table_windows = []
+        # Check if text contains HTML tags
+        if '<span' not in options.text:
+            # No HTML, use default painting
+            super().paint(painter, option, index)
+            return
 
-        # Get application settings
-        self.settings = get_settings()
+        painter.save()
 
-        # Check if metadata directory is configured and valid
-        if not self.check_metadata_directory():
-            # Show setup wizard on first run or if metadata directory is invalid
-            if not self.show_setup_wizard():
-                # User cancelled setup, exit application
-                logger.warning("Setup cancelled by user, exiting application")
-                QMessageBox.critical(
-                    self,
-                    "Setup Required",
-                    "NC ROM Editor requires a metadata directory to function.\n"
-                    "Application will now exit."
-                )
-                sys.exit(1)
+        # Create a text document for HTML rendering
+        doc = QTextDocument()
+        doc.setHtml(options.text)
+        doc.setDefaultFont(options.font)
 
-        # ROM detector for automatic XML matching
-        try:
-            metadata_dir = self.settings.get_metadata_directory()
-            self.rom_detector = RomDetector(metadata_dir)
-            logger.info(f"ROM detector initialized successfully (metadata: {metadata_dir})")
-        except DetectionError as e:
-            logger.error(f"Failed to initialize ROM detector: {e}")
-            QMessageBox.critical(
-                self,
-                "Initialization Error",
-                f"Failed to initialize ROM detector:\n{str(e)}"
-            )
-            self.rom_detector = None
-        except Exception as e:
-            logger.error(f"Unexpected error initializing ROM detector: {e}")
-            QMessageBox.critical(
-                self,
-                "Initialization Error",
-                f"Failed to initialize ROM detector:\n{str(e)}"
-            )
-            self.rom_detector = None
+        # Clear the text so the default drawing doesn't happen
+        options.text = ""
 
-        # Initialize UI
-        self.init_ui()
-        self.init_menu()
-
-        # Log startup message
-        self.log_startup_message()
-
-    def check_metadata_directory(self) -> bool:
-        """
-        Check if metadata directory is configured and valid
-
-        Returns:
-            bool: True if valid, False if needs configuration
-        """
-        metadata_dir = self.settings.get_metadata_directory()
-
-        # Check if path exists
-        metadata_path = Path(metadata_dir)
-        if not metadata_path.exists() or not metadata_path.is_dir():
-            logger.warning(f"Metadata directory does not exist: {metadata_dir}")
-            return False
-
-        # Check if directory contains at least one XML file
-        xml_files = list(metadata_path.glob("*.xml"))
-        if not xml_files:
-            logger.warning(f"No XML files found in metadata directory: {metadata_dir}")
-            return False
-
-        return True
-
-    def show_setup_wizard(self) -> bool:
-        """
-        Show the setup wizard for first-run configuration
-
-        Returns:
-            bool: True if setup completed, False if cancelled
-        """
-        wizard = SetupWizard(self)
-        result = wizard.exec()
-
-        if result == QDialog.Accepted:
-            logger.info("Setup wizard completed successfully")
-            return True
+        # Draw the item background
+        if options.widget:
+            style = options.widget.style()
         else:
-            logger.info("Setup wizard cancelled")
-            return False
+            from PySide6.QtWidgets import QApplication
+            style = QApplication.style()
+
+        style.drawControl(style.CE_ItemViewItem, options, painter)
+
+        # Calculate text rect
+        text_rect = style.subElementRect(style.SE_ItemViewItemText, options)
+
+        # Draw the HTML text
+        painter.translate(text_rect.topLeft())
+        clip = QRectF(0, 0, text_rect.width(), text_rect.height())
+        doc.drawContents(painter, clip)
+
+        painter.restore()
+
+    def sizeHint(self, option, index):
+        """Return size hint for the item"""
+        # Use default size hint
+        return super().sizeHint(option, index)
+
+
+class TableBrowser(QWidget):
+    """Widget for browsing tables by category"""
+
+    # Signal emitted when a table is selected
+    table_selected = Signal(Table)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.definition = None
+        self.init_ui()
 
     def init_ui(self):
         """Initialize the user interface"""
-        # Central widget
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
+        layout = QVBoxLayout()
+        self.setLayout(layout)
 
-        layout = QHBoxLayout()
-        central_widget.setLayout(layout)
+        # Label
+        label = QLabel("Tables")
+        layout.addWidget(label)
 
-        # Main splitter (tabs on left, activity log on right)
-        main_splitter = QSplitter(Qt.Horizontal)
-        layout.addWidget(main_splitter)
+        # Search box
+        search_layout = QHBoxLayout()
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("Search tables... (Ctrl+F)")
+        self.search_box.textChanged.connect(self._filter_tables)
+        self.search_box.setClearButtonEnabled(True)
+        search_layout.addWidget(self.search_box)
 
-        # Tab widget for multiple ROM documents
-        self.tab_widget = QTabWidget()
-        self.tab_widget.setTabsClosable(True)
-        self.tab_widget.setMovable(True)
-        self.tab_widget.tabCloseRequested.connect(self.close_tab)
-        self.tab_widget.currentChanged.connect(self.on_tab_changed)
-        main_splitter.addWidget(self.tab_widget)
+        clear_button = QPushButton("Clear")
+        clear_button.clicked.connect(self.search_box.clear)
+        search_layout.addWidget(clear_button)
 
-        # Shared activity log on the right (always visible)
-        self.log_console = LogConsole()
-        main_splitter.addWidget(self.log_console)
+        layout.addLayout(search_layout)
 
-        # Set initial splitter sizes (30% tabs, 70% log)
-        # Matches longest table name width on left, rest for activity log
-        main_splitter.setSizes([420, 980])
+        # Tree widget for categories and tables
+        self.tree = QTreeWidget()
+        self.tree.setHeaderLabels(["Name", "Type", "Address"])
+        self.tree.setColumnWidth(0, TABLE_BROWSER_COLUMN_WIDTH)
+        self.tree.itemClicked.connect(self._on_item_clicked)
 
-    def init_menu(self):
-        """Initialize the menu bar"""
-        menubar = self.menuBar()
+        # Set custom delegate for HTML rendering
+        self.html_delegate = HtmlDelegate(self.tree)
+        self.tree.setItemDelegate(self.html_delegate)
 
-        # File menu
-        file_menu = menubar.addMenu("File")
+        layout.addWidget(self.tree)
 
-        open_action = file_menu.addAction("Open ROM...")
-        open_action.triggered.connect(self.open_rom)
+        # Keyboard shortcut for search (Ctrl+F)
+        self.search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
+        self.search_shortcut.activated.connect(self._focus_search)
 
-        save_action = file_menu.addAction("Save ROM")
-        save_action.triggered.connect(self.save_rom)
-
-        save_as_action = file_menu.addAction("Save ROM As...")
-        save_as_action.triggered.connect(self.save_rom_as)
-
-        file_menu.addSeparator()
-
-        close_tab_action = file_menu.addAction("Close Tab")
-        close_tab_action.triggered.connect(self.close_current_tab)
-
-        file_menu.addSeparator()
-
-        exit_action = file_menu.addAction("Exit")
-        exit_action.triggered.connect(self.close)
-
-        # Edit menu
-        edit_menu = menubar.addMenu("Edit")
-
-        settings_action = edit_menu.addAction("Settings...")
-        settings_action.triggered.connect(self.show_settings)
-
-        # Help menu
-        help_menu = menubar.addMenu("Help")
-
-        about_action = help_menu.addAction("About")
-        about_action.triggered.connect(self.show_about)
-
-    def update_no_roms_visibility(self):
-        """Update visibility - placeholder for future use"""
-        # Just update window title based on tab count
-        if self.tab_widget.count() == 0:
-            self.setWindowTitle("NC ROM Editor")
-        pass
-
-    def get_current_document(self):
+    def load_definition(self, definition: RomDefinition):
         """
-        Get the currently active ROM document
-
-        Returns:
-            RomDocument or None: Current document or None if no tabs
-        """
-        current_index = self.tab_widget.currentIndex()
-        if current_index >= 0:
-            return self.tab_widget.widget(current_index)
-        return None
-
-    def close_tab(self, index: int):
-        """
-        Close a ROM tab
+        Load ROM definition and populate tree
 
         Args:
-            index: Tab index to close
+            definition: ROM definition with tables
         """
-        if index < 0 or index >= self.tab_widget.count():
+        self.definition = definition
+        self.tree.clear()
+
+        # Get tables grouped by category
+        categories = definition.get_tables_by_category()
+
+        # Sort categories alphabetically
+        for category in sorted(categories.keys()):
+            tables = categories[category]
+
+            # Create category item
+            category_item = QTreeWidgetItem([category, "", ""])
+            category_item.setData(0, 100, None)  # Store None for category items
+            self.tree.addTopLevelItem(category_item)
+
+            # Sort tables by name within category
+            for table in sorted(tables, key=lambda t: t.name):
+                # Create table item
+                table_item = QTreeWidgetItem([
+                    table.name,
+                    table.type.value,
+                    f"0x{table.address}"
+                ])
+                # Store table object
+                table_item.setData(0, 100, table)
+                category_item.addChild(table_item)
+
+            # Collapse categories initially
+            category_item.setExpanded(False)
+
+    def _on_item_clicked(self, item, column):
+        """Handle item click in tree"""
+        # Get table object stored in item
+        table = item.data(0, 100)
+        if table is not None:  # Not a category
+            self.table_selected.emit(table)
+
+    def _focus_search(self):
+        """Focus the search box and select all text"""
+        self.search_box.setFocus()
+        self.search_box.selectAll()
+
+    def _highlight_text(self, text: str, search_text: str) -> str:
+        """
+        Highlight matching portions of text with HTML
+
+        Args:
+            text: Original text
+            search_text: Text to highlight
+
+        Returns:
+            str: Text with HTML highlighting
+        """
+        if not search_text:
+            return text
+
+        # Case-insensitive search for position
+        lower_text = text.lower()
+        lower_search = search_text.lower()
+
+        result = text
+        pos = 0
+        highlighted = []
+
+        while True:
+            index = lower_text.find(lower_search, pos)
+            if index == -1:
+                # Add remaining text
+                highlighted.append(result[pos:])
+                break
+
+            # Add text before match
+            highlighted.append(result[pos:index])
+
+            # Add highlighted match (subtle background color)
+            match_text = result[index:index + len(search_text)]
+            highlighted.append(f'<span style="background-color: #E3F2FD; color: #1976D2; font-weight: 500;">{match_text}</span>')
+
+            pos = index + len(search_text)
+
+        return ''.join(highlighted)
+
+    def _filter_tables(self, search_text: str):
+        """
+        Filter the table tree based on search text and highlight matches
+
+        Args:
+            search_text: Text to search for in table names and categories
+        """
+        search_text = search_text.lower().strip()
+
+        # If search is empty, show all items and clear highlighting
+        if not search_text:
+            self._show_all_items()
             return
 
-        document = self.tab_widget.widget(index)
-        if document and document.is_modified():
-            response = QMessageBox.question(
-                self,
-                "Unsaved Changes",
-                f"'{document.file_name}' has unsaved changes.\n\nDo you want to save before closing?",
-                QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
-                QMessageBox.Save
-            )
+        # Iterate through all category items
+        for i in range(self.tree.topLevelItemCount()):
+            category_item = self.tree.topLevelItem(i)
+            # Get original text (stored in data)
+            original_category = category_item.data(0, Qt.UserRole)
+            if original_category is None:
+                original_category = category_item.text(0)
+                category_item.setData(0, Qt.UserRole, original_category)
 
-            if response == QMessageBox.Cancel:
-                return
-            elif response == QMessageBox.Save:
-                # TODO: Implement save before close
-                pass
+            category_name_lower = original_category.lower()
+            category_has_match = False
 
-        # Remove the tab
-        self.tab_widget.removeTab(index)
-        self.update_no_roms_visibility()
+            # Check if category name matches
+            category_matches = search_text in category_name_lower
 
-        logger.info(f"Closed ROM tab: {document.file_name if document else 'unknown'}")
-
-    def close_current_tab(self):
-        """Close the currently active tab"""
-        current_index = self.tab_widget.currentIndex()
-        if current_index >= 0:
-            self.close_tab(current_index)
-
-    def on_tab_changed(self, index: int):
-        """Handle tab change"""
-        if index >= 0:
-            document = self.tab_widget.widget(index)
-            if document:
-                self.setWindowTitle(f"NC ROM Editor - {document.get_tab_title()}")
-                logger.info(f"Switched to ROM: {document.file_name}")
-        else:
-            self.setWindowTitle("NC ROM Editor")
-            self.update_no_roms_visibility()
-
-    def open_rom(self):
-        """Open a ROM file in a new tab"""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Open ROM File",
-            "",
-            "ROM Files (*.bin *.rom);;All Files (*)"
-        )
-
-        if file_path:
-            try:
-                logger.info(f"Opening ROM file: {file_path}")
-                self.statusBar().showMessage(f"Detecting ROM ID...")
-
-                # Detect ROM ID and find matching XML definition
-                if not self.rom_detector:
-                    logger.error("ROM detector not initialized")
-                    QMessageBox.critical(
-                        self,
-                        "Error",
-                        "ROM detector not initialized. Cannot auto-detect ROM type."
-                    )
-                    return
-
-                rom_id, xml_path = self.rom_detector.detect_rom_id(file_path)
-
-                if not rom_id or not xml_path:
-                    logger.warning(f"No matching ROM definition found for {file_path}")
-                    QMessageBox.critical(
-                        self,
-                        "Unknown ROM",
-                        "Could not identify ROM type. No matching definition found.\n\n"
-                        "Supported ROM IDs:\n" +
-                        "\n".join([f"  - {info['xmlid']} ({info['make']} {info['model']})"
-                                   for info in self.rom_detector.get_definitions_summary()])
-                    )
-                    return
-
-                # Load the matching definition
-                logger.info(f"Detected ROM ID: {rom_id}")
-                self.statusBar().showMessage(f"Detected ROM ID: {rom_id}, loading definition...")
-                rom_definition = load_definition(xml_path)
-
-                # Create ROM reader
-                self.statusBar().showMessage(f"Loading ROM data...")
-                rom_reader = RomReader(file_path, rom_definition)
-
-                # Verify ROM ID (should always pass now, but kept as sanity check)
-                if not rom_reader.verify_rom_id():
-                    logger.warning("ROM ID verification failed after auto-detection")
-                    QMessageBox.warning(
-                        self,
-                        "ROM ID Warning",
-                        f"ROM ID verification failed. This should not happen after auto-detection.\n"
-                        f"Expected: {rom_definition.romid.internalidstring}\n"
-                        f"This may indicate a detection bug."
-                    )
-
-                # Create ROM document widget
-                rom_document = RomDocument(file_path, rom_definition, rom_reader, self)
-                rom_document.table_selected.connect(self.on_table_selected)
-
-                # Add as new tab
-                file_name = Path(file_path).name
-                tab_index = self.tab_widget.addTab(rom_document, file_name)
-                self.tab_widget.setTabToolTip(tab_index, file_path)
-                self.tab_widget.setCurrentIndex(tab_index)
-
-                # Update visibility
-                self.update_no_roms_visibility()
-
-                # Log to console
-                logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                logger.info(f"ROM LOADED: {file_name}")
-                logger.info(f"  ROM ID: {rom_id}")
-                logger.info(f"  Definition: {rom_definition.romid.xmlid}")
-                logger.info(f"  Make/Model: {rom_definition.romid.make} {rom_definition.romid.model}")
-                logger.info(f"  Tables: {len(rom_definition.tables)}")
-                logger.info(f"  Size: {len(rom_reader.rom_data):,} bytes")
-                logger.info(f"  Tab: {tab_index + 1}")
-                logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-                self.statusBar().showMessage(
-                    f"Loaded: {file_name} - {rom_definition.romid.xmlid} "
-                    f"({len(rom_definition.tables)} tables)"
-                )
-
-            except (DetectionError, RomFileError, DefinitionError) as e:
-                logger.error(f"Failed to open ROM file: {e}")
-                QMessageBox.critical(
-                    self,
-                    "Error",
-                    f"Failed to open ROM file:\n{str(e)}"
-                )
-            except Exception as e:
-                logger.error(f"Unexpected error opening ROM file: {e}")
-                QMessageBox.critical(
-                    self,
-                    "Error",
-                    f"Failed to open ROM file:\n{str(e)}"
-                )
-
-    def save_rom(self):
-        """Save the current ROM file"""
-        document = self.get_current_document()
-        if not document:
-            QMessageBox.warning(self, "No ROM", "No ROM file is currently loaded.")
-            return
-
-        try:
-            document.save()
-
-            # Log to console
-            logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            logger.info(f"ROM SAVED: {document.file_name}")
-            logger.info(f"  Location: {document.rom_path}")
-            logger.info(f"  Size: {len(document.rom_reader.rom_data):,} bytes")
-            logger.info(f"  Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-            self.statusBar().showMessage(f"Saved: {document.rom_path}")
-            QMessageBox.information(
-                self,
-                "Success",
-                f"ROM saved successfully to:\n{document.rom_path}"
-            )
-        except RomFileError as e:
-            logger.error(f"Failed to save ROM file: {e}")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to save ROM file:\n{str(e)}"
-            )
-        except Exception as e:
-            logger.error(f"Unexpected error saving ROM file: {e}")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to save ROM file:\n{str(e)}"
-            )
-
-    def save_rom_as(self):
-        """Save the ROM to a new file"""
-        document = self.get_current_document()
-        if not document:
-            QMessageBox.warning(self, "No ROM", "No ROM file is currently loaded.")
-            return
-
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save ROM File As",
-            "",
-            "ROM Files (*.bin);;All Files (*)"
-        )
-
-        if file_path:
-            try:
-                document.save(file_path)
-
-                # Update tab title with new filename
-                current_index = self.tab_widget.currentIndex()
-                self.tab_widget.setTabText(current_index, document.file_name)
-                self.tab_widget.setTabToolTip(current_index, file_path)
-
-                # Log to console
-                logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                logger.info(f"ROM SAVED AS: {document.file_name}")
-                logger.info(f"  Location: {file_path}")
-                logger.info(f"  Size: {len(document.rom_reader.rom_data):,} bytes")
-                logger.info(f"  Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-                self.statusBar().showMessage(f"Saved: {file_path}")
-                QMessageBox.information(
-                    self,
-                    "Success",
-                    f"ROM saved successfully to:\n{file_path}"
-                )
-            except RomFileError as e:
-                logger.error(f"Failed to save ROM file: {e}")
-                QMessageBox.critical(
-                    self,
-                    "Error",
-                    f"Failed to save ROM file:\n{str(e)}"
-                )
-            except Exception as e:
-                logger.error(f"Unexpected error saving ROM file: {e}")
-                QMessageBox.critical(
-                    self,
-                    "Error",
-                    f"Failed to save ROM file:\n{str(e)}"
-                )
-
-    def on_table_selected(self, table, rom_reader):
-        """Handle table selection from browser - opens table in new window"""
-        try:
-            # Read table data from ROM
-            logger.debug(f"User selected table: {table.name}")
-            self.statusBar().showMessage(f"Loading table: {table.name}...")
-            data = rom_reader.read_table_data(table)
-
-            if data:
-                # Create and show new table viewer window
-                viewer_window = TableViewerWindow(table, data, parent=self)
-                viewer_window.show()
-
-                # Track the window
-                self.open_table_windows.append(viewer_window)
-
-                # Clean up closed windows from the list
-                self.open_table_windows = [w for w in self.open_table_windows if w.isVisible()]
-
-                # Log to console
-                logger.info(f"Opened table: {table.name}")
-                logger.info(f"  Category: {table.category}")
-                logger.info(f"  Type: {table.type.value}")
-                logger.info(f"  Address: {table.address}")
-                logger.info(f"  Elements: {table.elements}")
-                logger.info(f"  Open windows: {len(self.open_table_windows)}")
-
-                self.statusBar().showMessage(
-                    f"Opened: {table.name} ({len(self.open_table_windows)} tables open)"
-                )
+            # Set category text with or without highlighting
+            if category_matches:
+                category_item.setText(0, self._highlight_text(original_category, search_text))
             else:
-                logger.warning(f"No data returned for table: {table.name}")
-                QMessageBox.warning(
-                    self,
-                    "Error",
-                    f"Failed to read table data for: {table.name}"
-                )
+                category_item.setText(0, original_category)
 
-        except (ScalingNotFoundError, RomReadError) as e:
-            logger.error(f"Failed to load table {table.name}: {e}")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to load table:\n{str(e)}"
-            )
-        except Exception as e:
-            logger.error(f"Unexpected error loading table {table.name}: {e}")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to load table:\n{str(e)}"
-            )
+            # Check all table children
+            for j in range(category_item.childCount()):
+                table_item = category_item.child(j)
 
-    def log_startup_message(self):
-        """Log application startup message to console"""
-        logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        logger.info("NC ROM Editor v0.1.0")
-        logger.info("An open-source ROM editor for NC Miata ECUs")
-        logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        logger.info("")
-        logger.info("Ready. Open a ROM file to begin.")
-        logger.info("")
+                # Get original texts (stored in data)
+                original_name = table_item.data(0, Qt.UserRole)
+                original_type = table_item.data(1, Qt.UserRole)
+                original_address = table_item.data(2, Qt.UserRole)
 
-        if self.rom_detector:
-            definitions = self.rom_detector.get_definitions_summary()
-            logger.info(f"Available ROM definitions: {len(definitions)}")
-            for defn in definitions:
-                logger.info(f"  • {defn['xmlid']} - {defn['make']} {defn['model']}")
+                if original_name is None:
+                    original_name = table_item.text(0)
+                    original_type = table_item.text(1)
+                    original_address = table_item.text(2)
+                    table_item.setData(0, Qt.UserRole, original_name)
+                    table_item.setData(1, Qt.UserRole, original_type)
+                    table_item.setData(2, Qt.UserRole, original_address)
 
-    def show_settings(self):
-        """Show settings dialog"""
-        dialog = SettingsDialog(self)
-        dialog.settings_changed.connect(self.on_settings_changed)
-        dialog.exec()
+                # Match against table name, type, or address
+                name_matches = search_text in original_name.lower()
+                type_matches = search_text in original_type.lower()
+                address_matches = search_text in original_address.lower()
+                matches = name_matches or type_matches or address_matches
 
-    def on_settings_changed(self):
-        """Handle settings changes"""
-        # Reinitialize ROM detector with new metadata path
-        try:
-            metadata_dir = self.settings.get_metadata_directory()
-            self.rom_detector = RomDetector(metadata_dir)
-            logger.info(f"ROM detector reinitialized with metadata directory: {metadata_dir}")
-            self.statusBar().showMessage(f"Settings updated. Metadata directory: {metadata_dir}")
-        except DetectionError as e:
-            logger.error(f"Failed to reinitialize ROM detector: {e}")
-            QMessageBox.warning(
-                self,
-                "Settings Error",
-                f"Failed to load metadata from new directory:\n{str(e)}\n\n"
-                "Please check the metadata directory path in settings."
-            )
+                # Set text with highlighting for matching columns
+                if name_matches:
+                    table_item.setText(0, self._highlight_text(original_name, search_text))
+                else:
+                    table_item.setText(0, original_name)
 
-    def show_about(self):
-        """Show about dialog"""
-        QMessageBox.about(
-            self,
-            "About NC ROM Editor",
-            "NC ROM Editor v0.1.0\n\n"
-            "An open-source ROM editor for NC Miata ECUs\n\n"
-            "Designed to replace EcuFlash for ROM editing tasks.\n"
-            "Works with RomDrop for ECU flashing."
-        )
+                if type_matches:
+                    table_item.setText(1, self._highlight_text(original_type, search_text))
+                else:
+                    table_item.setText(1, original_type)
 
+                if address_matches:
+                    table_item.setText(2, self._highlight_text(original_address, search_text))
+                else:
+                    table_item.setText(2, original_address)
 
-def main():
-    """Application entry point"""
-    # Initialize logging before anything else
-    # Default: INFO level to console, optionally to file
-    log_file = Path.home() / ".nc-rom-editor" / "nc-rom-editor.log"
-    setup_logging(
-        level=logging.INFO,
-        log_file=str(log_file),
-        console=True,
-        detailed=False
-    )
+                # Show/hide table item
+                table_item.setHidden(not matches and not category_matches)
 
-    logger.info("=" * 60)
-    logger.info("NC ROM Editor v0.1.0 starting")
-    logger.info("=" * 60)
+                if matches:
+                    category_has_match = True
 
-    app = QApplication(sys.argv)
-    app.setApplicationName("NC ROM Editor")
+            # Show category if it matches or has matching children
+            category_item.setHidden(not (category_matches or category_has_match))
 
-    window = MainWindow()
-    window.show()
+            # Expand categories that have matches
+            if category_has_match or category_matches:
+                category_item.setExpanded(True)
 
-    logger.info("Application window displayed")
-    exit_code = app.exec()
-    logger.info(f"Application exiting with code {exit_code}")
+    def _show_all_items(self):
+        """Show all items in the tree, collapse categories, and clear highlighting"""
+        for i in range(self.tree.topLevelItemCount()):
+            category_item = self.tree.topLevelItem(i)
+            category_item.setHidden(False)
 
-    sys.exit(exit_code)
+            # Restore original text without highlighting
+            original_category = category_item.data(0, Qt.UserRole)
+            if original_category:
+                category_item.setText(0, original_category)
 
+            for j in range(category_item.childCount()):
+                table_item = category_item.child(j)
+                table_item.setHidden(False)
 
-if __name__ == "__main__":
-    main()
+                # Restore original texts without highlighting
+                original_name = table_item.data(0, Qt.UserRole)
+                original_type = table_item.data(1, Qt.UserRole)
+                original_address = table_item.data(2, Qt.UserRole)
+
+                if original_name:
+                    table_item.setText(0, original_name)
+                if original_type:
+                    table_item.setText(1, original_type)
+                if original_address:
+                    table_item.setText(2, original_address)
+
+            # Collapse categories when search is cleared
+            category_item.setExpanded(False)
 </file>
 
 <file path="README.md">
@@ -10318,6 +9644,667 @@ TBD
 ## Disclaimer
 
 Modifying your ECU can damage your vehicle or violate emissions regulations. Use this software at your own risk. Always keep backups of your stock ROM.
+</file>
+
+<file path="main.py">
+#!/usr/bin/env python3
+"""
+NC ROM Editor - Main Application Entry Point
+
+An open-source ROM editor for NC Miata ECUs
+"""
+
+import sys
+import logging
+from pathlib import Path
+from datetime import datetime
+from PySide6.QtWidgets import (
+    QDialog,
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QSplitter,
+    QFileDialog,
+    QMessageBox,
+    QLabel,
+    QTabWidget
+)
+from PySide6.QtCore import Qt
+
+from src.utils.logging_config import setup_logging, get_logger
+from src.utils.settings import get_settings
+from src.utils.constants import (
+    APP_NAME, APP_VERSION_STRING, APP_DESCRIPTION,
+    MAIN_WINDOW_X, MAIN_WINDOW_Y, MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT,
+    MAIN_SPLITTER_LEFT, MAIN_SPLITTER_RIGHT
+)
+from src.core.definition_parser import load_definition
+from src.core.rom_reader import RomReader
+from src.core.rom_detector import RomDetector
+from src.core.exceptions import (
+    DefinitionError,
+    RomFileError,
+    DetectionError,
+    ScalingNotFoundError,
+    RomReadError
+)
+from src.ui.table_browser import TableBrowser
+from src.ui.table_viewer_window import TableViewerWindow
+from src.ui.log_console import LogConsole
+from src.ui.settings_dialog import SettingsDialog
+from src.ui.setup_wizard import SetupWizard
+from src.ui.rom_document import RomDocument
+
+logger = get_logger(__name__)
+
+
+def handle_rom_operation_error(parent, operation: str, exception: Exception):
+    """
+    Handle common ROM operation errors with consistent logging and user feedback
+
+    Args:
+        parent: Parent widget for message box
+        operation: Description of operation that failed (e.g., "open ROM file")
+        exception: The exception that was raised
+    """
+    error_msg = f"Failed to {operation}:\n{str(exception)}"
+    logger.error(error_msg.replace('\n', ' '))
+    QMessageBox.critical(parent, "Error", error_msg)
+
+
+class MainWindow(QMainWindow):
+    """Main application window"""
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle(APP_NAME)
+        self.setGeometry(MAIN_WINDOW_X, MAIN_WINDOW_Y, MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT)
+
+        logger.info("Initializing NC ROM Editor")
+
+        # Track open table viewer windows
+        self.open_table_windows = []
+
+        # Get application settings
+        self.settings = get_settings()
+
+        # Check if metadata directory is configured and valid
+        if not self.check_metadata_directory():
+            # Show setup wizard on first run or if metadata directory is invalid
+            if not self.show_setup_wizard():
+                # User cancelled setup, exit application
+                logger.warning("Setup cancelled by user, exiting application")
+                QMessageBox.critical(
+                    self,
+                    "Setup Required",
+                    f"{APP_NAME} requires a metadata directory to function.\n"
+                    "Application will now exit."
+                )
+                sys.exit(1)
+
+        # ROM detector for automatic XML matching
+        try:
+            metadata_dir = self.settings.get_metadata_directory()
+            self.rom_detector = RomDetector(metadata_dir)
+            logger.info(f"ROM detector initialized successfully (metadata: {metadata_dir})")
+        except DetectionError as e:
+            logger.error(f"Failed to initialize ROM detector: {e}")
+            QMessageBox.critical(
+                self,
+                "Initialization Error",
+                f"Failed to initialize ROM detector:\n{str(e)}"
+            )
+            self.rom_detector = None
+        except Exception as e:
+            logger.error(f"Unexpected error initializing ROM detector: {e}")
+            QMessageBox.critical(
+                self,
+                "Initialization Error",
+                f"Failed to initialize ROM detector:\n{str(e)}"
+            )
+            self.rom_detector = None
+
+        # Initialize UI
+        self.init_ui()
+        self.init_menu()
+
+        # Log startup message
+        self.log_startup_message()
+
+    def check_metadata_directory(self) -> bool:
+        """
+        Check if metadata directory is configured and valid
+
+        Returns:
+            bool: True if valid, False if needs configuration
+        """
+        metadata_dir = self.settings.get_metadata_directory()
+
+        # Check if path exists
+        metadata_path = Path(metadata_dir)
+        if not metadata_path.exists() or not metadata_path.is_dir():
+            logger.warning(f"Metadata directory does not exist: {metadata_dir}")
+            return False
+
+        # Check if directory contains at least one XML file
+        xml_files = list(metadata_path.glob("*.xml"))
+        if not xml_files:
+            logger.warning(f"No XML files found in metadata directory: {metadata_dir}")
+            return False
+
+        return True
+
+    def show_setup_wizard(self) -> bool:
+        """
+        Show the setup wizard for first-run configuration
+
+        Returns:
+            bool: True if setup completed, False if cancelled
+        """
+        wizard = SetupWizard(self)
+        result = wizard.exec()
+
+        if result == QDialog.Accepted:
+            logger.info("Setup wizard completed successfully")
+            return True
+        else:
+            logger.info("Setup wizard cancelled")
+            return False
+
+    def init_ui(self):
+        """Initialize the user interface"""
+        # Central widget
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+
+        layout = QHBoxLayout()
+        central_widget.setLayout(layout)
+
+        # Main splitter (tabs on left, activity log on right)
+        main_splitter = QSplitter(Qt.Horizontal)
+        layout.addWidget(main_splitter)
+
+        # Tab widget for multiple ROM documents
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setTabsClosable(True)
+        self.tab_widget.setMovable(True)
+        self.tab_widget.tabCloseRequested.connect(self.close_tab)
+        self.tab_widget.currentChanged.connect(self.on_tab_changed)
+        main_splitter.addWidget(self.tab_widget)
+
+        # Shared activity log on the right (always visible)
+        self.log_console = LogConsole()
+        main_splitter.addWidget(self.log_console)
+
+        # Set initial splitter sizes (30% tabs, 70% log)
+        # Matches longest table name width on left, rest for activity log
+        main_splitter.setSizes([MAIN_SPLITTER_LEFT, MAIN_SPLITTER_RIGHT])
+
+    def init_menu(self):
+        """Initialize the menu bar"""
+        menubar = self.menuBar()
+
+        # File menu
+        self.file_menu = menubar.addMenu("File")
+
+        open_action = self.file_menu.addAction("Open ROM...")
+        open_action.triggered.connect(self.open_rom)
+
+        save_action = self.file_menu.addAction("Save ROM")
+        save_action.triggered.connect(self.save_rom)
+
+        save_as_action = self.file_menu.addAction("Save ROM As...")
+        save_as_action.triggered.connect(self.save_rom_as)
+
+        self.file_menu.addSeparator()
+
+        close_tab_action = self.file_menu.addAction("Close Tab")
+        close_tab_action.triggered.connect(self.close_current_tab)
+
+        self.file_menu.addSeparator()
+
+        # Recent files section (will be populated dynamically)
+        self.recent_files_separator = self.file_menu.addSeparator()
+        self.recent_files_actions = []
+        self.update_recent_files_menu()
+
+        self.file_menu.addSeparator()
+
+        exit_action = self.file_menu.addAction("Exit")
+        exit_action.triggered.connect(self.close)
+
+        # Edit menu
+        edit_menu = menubar.addMenu("Edit")
+
+        settings_action = edit_menu.addAction("Settings...")
+        settings_action.triggered.connect(self.show_settings)
+
+        # Help menu
+        help_menu = menubar.addMenu("Help")
+
+        about_action = help_menu.addAction("About")
+        about_action.triggered.connect(self.show_about)
+
+    def update_recent_files_menu(self):
+        """Update the recent files menu with current list"""
+        # Remove existing recent file actions
+        for action in self.recent_files_actions:
+            self.file_menu.removeAction(action)
+        self.recent_files_actions.clear()
+
+        # Get recent files from settings
+        recent_files = self.settings.get_recent_files()
+
+        if recent_files:
+            # Add each recent file
+            for i, file_path in enumerate(recent_files, 1):
+                # Show just the filename, but store full path
+                file_name = Path(file_path).name
+                action_text = f"{i}. {file_name}"
+
+                action = self.file_menu.addAction(action_text)
+                action.setData(file_path)  # Store full path in action data
+                action.setStatusTip(file_path)  # Show full path in status bar
+                action.triggered.connect(lambda checked=False, path=file_path: self.open_recent_file(path))
+
+                # Insert before the separator
+                self.file_menu.insertAction(self.recent_files_separator, action)
+                self.recent_files_actions.append(action)
+
+            # Add "Clear Recent Files" option
+            clear_action = self.file_menu.addAction("Clear Recent Files")
+            clear_action.triggered.connect(self.clear_recent_files)
+            self.file_menu.insertAction(self.recent_files_separator, clear_action)
+            self.recent_files_actions.append(clear_action)
+
+    def open_recent_file(self, file_path: str):
+        """
+        Open a ROM file from recent files list
+
+        Args:
+            file_path: Full path to ROM file
+        """
+        if not Path(file_path).exists():
+            QMessageBox.warning(
+                self,
+                "File Not Found",
+                f"The file no longer exists:\n{file_path}\n\n"
+                "It will be removed from recent files."
+            )
+            # Remove from recent files
+            recent = self.settings.get_recent_files()
+            if file_path in recent:
+                recent.remove(file_path)
+                self.settings.settings.setValue("recent_files", recent)
+                self.settings.settings.sync()
+                self.update_recent_files_menu()
+            return
+
+        # Open the file (reuse existing logic by calling the internal open method)
+        self._open_rom_file(file_path)
+
+    def clear_recent_files(self):
+        """Clear the recent files list"""
+        self.settings.clear_recent_files()
+        self.update_recent_files_menu()
+        logger.info("Recent files list cleared")
+
+    def update_window_title(self):
+        """Update window title based on tab count"""
+        if self.tab_widget.count() == 0:
+            self.setWindowTitle(APP_NAME)
+
+    def get_current_document(self):
+        """
+        Get the currently active ROM document
+
+        Returns:
+            RomDocument or None: Current document or None if no tabs
+        """
+        current_index = self.tab_widget.currentIndex()
+        if current_index >= 0:
+            return self.tab_widget.widget(current_index)
+        return None
+
+    def close_tab(self, index: int):
+        """
+        Close a ROM tab
+
+        Args:
+            index: Tab index to close
+        """
+        if index < 0 or index >= self.tab_widget.count():
+            return
+
+        document = self.tab_widget.widget(index)
+        if document and document.is_modified():
+            response = QMessageBox.question(
+                self,
+                "Unsaved Changes",
+                f"'{document.file_name}' has unsaved changes.\n\nDo you want to save before closing?",
+                QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
+                QMessageBox.Save
+            )
+
+            if response == QMessageBox.Cancel:
+                return
+            elif response == QMessageBox.Save:
+                document.save()
+
+        # Remove the tab
+        self.tab_widget.removeTab(index)
+        self.update_window_title()
+
+        logger.info(f"Closed ROM tab: {document.file_name if document else 'unknown'}")
+
+    def close_current_tab(self):
+        """Close the currently active tab"""
+        current_index = self.tab_widget.currentIndex()
+        if current_index >= 0:
+            self.close_tab(current_index)
+
+    def on_tab_changed(self, index: int):
+        """Handle tab change"""
+        if index >= 0:
+            document = self.tab_widget.widget(index)
+            if document:
+                self.setWindowTitle(f"{APP_NAME} - {document.get_tab_title()}")
+                logger.info(f"Switched to ROM: {document.file_name}")
+        else:
+            self.update_window_title()
+
+    def open_rom(self):
+        """Open a ROM file via file dialog"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open ROM File",
+            "",
+            "ROM Files (*.bin *.rom);;All Files (*)"
+        )
+
+        if file_path:
+            self._open_rom_file(file_path)
+
+    def _open_rom_file(self, file_path: str):
+        """
+        Open a ROM file from a given path
+
+        Args:
+            file_path: Full path to ROM file
+        """
+        try:
+            logger.info(f"Opening ROM file: {file_path}")
+            self.statusBar().showMessage(f"Detecting ROM ID...")
+
+            # Detect ROM ID and find matching XML definition
+            if not self.rom_detector:
+                logger.error("ROM detector not initialized")
+                QMessageBox.critical(
+                    self,
+                    "Error",
+                    "ROM detector not initialized. Cannot auto-detect ROM type."
+                )
+                return
+
+            rom_id, xml_path = self.rom_detector.detect_rom_id(file_path)
+
+            if not rom_id or not xml_path:
+                logger.warning(f"No matching ROM definition found for {file_path}")
+                QMessageBox.critical(
+                    self,
+                    "Unknown ROM",
+                    "Could not identify ROM type. No matching definition found.\n\n"
+                    "Supported ROM IDs:\n" +
+                    "\n".join([f"  - {info['xmlid']} ({info['make']} {info['model']})"
+                               for info in self.rom_detector.get_definitions_summary()])
+                )
+                return
+
+            # Load the matching definition
+            logger.info(f"Detected ROM ID: {rom_id}")
+            self.statusBar().showMessage(f"Detected ROM ID: {rom_id}, loading definition...")
+            rom_definition = load_definition(xml_path)
+
+            # Create ROM reader
+            self.statusBar().showMessage(f"Loading ROM data...")
+            rom_reader = RomReader(file_path, rom_definition)
+
+            # Verify ROM ID (should always pass now, but kept as sanity check)
+            if not rom_reader.verify_rom_id():
+                logger.warning("ROM ID verification failed after auto-detection")
+                QMessageBox.warning(
+                    self,
+                    "ROM ID Warning",
+                    f"ROM ID verification failed. This should not happen after auto-detection.\n"
+                    f"Expected: {rom_definition.romid.internalidstring}\n"
+                    f"This may indicate a detection bug."
+                )
+
+            # Create ROM document widget
+            rom_document = RomDocument(file_path, rom_definition, rom_reader, self)
+            rom_document.table_selected.connect(self.on_table_selected)
+
+            # Add as new tab
+            file_name = Path(file_path).name
+            tab_index = self.tab_widget.addTab(rom_document, file_name)
+            self.tab_widget.setTabToolTip(tab_index, file_path)
+            self.tab_widget.setCurrentIndex(tab_index)
+
+            # Add to recent files list
+            self.settings.add_recent_file(file_path)
+            self.update_recent_files_menu()
+
+            # Log to console
+            logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            logger.info(f"ROM LOADED: {file_name}")
+            logger.info(f"  ROM ID: {rom_id}")
+            logger.info(f"  Definition: {rom_definition.romid.xmlid}")
+            logger.info(f"  Make/Model: {rom_definition.romid.make} {rom_definition.romid.model}")
+            logger.info(f"  Tables: {len(rom_definition.tables)}")
+            logger.info(f"  Size: {len(rom_reader.rom_data):,} bytes")
+            logger.info(f"  Tab: {tab_index + 1}")
+            logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+            self.statusBar().showMessage(
+                f"Loaded: {file_name} - {rom_definition.romid.xmlid} "
+                f"({len(rom_definition.tables)} tables)"
+            )
+
+        except (DetectionError, RomFileError, DefinitionError, Exception) as e:
+            handle_rom_operation_error(self, "open ROM file", e)
+
+    def save_rom(self):
+        """Save the current ROM file"""
+        document = self.get_current_document()
+        if not document:
+            QMessageBox.warning(self, "No ROM", "No ROM file is currently loaded.")
+            return
+
+        try:
+            document.save()
+
+            # Log to console
+            logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            logger.info(f"ROM SAVED: {document.file_name}")
+            logger.info(f"  Location: {document.rom_path}")
+            logger.info(f"  Size: {len(document.rom_reader.rom_data):,} bytes")
+            logger.info(f"  Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+            self.statusBar().showMessage(f"Saved: {document.rom_path}")
+            QMessageBox.information(
+                self,
+                "Success",
+                f"ROM saved successfully to:\n{document.rom_path}"
+            )
+        except (RomFileError, Exception) as e:
+            handle_rom_operation_error(self, "save ROM file", e)
+
+    def save_rom_as(self):
+        """Save the ROM to a new file"""
+        document = self.get_current_document()
+        if not document:
+            QMessageBox.warning(self, "No ROM", "No ROM file is currently loaded.")
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save ROM File As",
+            "",
+            "ROM Files (*.bin);;All Files (*)"
+        )
+
+        if file_path:
+            try:
+                document.save(file_path)
+
+                # Update tab title with new filename
+                current_index = self.tab_widget.currentIndex()
+                self.tab_widget.setTabText(current_index, document.file_name)
+                self.tab_widget.setTabToolTip(current_index, file_path)
+
+                # Log to console
+                logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                logger.info(f"ROM SAVED AS: {document.file_name}")
+                logger.info(f"  Location: {file_path}")
+                logger.info(f"  Size: {len(document.rom_reader.rom_data):,} bytes")
+                logger.info(f"  Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+                self.statusBar().showMessage(f"Saved: {file_path}")
+                QMessageBox.information(
+                    self,
+                    "Success",
+                    f"ROM saved successfully to:\n{file_path}"
+                )
+            except (RomFileError, Exception) as e:
+                handle_rom_operation_error(self, "save ROM file", e)
+
+    def on_table_selected(self, table, rom_reader):
+        """Handle table selection from browser - opens table in new window"""
+        try:
+            # Read table data from ROM
+            logger.debug(f"User selected table: {table.name}")
+            self.statusBar().showMessage(f"Loading table: {table.name}...")
+            data = rom_reader.read_table_data(table)
+
+            if data:
+                # Create and show new table viewer window
+                viewer_window = TableViewerWindow(table, data, parent=self)
+                viewer_window.show()
+
+                # Track the window
+                self.open_table_windows.append(viewer_window)
+
+                # Clean up closed windows from the list
+                self.open_table_windows = [w for w in self.open_table_windows if w.isVisible()]
+
+                # Log to console
+                logger.info(f"Opened table: {table.name}")
+                logger.info(f"  Category: {table.category}")
+                logger.info(f"  Type: {table.type.value}")
+                logger.info(f"  Address: {table.address}")
+                logger.info(f"  Elements: {table.elements}")
+                logger.info(f"  Open windows: {len(self.open_table_windows)}")
+
+                self.statusBar().showMessage(
+                    f"Opened: {table.name} ({len(self.open_table_windows)} tables open)"
+                )
+            else:
+                logger.warning(f"No data returned for table: {table.name}")
+                QMessageBox.warning(
+                    self,
+                    "Error",
+                    f"Failed to read table data for: {table.name}"
+                )
+
+        except (ScalingNotFoundError, RomReadError, Exception) as e:
+            handle_rom_operation_error(self, "load table", e)
+
+    def log_startup_message(self):
+        """Log application startup message to console"""
+        logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        logger.info(f"{APP_NAME} {APP_VERSION_STRING}")
+        logger.info(APP_DESCRIPTION)
+        logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        logger.info("")
+        logger.info("Ready. Open a ROM file to begin.")
+        logger.info("")
+
+        if self.rom_detector:
+            definitions = self.rom_detector.get_definitions_summary()
+            logger.info(f"Available ROM definitions: {len(definitions)}")
+            for defn in definitions:
+                logger.info(f"  • {defn['xmlid']} - {defn['make']} {defn['model']}")
+
+    def show_settings(self):
+        """Show settings dialog"""
+        dialog = SettingsDialog(self)
+        dialog.settings_changed.connect(self.on_settings_changed)
+        dialog.exec()
+
+    def on_settings_changed(self):
+        """Handle settings changes"""
+        # Reinitialize ROM detector with new metadata path
+        try:
+            metadata_dir = self.settings.get_metadata_directory()
+            self.rom_detector = RomDetector(metadata_dir)
+            logger.info(f"ROM detector reinitialized with metadata directory: {metadata_dir}")
+            self.statusBar().showMessage(f"Settings updated. Metadata directory: {metadata_dir}")
+        except DetectionError as e:
+            logger.error(f"Failed to reinitialize ROM detector: {e}")
+            QMessageBox.warning(
+                self,
+                "Settings Error",
+                f"Failed to load metadata from new directory:\n{str(e)}\n\n"
+                "Please check the metadata directory path in settings."
+            )
+
+    def show_about(self):
+        """Show about dialog"""
+        QMessageBox.about(
+            self,
+            f"About {APP_NAME}",
+            f"{APP_NAME} {APP_VERSION_STRING}\n\n"
+            f"{APP_DESCRIPTION}\n\n"
+            "Designed to replace EcuFlash for ROM editing tasks.\n"
+            "Works with RomDrop for ECU flashing."
+        )
+
+
+def main():
+    """Application entry point"""
+    # Initialize logging before anything else
+    # Default: INFO level to console, optionally to file
+    log_file = Path.home() / ".nc-rom-editor" / "nc-rom-editor.log"
+    setup_logging(
+        level=logging.INFO,
+        log_file=str(log_file),
+        console=True,
+        detailed=False
+    )
+
+    logger.info("=" * 60)
+    logger.info(f"{APP_NAME} {APP_VERSION_STRING} starting")
+    logger.info("=" * 60)
+
+    app = QApplication(sys.argv)
+    app.setApplicationName(APP_NAME)
+
+    window = MainWindow()
+    window.show()
+
+    logger.info("Application window displayed")
+    exit_code = app.exec()
+    logger.info(f"Application exiting with code {exit_code}")
+
+    sys.exit(exit_code)
+
+
+if __name__ == "__main__":
+    main()
 </file>
 
 <file path=".beads/issues.jsonl">

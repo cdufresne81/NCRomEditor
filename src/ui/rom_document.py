@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 
 from .table_browser import TableBrowser
-from .log_console import LogConsole
 from ..core.rom_definition import RomDefinition, Table
 from ..core.rom_reader import RomReader
 

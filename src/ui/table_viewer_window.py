@@ -8,6 +8,7 @@ Allows opening multiple tables simultaneously for comparison.
 from PySide6.QtWidgets import QMainWindow, QVBoxLayout, QWidget
 from PySide6.QtCore import Qt
 
+from ..utils.constants import TABLE_VIEWER_DEFAULT_WIDTH, TABLE_VIEWER_DEFAULT_HEIGHT, APP_NAME
 from .table_viewer import TableViewer
 from ..core.rom_definition import Table
 
@@ -38,8 +39,8 @@ class TableViewerWindow(QMainWindow):
         self.data = data
 
         # Set window properties
-        self.setWindowTitle(f"{table.name} - NC ROM Editor")
-        self.resize(800, 600)
+        self.setWindowTitle(f"{table.name} - {APP_NAME}")
+        self.resize(TABLE_VIEWER_DEFAULT_WIDTH, TABLE_VIEWER_DEFAULT_HEIGHT)
 
         # Create central widget
         central_widget = QWidget()
@@ -54,9 +55,6 @@ class TableViewerWindow(QMainWindow):
 
         # Display the table data
         self.viewer.display_table(table, data)
-
-        # Make window stay on top initially (user can change this)
-        # self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
 
     def closeEvent(self, event):
         """Handle window close event"""

@@ -16,8 +16,9 @@ from PySide6.QtWidgets import (
     QStyledItemDelegate
 )
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtGui import QShortcut, QKeySequence, QBrush, QColor, QPalette
+from PySide6.QtGui import QShortcut, QKeySequence
 
+from ..utils.constants import TABLE_BROWSER_COLUMN_WIDTH
 from ..core.rom_definition import RomDefinition, Table
 
 
@@ -110,7 +111,7 @@ class TableBrowser(QWidget):
         # Tree widget for categories and tables
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(["Name", "Type", "Address"])
-        self.tree.setColumnWidth(0, 300)  # Reduced from 400 to fit table names more efficiently
+        self.tree.setColumnWidth(0, TABLE_BROWSER_COLUMN_WIDTH)
         self.tree.itemClicked.connect(self._on_item_clicked)
 
         # Set custom delegate for HTML rendering
