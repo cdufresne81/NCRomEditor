@@ -40,13 +40,6 @@ The content is organized as follows:
 </file_summary>
 
 <directory_structure>
-.beads/
-  .gitignore
-  config.yaml
-  interactions.jsonl
-  issues.jsonl
-  metadata.json
-  README.md
 .github/
   workflows/
     ci.yml
@@ -56,6 +49,7 @@ docs/
   MODIFICATION_TRACKING_SUMMARY.md
   ROM_DEFINITION_FORMAT.md
 ecuflash_examples/
+  ECUFlash_table_display_overall_look.png
   OpenRomDocument.png
 examples/
   lf9veb.bin
@@ -92,262 +86,97 @@ tests/
   test_definition_parser.py
   test_rom_detector.py
   test_rom_reader.py
-.gitattributes
 .gitignore
-AGENTS.md
+CLAUDE.md
 main.py
 pytest.ini
 README.md
 requirements.txt
 run.bat
+TODO.md
 WINDOWS_SETUP.md
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
 
-<file path="src/utils/constants.py">
-"""
-Application Constants
+<file path="CLAUDE.md">
+# Claude Code Instructions
 
-Centralized location for all magic numbers and configuration constants.
-"""
+## Session Start
 
-# Application metadata
-APP_NAME = "NC ROM Editor"
-APP_VERSION = "0.1.0"
-APP_VERSION_STRING = f"v{APP_VERSION}"
-APP_DESCRIPTION = "An open-source ROM editor for NC Miata ECUs"
+1. **Refresh codebase snapshot** (if using repomix):
+   ```bash
+   repomix mix
+   ```
 
-# Main window settings
-MAIN_WINDOW_X = 100
-MAIN_WINDOW_Y = 100
-MAIN_WINDOW_WIDTH = 1400
-MAIN_WINDOW_HEIGHT = 900
-MAIN_SPLITTER_LEFT = 420  # Table browser width (30%)
-MAIN_SPLITTER_RIGHT = 980  # Activity log width (70%)
+## Landing the Plane (Session Completion)
 
-# Table browser settings
-TABLE_BROWSER_COLUMN_WIDTH = 300  # Width of name column
+When ending a work session, complete ALL steps below. Work is NOT complete until `git push` succeeds.
 
-# Log console settings
-LOG_CONSOLE_MAX_LINES = 1000  # Maximum lines kept in console
-LOG_CONSOLE_CLEAR_BUTTON_WIDTH = 80
-LOG_CONSOLE_FONT_FAMILY = "Courier New"
-LOG_CONSOLE_FONT_SIZE = 9
+**Checklist:**
 
-# Logging configuration
-LOG_FILE_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
-LOG_FILE_BACKUP_COUNT = 5
+1. **Run quality gates** (if code changed):
+   ```bash
+   pytest
+   ```
 
-# Settings
-MAX_RECENT_FILES = 10
+2. **Refresh Repomix** (if using):
+   ```bash
+   repomix mix
+   git add repomix-output.xml
+   ```
 
-# Table viewer window
-TABLE_VIEWER_DEFAULT_WIDTH = 800
-TABLE_VIEWER_DEFAULT_HEIGHT = 600
+3. **Commit and push**:
+   ```bash
+   git add -A
+   git commit -m "Description of changes"
+   git pull --rebase
+   git push
+   git status  # MUST show "up to date with origin"
+   ```
+
+4. **Verify** - All changes committed AND pushed
+
+5. **Hand off** - Provide context summary for next session
+
+**Rules:**
+- Work is NOT complete until `git push` succeeds
+- NEVER stop before pushing - that leaves work stranded locally
+- If push fails, resolve and retry until it succeeds
 </file>
 
-<file path=".beads/.gitignore">
-# SQLite databases
-*.db
-*.db?*
-*.db-journal
-*.db-wal
-*.db-shm
+<file path="TODO.md">
+# TODO
 
-# Daemon runtime files
-daemon.lock
-daemon.log
-daemon.pid
-bd.sock
-sync-state.json
-last-touched
+## Open Tasks
 
-# Local version tracking (prevents upgrade notification spam after git ops)
-.local_version
+1. **Implement table editing operations**
+   - Add/subtract values from cells
+   - Interpolate values
+   - Copy/paste table data
+   - Undo/redo functionality
+   - Status: May already be partially working
 
-# Legacy database files
-db.sqlite
-bd.db
+2. **Build ROM comparison tool**
+   - Compare two ROM files (stock vs modified)
+   - Highlight differences in tables and raw data
 
-# Worktree redirect file (contains relative path to main repo's .beads/)
-# Must not be committed as paths would be wrong in other clones
-redirect
+3. **Create packaging for Windows distribution**
+   - Use PyInstaller to package as standalone .exe
+   - Test on clean Windows system
 
-# Merge artifacts (temporary files from 3-way merge)
-beads.base.jsonl
-beads.base.meta.json
-beads.left.jsonl
-beads.left.meta.json
-beads.right.jsonl
-beads.right.meta.json
+4. **Implement ROM modification tracking and project management**
+   - Git-like modification tracking for ROM edits
+   - Project organization with ROM aliases
+   - Change history viewer
+   - Export modification logs
 
-# NOTE: Do NOT add negation patterns (e.g., !issues.jsonl) here.
-# They would override fork protection in .git/info/exclude, allowing
-# contributors to accidentally commit upstream issue databases.
-# The JSONL files (issues.jsonl, interactions.jsonl) and config files
-# are tracked by git by default since no pattern above ignores them.
-</file>
-
-<file path=".beads/config.yaml">
-# Beads Configuration File
-# This file configures default behavior for all bd commands in this repository
-# All settings can also be set via environment variables (BD_* prefix)
-# or overridden with command-line flags
-
-# Issue prefix for this repository (used by bd init)
-# If not set, bd init will auto-detect from directory name
-# Example: issue-prefix: "myproject" creates issues like "myproject-1", "myproject-2", etc.
-# issue-prefix: ""
-
-# Use no-db mode: load from JSONL, no SQLite, write back after each command
-# When true, bd will use .beads/issues.jsonl as the source of truth
-# instead of SQLite database
-# no-db: false
-
-# Disable daemon for RPC communication (forces direct database access)
-# no-daemon: false
-
-# Disable auto-flush of database to JSONL after mutations
-# no-auto-flush: false
-
-# Disable auto-import from JSONL when it's newer than database
-# no-auto-import: false
-
-# Enable JSON output by default
-# json: false
-
-# Default actor for audit trails (overridden by BD_ACTOR or --actor)
-# actor: ""
-
-# Path to database (overridden by BEADS_DB or --db)
-# db: ""
-
-# Auto-start daemon if not running (can also use BEADS_AUTO_START_DAEMON)
-# auto-start-daemon: true
-
-# Debounce interval for auto-flush (can also use BEADS_FLUSH_DEBOUNCE)
-# flush-debounce: "5s"
-
-# Git branch for beads commits (bd sync will commit to this branch)
-# IMPORTANT: Set this for team projects so all clones use the same sync branch.
-# This setting persists across clones (unlike database config which is gitignored).
-# Can also use BEADS_SYNC_BRANCH env var for local override.
-# If not set, bd sync will require you to run 'bd config set sync.branch <branch>'.
-# sync-branch: "beads-sync"
-
-# Multi-repo configuration (experimental - bd-307)
-# Allows hydrating from multiple repositories and routing writes to the correct JSONL
-# repos:
-#   primary: "."  # Primary repo (where this database lives)
-#   additional:   # Additional repos to hydrate from (read-only)
-#     - ~/beads-planning  # Personal planning repo
-#     - ~/work-planning   # Work planning repo
-
-# Integration settings (access with 'bd config get/set')
-# These are stored in the database, not in this file:
-# - jira.url
-# - jira.project
-# - linear.url
-# - linear.api-key
-# - github.org
-# - github.repo
-</file>
-
-<file path=".beads/interactions.jsonl">
-
-</file>
-
-<file path=".beads/metadata.json">
-{
-  "database": "beads.db",
-  "jsonl_export": "issues.jsonl"
-}
-</file>
-
-<file path=".beads/README.md">
-# Beads - AI-Native Issue Tracking
-
-Welcome to Beads! This repository uses **Beads** for issue tracking - a modern, AI-native tool designed to live directly in your codebase alongside your code.
-
-## What is Beads?
-
-Beads is issue tracking that lives in your repo, making it perfect for AI coding agents and developers who want their issues close to their code. No web UI required - everything works through the CLI and integrates seamlessly with git.
-
-**Learn more:** [github.com/steveyegge/beads](https://github.com/steveyegge/beads)
-
-## Quick Start
-
-### Essential Commands
-
-```bash
-# Create new issues
-bd create "Add user authentication"
-
-# View all issues
-bd list
-
-# View issue details
-bd show <issue-id>
-
-# Update issue status
-bd update <issue-id> --status in_progress
-bd update <issue-id> --status done
-
-# Sync with git remote
-bd sync
-```
-
-### Working with Issues
-
-Issues in Beads are:
-- **Git-native**: Stored in `.beads/issues.jsonl` and synced like code
-- **AI-friendly**: CLI-first design works perfectly with AI coding agents
-- **Branch-aware**: Issues can follow your branch workflow
-- **Always in sync**: Auto-syncs with your commits
-
-## Why Beads?
-
-✨ **AI-Native Design**
-- Built specifically for AI-assisted development workflows
-- CLI-first interface works seamlessly with AI coding agents
-- No context switching to web UIs
-
-🚀 **Developer Focused**
-- Issues live in your repo, right next to your code
-- Works offline, syncs when you push
-- Fast, lightweight, and stays out of your way
-
-🔧 **Git Integration**
-- Automatic sync with git commits
-- Branch-aware issue tracking
-- Intelligent JSONL merge resolution
-
-## Get Started with Beads
-
-Try Beads in your own projects:
-
-```bash
-# Install Beads
-curl -sSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
-
-# Initialize in your repo
-bd init
-
-# Create your first issue
-bd create "Try out Beads"
-```
-
-## Learn More
-
-- **Documentation**: [github.com/steveyegge/beads/docs](https://github.com/steveyegge/beads/tree/main/docs)
-- **Quick Start Guide**: Run `bd quickstart`
-- **Examples**: [github.com/steveyegge/beads/examples](https://github.com/steveyegge/beads/tree/main/examples)
-
----
-
-*Beads: Issue tracking that moves at the speed of thought* ⚡
+5. ~~**Improve table display**~~ (COMPLETED)
+   - ~~Add gradient coloring based on cell values (min/max or relative to neighbors)~~
+   - ~~Add row/column labels (RPM, Load, etc.)~~
+   - ~~Use scaling format for decimal precision (from XML definition)~~
+   - ~~Configurable font size in settings~~
 </file>
 
 <file path=".github/workflows/ci.yml">
@@ -5752,314 +5581,6 @@ class RomDefinition:
 
 </file>
 
-<file path="src/ui/log_console.py">
-"""
-Log Console Widget
-
-Displays application logs and messages in a console-like interface.
-Similar to ECUFlash's message window.
-"""
-
-import logging
-from ..utils.constants import (
-    LOG_CONSOLE_MAX_LINES,
-    LOG_CONSOLE_CLEAR_BUTTON_WIDTH,
-    LOG_CONSOLE_FONT_FAMILY,
-    LOG_CONSOLE_FONT_SIZE
-)
-from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QTextEdit,
-    QLabel,
-    QPushButton,
-    QHBoxLayout
-)
-from PySide6.QtGui import QTextCursor, QFont
-from PySide6.QtCore import Qt, Signal, QObject
-
-
-class QtLogHandler(logging.Handler, QObject):
-    """
-    Custom logging handler that emits Qt signals for thread-safe log display
-    """
-    log_message = Signal(str, int)  # message, level
-
-    def __init__(self):
-        logging.Handler.__init__(self)
-        QObject.__init__(self)
-
-    def emit(self, record):
-        """Emit log record as Qt signal"""
-        msg = self.format(record)
-        self.log_message.emit(msg, record.levelno)
-
-
-class LogConsole(QWidget):
-    """
-    Console widget for displaying application logs and messages
-    """
-
-    def __init__(self, parent=None, auto_register=True):
-        """
-        Initialize log console
-
-        Args:
-            parent: Parent widget
-            auto_register: If True, automatically register with root logger
-        """
-        super().__init__(parent)
-        self.max_lines = LOG_CONSOLE_MAX_LINES
-        self.log_handler = None
-        self.init_ui()
-
-        if auto_register:
-            self.setup_logging()
-
-    def init_ui(self):
-        """Initialize the user interface"""
-        layout = QVBoxLayout()
-        self.setLayout(layout)
-
-        # Header with title and controls
-        header_layout = QHBoxLayout()
-
-        # Title label
-        title_label = QLabel("Activity Log")
-        title_label.setStyleSheet("font-weight: bold; font-size: 12px;")
-        header_layout.addWidget(title_label)
-
-        header_layout.addStretch()
-
-        # Clear button
-        clear_button = QPushButton("Clear")
-        clear_button.setMaximumWidth(LOG_CONSOLE_CLEAR_BUTTON_WIDTH)
-        clear_button.clicked.connect(self.clear)
-        header_layout.addWidget(clear_button)
-
-        layout.addLayout(header_layout)
-
-        # Console text area
-        self.console = QTextEdit()
-        self.console.setReadOnly(True)
-        self.console.setLineWrapMode(QTextEdit.NoWrap)
-
-        # Use monospace font for console-like appearance
-        font = QFont(LOG_CONSOLE_FONT_FAMILY, LOG_CONSOLE_FONT_SIZE)
-        self.console.setFont(font)
-
-        # Style the console
-        self.console.setStyleSheet("""
-            QTextEdit {
-                background-color: #1e1e1e;
-                color: #d4d4d4;
-                border: 1px solid #3c3c3c;
-            }
-        """)
-
-        layout.addWidget(self.console)
-
-        # Status bar at bottom
-        self.status_label = QLabel("Ready")
-        self.status_label.setStyleSheet(
-            "padding: 4px; background-color: #2d2d2d; color: #888;"
-        )
-        layout.addWidget(self.status_label)
-
-    def setup_logging(self):
-        """
-        Setup custom logging handler to display logs in console
-
-        Note: This modifies the root logger. Call unregister_logging() to clean up.
-        """
-        if self.log_handler is not None:
-            # Already registered
-            return
-
-        self.log_handler = QtLogHandler()
-        self.log_handler.setFormatter(
-            logging.Formatter('%(asctime)s - %(levelname)s - %(message)s',
-                            datefmt='%H:%M:%S')
-        )
-        self.log_handler.log_message.connect(self.append_log)
-
-        # Add handler to root logger
-        logging.getLogger().addHandler(self.log_handler)
-
-    def unregister_logging(self):
-        """Remove log handler from root logger"""
-        if self.log_handler is not None:
-            logging.getLogger().removeHandler(self.log_handler)
-            self.log_handler = None
-
-    def append_log(self, message: str, level: int):
-        """
-        Append log message to console with appropriate color
-
-        Args:
-            message: Log message text
-            level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        """
-        # Color coding based on log level
-        colors = {
-            logging.DEBUG: "#808080",      # Gray
-            logging.INFO: "#4ec9b0",       # Cyan
-            logging.WARNING: "#dcdcaa",    # Yellow
-            logging.ERROR: "#f48771",      # Red
-            logging.CRITICAL: "#ff0000"    # Bright Red
-        }
-
-        color = colors.get(level, "#d4d4d4")  # Default white
-
-        # Format with HTML for colors
-        html_message = f'<span style="color: {color};">{message}</span>'
-
-        # Append to console
-        self.console.append(html_message)
-
-        # Auto-scroll to bottom
-        cursor = self.console.textCursor()
-        cursor.movePosition(QTextCursor.End)
-        self.console.setTextCursor(cursor)
-
-        # Limit number of lines
-        self._limit_lines()
-
-    def _limit_lines(self):
-        """Limit console to max_lines by removing old lines"""
-        document = self.console.document()
-        if document.blockCount() > self.max_lines:
-            cursor = QTextCursor(document.findBlockByLineNumber(0))
-            cursor.select(QTextCursor.BlockUnderCursor)
-            cursor.removeSelectedText()
-            cursor.deleteChar()  # Remove the newline
-
-    def log_info(self, message: str):
-        """Log an info message"""
-        logging.info(message)
-
-    def log_warning(self, message: str):
-        """Log a warning message"""
-        logging.warning(message)
-
-    def log_error(self, message: str):
-        """Log an error message"""
-        logging.error(message)
-
-    def log_success(self, message: str):
-        """Log a success message (info level with custom formatting)"""
-        logging.info(f"✓ {message}")
-
-    def clear(self):
-        """Clear the console"""
-        self.console.clear()
-        self.log_info("Console cleared")
-
-    def update_status(self, message: str):
-        """Update the status bar at the bottom"""
-        self.status_label.setText(message)
-
-    def closeEvent(self, event):
-        """Remove log handler when widget is closed"""
-        self.unregister_logging()
-        event.accept()
-</file>
-
-<file path="src/ui/rom_document.py">
-"""
-ROM Document Widget
-
-Represents a single ROM file with its own table browser and state.
-Each ROM is displayed in its own tab.
-"""
-
-from pathlib import Path
-from PySide6.QtWidgets import (
-    QWidget,
-    QSplitter,
-    QHBoxLayout
-)
-from PySide6.QtCore import Qt, Signal
-
-from .table_browser import TableBrowser
-from ..core.rom_definition import RomDefinition, Table
-from ..core.rom_reader import RomReader
-
-
-class RomDocument(QWidget):
-    """Widget representing a single open ROM document"""
-
-    # Signal emitted when a table is selected
-    table_selected = Signal(Table, object)  # table, rom_reader
-
-    def __init__(self, rom_path: str, rom_definition: RomDefinition, rom_reader: RomReader, parent=None):
-        super().__init__(parent)
-        self.rom_path = rom_path
-        self.rom_definition = rom_definition
-        self.rom_reader = rom_reader
-        self.file_name = Path(rom_path).name
-        self.init_ui()
-
-    def init_ui(self):
-        """Initialize the user interface"""
-        layout = QHBoxLayout()
-        self.setLayout(layout)
-
-        # Table browser takes full width (log console is now shared at bottom of main window)
-        self.table_browser = TableBrowser()
-        self.table_browser.load_definition(self.rom_definition)
-        self.table_browser.table_selected.connect(self.on_table_selected)
-        layout.addWidget(self.table_browser)
-
-    def on_table_selected(self, table: Table):
-        """Handle table selection from browser"""
-        # Emit signal with both table and this document's rom_reader
-        self.table_selected.emit(table, self.rom_reader)
-
-    def get_tab_title(self) -> str:
-        """
-        Get the title for this document's tab
-
-        Returns:
-            str: Tab title (filename + ROM ID)
-        """
-        return f"{self.file_name} ({self.rom_definition.romid.xmlid})"
-
-    def get_short_title(self) -> str:
-        """
-        Get short title for tab (just filename)
-
-        Returns:
-            str: Short filename
-        """
-        return self.file_name
-
-    def is_modified(self) -> bool:
-        """
-        Check if this ROM has been modified
-
-        Returns:
-            bool: True if modified (TODO: implement tracking)
-        """
-        # TODO: Implement modification tracking
-        return False
-
-    def save(self, file_path: str = None):
-        """
-        Save this ROM
-
-        Args:
-            file_path: Optional new path for save-as
-        """
-        save_path = file_path if file_path else self.rom_path
-        self.rom_reader.save_rom(save_path)
-
-        # Update path if it changed
-        if file_path:
-            self.rom_path = file_path
-            self.file_name = Path(file_path).name
-</file>
-
 <file path="src/ui/settings_dialog.py">
 """
 Settings Dialog
@@ -6080,7 +5601,9 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QLineEdit,
     QFileDialog,
-    QGroupBox
+    QGroupBox,
+    QComboBox,
+    QSpinBox
 )
 from PySide6.QtCore import Qt, Signal
 
@@ -6163,11 +5686,29 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout()
         tab.setLayout(layout)
 
-        # Placeholder label
-        label = QLabel("Appearance settings will be added here\n(Theme, colors, fonts, etc.)")
-        label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(label)
+        # Table display group
+        table_group = QGroupBox("Table Display")
+        table_layout = QFormLayout()
+        table_group.setLayout(table_layout)
 
+        # Font size setting
+        self.font_size_spin = QSpinBox()
+        self.font_size_spin.setRange(6, 16)
+        self.font_size_spin.setSuffix(" px")
+        table_layout.addRow("Table font size:", self.font_size_spin)
+
+        # Gradient mode setting
+        self.gradient_mode_combo = QComboBox()
+        self.gradient_mode_combo.addItem("Min/Max of table", "minmax")
+        self.gradient_mode_combo.addItem("Relative to neighbors", "neighbors")
+        table_layout.addRow("Cell gradient coloring:", self.gradient_mode_combo)
+
+        # Help text
+        help_label = QLabel("Note: Changes take effect on newly opened tables")
+        help_label.setStyleSheet("color: gray; font-size: 10px;")
+        table_layout.addRow("", help_label)
+
+        layout.addWidget(table_group)
         layout.addStretch()
 
         self.tabs.addTab(tab, "Appearance")
@@ -6193,6 +5734,16 @@ class SettingsDialog(QDialog):
         metadata_dir = self.settings.get_metadata_directory()
         self.metadata_path_edit.setText(metadata_dir)
 
+        # Load gradient mode
+        gradient_mode = self.settings.get_gradient_mode()
+        index = self.gradient_mode_combo.findData(gradient_mode)
+        if index >= 0:
+            self.gradient_mode_combo.setCurrentIndex(index)
+
+        # Load font size
+        font_size = self.settings.get_table_font_size()
+        self.font_size_spin.setValue(font_size)
+
     def browse_metadata_directory(self):
         """Open directory browser for metadata directory"""
         current_path = self.metadata_path_edit.text()
@@ -6215,6 +5766,14 @@ class SettingsDialog(QDialog):
         metadata_dir = self.metadata_path_edit.text().strip()
         if metadata_dir:
             self.settings.set_metadata_directory(metadata_dir)
+
+        # Save gradient mode
+        gradient_mode = self.gradient_mode_combo.currentData()
+        self.settings.set_gradient_mode(gradient_mode)
+
+        # Save font size
+        font_size = self.font_size_spin.value()
+        self.settings.set_table_font_size(font_size)
 
         # Emit signal that settings changed
         self.settings_changed.emit()
@@ -6412,76 +5971,11 @@ class SetupWizard(QDialog):
             super().reject()
 </file>
 
-<file path="src/ui/table_viewer_window.py">
-"""
-Table Viewer Window
-
-Displays table data in a separate, independent window.
-Allows opening multiple tables simultaneously for comparison.
-"""
-
-from PySide6.QtWidgets import QMainWindow, QVBoxLayout, QWidget
-from PySide6.QtCore import Qt
-
-from ..utils.constants import TABLE_VIEWER_DEFAULT_WIDTH, TABLE_VIEWER_DEFAULT_HEIGHT, APP_NAME
-from .table_viewer import TableViewer
-from ..core.rom_definition import Table
-
-
-class TableViewerWindow(QMainWindow):
-    """
-    Standalone window for viewing a single table
-
-    Features:
-    - Independent window that can be moved/resized
-    - Shows table name in window title
-    - Contains TableViewer widget for displaying data
-    - Can have multiple windows open simultaneously
-    """
-
-    def __init__(self, table: Table, data: dict, parent=None):
-        """
-        Initialize table viewer window
-
-        Args:
-            table: Table definition
-            data: Table data dictionary from RomReader
-            parent: Parent widget (optional)
-        """
-        super().__init__(parent)
-
-        self.table = table
-        self.data = data
-
-        # Set window properties
-        self.setWindowTitle(f"{table.name} - {APP_NAME}")
-        self.resize(TABLE_VIEWER_DEFAULT_WIDTH, TABLE_VIEWER_DEFAULT_HEIGHT)
-
-        # Create central widget
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-
-        layout = QVBoxLayout()
-        central_widget.setLayout(layout)
-
-        # Create table viewer widget
-        self.viewer = TableViewer()
-        layout.addWidget(self.viewer)
-
-        # Display the table data
-        self.viewer.display_table(table, data)
-
-    def closeEvent(self, event):
-        """Handle window close event"""
-        # Clean up if needed
-        event.accept()
-</file>
-
 <file path="src/ui/table_viewer.py">
 """
 Table Viewer Widget
 
-Displays table data in a grid view.
+Displays table data in a grid view with gradient coloring and axis labels.
 """
 
 from PySide6.QtWidgets import (
@@ -6493,16 +5987,20 @@ from PySide6.QtWidgets import (
     QHeaderView
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QBrush
 
-from ..core.rom_definition import Table, TableType
+from ..core.rom_definition import Table, TableType, RomDefinition, AxisType
+from ..utils.settings import get_settings
 import numpy as np
+import re
 
 
 class TableViewer(QWidget):
-    """Widget for viewing table data"""
+    """Widget for viewing table data with gradient coloring"""
 
-    def __init__(self, parent=None):
+    def __init__(self, rom_definition: RomDefinition = None, parent=None):
         super().__init__(parent)
+        self.rom_definition = rom_definition
         self.current_table = None
         self.current_data = None
         self.init_ui()
@@ -6510,6 +6008,7 @@ class TableViewer(QWidget):
     def init_ui(self):
         """Initialize the user interface"""
         layout = QVBoxLayout()
+        layout.setContentsMargins(2, 2, 2, 2)
         self.setLayout(layout)
 
         # Table info label
@@ -6519,7 +6018,37 @@ class TableViewer(QWidget):
         # Table widget for displaying data
         self.table_widget = QTableWidget()
         self.table_widget.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.table_widget.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.table_widget.verticalHeader().setVisible(False)  # Hide row numbers
+        self.table_widget.setShowGrid(True)
+        self.table_widget.setGridStyle(Qt.SolidLine)
+
+        # Apply compact styling from settings
+        self._apply_table_style()
+
         layout.addWidget(self.table_widget)
+
+    def _apply_table_style(self):
+        """Apply table styling based on settings"""
+        font_size = get_settings().get_table_font_size()
+
+        self.table_widget.setStyleSheet(f"""
+            QTableWidget {{
+                font-size: {font_size}px;
+                gridline-color: #c0c0c0;
+            }}
+            QTableWidget::item {{
+                padding: 0px 2px;
+            }}
+            QHeaderView::section {{
+                font-size: {font_size}px;
+                padding: 1px;
+            }}
+        """)
+
+        # Set row height based on font size
+        row_height = font_size + 6
+        self.table_widget.verticalHeader().setDefaultSectionSize(row_height)
 
     def display_table(self, table: Table, data: dict):
         """
@@ -6557,7 +6086,10 @@ class TableViewer(QWidget):
         self.table_widget.setHorizontalHeaderLabels(["Value"])
         self.table_widget.setVerticalHeaderLabels([""])
 
-        item = QTableWidgetItem(f"{values[0]:.4f}")
+        value_fmt = self._get_value_format()
+        item = QTableWidgetItem(self._format_value(values[0], value_fmt))
+        color = self._get_cell_color(values[0], values, 0, 0)
+        item.setBackground(QBrush(color))
         self.table_widget.setItem(0, 0, item)
 
     def _display_2d(self, values: np.ndarray, y_axis: np.ndarray):
@@ -6565,18 +6097,28 @@ class TableViewer(QWidget):
         num_values = len(values)
         self.table_widget.setRowCount(num_values)
         self.table_widget.setColumnCount(2)
-        self.table_widget.setHorizontalHeaderLabels(["Y Axis", "Value"])
+
+        # Get axis label with unit
+        y_label = self._get_axis_label(self.current_table, AxisType.Y_AXIS)
+        self.table_widget.setHorizontalHeaderLabels([y_label, "Value"])
+
+        # Get format specs
+        y_fmt = self._get_axis_format(AxisType.Y_AXIS)
+        value_fmt = self._get_value_format()
 
         for i in range(num_values):
             # Y axis value
             if y_axis is not None and i < len(y_axis):
-                y_item = QTableWidgetItem(f"{y_axis[i]:.4f}")
+                y_item = QTableWidgetItem(self._format_value(y_axis[i], y_fmt))
             else:
                 y_item = QTableWidgetItem(str(i))
+            y_item.setFlags(y_item.flags() & ~Qt.ItemIsEditable)  # Read-only
             self.table_widget.setItem(i, 0, y_item)
 
-            # Data value
-            value_item = QTableWidgetItem(f"{values[i]:.4f}")
+            # Data value with gradient color
+            value_item = QTableWidgetItem(self._format_value(values[i], value_fmt))
+            color = self._get_cell_color(values[i], values, i, 0)
+            value_item.setBackground(QBrush(color))
             self.table_widget.setItem(i, 1, value_item)
 
     def _display_3d(self, values: np.ndarray, x_axis: np.ndarray, y_axis: np.ndarray):
@@ -6591,10 +6133,19 @@ class TableViewer(QWidget):
         self.table_widget.setRowCount(rows)
         self.table_widget.setColumnCount(cols + 1)
 
+        # Get axis labels with units
+        x_label = self._get_axis_label(self.current_table, AxisType.X_AXIS)
+        y_label = self._get_axis_label(self.current_table, AxisType.Y_AXIS)
+
+        # Get format specs
+        x_fmt = self._get_axis_format(AxisType.X_AXIS)
+        y_fmt = self._get_axis_format(AxisType.Y_AXIS)
+        value_fmt = self._get_value_format()
+
         # Set column headers (X axis values)
-        headers = ["Y \\ X"]  # Top-left cell label
+        headers = [y_label]  # Top-left cell shows Y axis label
         if x_axis is not None and len(x_axis) == cols:
-            headers.extend([f"{x:.2f}" for x in x_axis])
+            headers.extend([self._format_value(x, x_fmt) for x in x_axis])
         else:
             headers.extend([str(i) for i in range(cols)])
         self.table_widget.setHorizontalHeaderLabels(headers)
@@ -6603,15 +6154,17 @@ class TableViewer(QWidget):
         for row in range(rows):
             # Y axis value in first column
             if y_axis is not None and row < len(y_axis):
-                y_item = QTableWidgetItem(f"{y_axis[row]:.2f}")
+                y_item = QTableWidgetItem(self._format_value(y_axis[row], y_fmt))
             else:
                 y_item = QTableWidgetItem(str(row))
             y_item.setFlags(y_item.flags() & ~Qt.ItemIsEditable)  # Make read-only
             self.table_widget.setItem(row, 0, y_item)
 
-            # Data values
+            # Data values with gradient coloring
             for col in range(cols):
-                value_item = QTableWidgetItem(f"{values[row, col]:.4f}")
+                value_item = QTableWidgetItem(self._format_value(values[row, col], value_fmt))
+                color = self._get_cell_color(values[row, col], values, row, col)
+                value_item.setBackground(QBrush(color))
                 self.table_widget.setItem(row, col + 1, value_item)
 
     def clear(self):
@@ -6621,229 +6174,292 @@ class TableViewer(QWidget):
         self.info_label.setText("Select a table to view")
         self.table_widget.setRowCount(0)
         self.table_widget.setColumnCount(0)
+
+    def _get_axis_label(self, table: Table, axis_type: AxisType) -> str:
+        """
+        Get axis label with unit, e.g., 'Engine Speed (RPM)'
+
+        Args:
+            table: Parent table
+            axis_type: AxisType.X_AXIS or AxisType.Y_AXIS
+
+        Returns:
+            str: Axis label with unit if available
+        """
+        axis_table = table.get_axis(axis_type)
+        if not axis_table:
+            return "X" if axis_type == AxisType.X_AXIS else "Y"
+
+        name = axis_table.name
+        unit = ""
+
+        # Get unit from scaling if available
+        if self.rom_definition and axis_table.scaling:
+            scaling = self.rom_definition.get_scaling(axis_table.scaling)
+            if scaling and scaling.units:
+                unit = scaling.units
+
+        if unit:
+            return f"{name} ({unit})"
+        return name
+
+    def _printf_to_python_format(self, printf_format: str) -> str:
+        """
+        Convert printf-style format to Python format spec.
+
+        Args:
+            printf_format: Printf format string like "%0.3f", "%.2f", "%d"
+
+        Returns:
+            str: Python format spec like ".3f", ".2f", "d"
+        """
+        if not printf_format:
+            return ".2f"  # Default fallback
+
+        # Match printf pattern: %[flags][width][.precision][length]specifier
+        match = re.match(r'%[-+0 #]*(\d*)\.?(\d*)([diouxXeEfFgGaAcspn%])', printf_format)
+        if not match:
+            return ".2f"  # Default fallback
+
+        width = match.group(1)
+        precision = match.group(2)
+        specifier = match.group(3)
+
+        # Build Python format spec
+        result = ""
+        if width:
+            result += width
+        if precision:
+            result += f".{precision}"
+        result += specifier
+
+        return result
+
+    def _get_value_format(self) -> str:
+        """
+        Get the Python format spec for the current table's values.
+
+        Returns:
+            str: Python format spec (e.g., ".3f")
+        """
+        if not self.current_table or not self.rom_definition:
+            return ".2f"
+
+        scaling_name = self.current_table.scaling
+        if not scaling_name:
+            return ".2f"
+
+        scaling = self.rom_definition.get_scaling(scaling_name)
+        if not scaling or not scaling.format:
+            return ".2f"
+
+        return self._printf_to_python_format(scaling.format)
+
+    def _get_axis_format(self, axis_type: AxisType) -> str:
+        """
+        Get the Python format spec for an axis.
+
+        Args:
+            axis_type: AxisType.X_AXIS or AxisType.Y_AXIS
+
+        Returns:
+            str: Python format spec (e.g., ".2f")
+        """
+        if not self.current_table or not self.rom_definition:
+            return ".2f"
+
+        axis_table = self.current_table.get_axis(axis_type)
+        if not axis_table or not axis_table.scaling:
+            return ".2f"
+
+        scaling = self.rom_definition.get_scaling(axis_table.scaling)
+        if not scaling or not scaling.format:
+            return ".2f"
+
+        return self._printf_to_python_format(scaling.format)
+
+    def _format_value(self, value: float, format_spec: str) -> str:
+        """
+        Format a value using the given format spec with error handling.
+
+        Args:
+            value: The value to format
+            format_spec: Python format spec (e.g., ".3f")
+
+        Returns:
+            str: Formatted value string
+        """
+        try:
+            return f"{value:{format_spec}}"
+        except (ValueError, TypeError):
+            return f"{value:.2f}"
+
+    def _ratio_to_color(self, ratio: float) -> QColor:
+        """
+        Convert 0-1 ratio to thermal/rainbow gradient (blue → cyan → green → yellow → red)
+        Similar to ECUFlash's table coloring.
+
+        Args:
+            ratio: Value between 0 and 1
+
+        Returns:
+            QColor: Gradient color
+        """
+        # Clamp ratio to valid range
+        ratio = max(0.0, min(1.0, ratio))
+
+        # 5-stop gradient: blue → cyan → green → yellow → red
+        if ratio <= 0.25:
+            # Blue to Cyan
+            t = ratio / 0.25
+            r = 0
+            g = int(t * 255)
+            b = 255
+        elif ratio <= 0.5:
+            # Cyan to Green
+            t = (ratio - 0.25) / 0.25
+            r = 0
+            g = 255
+            b = int(255 * (1 - t))
+        elif ratio <= 0.75:
+            # Green to Yellow
+            t = (ratio - 0.5) / 0.25
+            r = int(t * 255)
+            g = 255
+            b = 0
+        else:
+            # Yellow to Red
+            t = (ratio - 0.75) / 0.25
+            r = 255
+            g = int(255 * (1 - t))
+            b = 0
+
+        return QColor(r, g, b)
+
+    def _get_cell_color(self, value: float, values: np.ndarray,
+                        row: int, col: int) -> QColor:
+        """
+        Calculate cell background color based on gradient mode
+
+        Args:
+            value: Current cell value
+            values: All values in the table (2D array for 3D tables)
+            row: Row index
+            col: Column index
+
+        Returns:
+            QColor: Background color for the cell
+        """
+        mode = get_settings().get_gradient_mode()
+
+        if mode == "neighbors":
+            # Calculate relative to neighboring cells
+            ratio = self._get_neighbor_ratio(value, values, row, col)
+        else:
+            # Default: min/max mode
+            min_val = np.min(values)
+            max_val = np.max(values)
+
+            if max_val == min_val:
+                ratio = 0.5  # All values are the same
+            else:
+                ratio = (value - min_val) / (max_val - min_val)
+
+        return self._ratio_to_color(ratio)
+
+    def _get_neighbor_ratio(self, value: float, values: np.ndarray,
+                            row: int, col: int) -> float:
+        """
+        Calculate ratio relative to neighboring cells
+
+        Args:
+            value: Current cell value
+            values: All values in the table
+            row: Row index
+            col: Column index
+
+        Returns:
+            float: Ratio between 0 and 1
+        """
+        if values.ndim == 1:
+            # 1D/2D table - use adjacent values
+            neighbors = []
+            if row > 0:
+                neighbors.append(values[row - 1])
+            if row < len(values) - 1:
+                neighbors.append(values[row + 1])
+        else:
+            # 3D table - use surrounding 8 cells
+            rows, cols = values.shape
+            neighbors = []
+            for dr in [-1, 0, 1]:
+                for dc in [-1, 0, 1]:
+                    if dr == 0 and dc == 0:
+                        continue
+                    nr, nc = row + dr, col + dc
+                    if 0 <= nr < rows and 0 <= nc < cols:
+                        neighbors.append(values[nr, nc])
+
+        if not neighbors:
+            return 0.5
+
+        neighbor_avg = np.mean(neighbors)
+        neighbor_range = max(neighbors) - min(neighbors) if len(neighbors) > 1 else 1.0
+
+        if neighbor_range == 0:
+            neighbor_range = abs(neighbor_avg) * 0.1 if neighbor_avg != 0 else 1.0
+
+        # Calculate how different this value is from neighbors
+        diff = value - neighbor_avg
+        ratio = 0.5 + (diff / (neighbor_range * 2))
+
+        return max(0.0, min(1.0, ratio))
 </file>
 
 <file path="src/utils/__init__.py">
 
 </file>
 
-<file path="src/utils/logging_config.py">
+<file path="src/utils/constants.py">
 """
-Logging configuration for NC ROM Editor
+Application Constants
 
-Provides centralized logging setup with file and console handlers.
-"""
-
-import logging
-import logging.handlers
-from pathlib import Path
-from typing import Optional
-
-from .constants import LOG_FILE_MAX_BYTES, LOG_FILE_BACKUP_COUNT
-
-
-# Default log format
-DEFAULT_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-DETAILED_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
-
-
-def setup_logging(
-    level: int = logging.INFO,
-    log_file: Optional[str] = None,
-    console: bool = True,
-    detailed: bool = False
-) -> None:
-    """
-    Configure logging for the application
-
-    Args:
-        level: Logging level (e.g., logging.INFO, logging.DEBUG)
-        log_file: Path to log file (creates rotating file handler if provided)
-        console: Whether to enable console logging
-        detailed: Whether to use detailed log format with file/line info
-    """
-    # Get root logger
-    root_logger = logging.getLogger()
-    root_logger.setLevel(level)
-
-    # Clear any existing handlers
-    root_logger.handlers.clear()
-
-    # Choose format
-    log_format = DETAILED_FORMAT if detailed else DEFAULT_FORMAT
-    formatter = logging.Formatter(log_format)
-
-    # Console handler
-    if console:
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(level)
-        console_handler.setFormatter(formatter)
-        root_logger.addHandler(console_handler)
-
-    # File handler (rotating)
-    if log_file:
-        log_path = Path(log_file)
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-
-        file_handler = logging.handlers.RotatingFileHandler(
-            log_file,
-            maxBytes=LOG_FILE_MAX_BYTES,
-            backupCount=LOG_FILE_BACKUP_COUNT,
-            encoding='utf-8'
-        )
-        file_handler.setLevel(level)
-        file_handler.setFormatter(formatter)
-        root_logger.addHandler(file_handler)
-
-
-def get_logger(name: str) -> logging.Logger:
-    """
-    Get a logger instance for a module
-
-    Args:
-        name: Logger name (typically __name__)
-
-    Returns:
-        Logger instance
-    """
-    return logging.getLogger(name)
-
-
-def set_log_level(level: int) -> None:
-    """
-    Set the logging level for all handlers
-
-    Args:
-        level: Logging level (e.g., logging.DEBUG, logging.INFO)
-    """
-    root_logger = logging.getLogger()
-    root_logger.setLevel(level)
-    for handler in root_logger.handlers:
-        handler.setLevel(level)
-
-
-# Default configuration on import
-setup_logging(level=logging.INFO, console=True, detailed=False)
-</file>
-
-<file path="src/utils/settings.py">
-"""
-Application Settings Management
-
-Handles loading, saving, and accessing application settings using QSettings.
+Centralized location for all magic numbers and configuration constants.
 """
 
-from pathlib import Path
-from PySide6.QtCore import QSettings
+# Application metadata
+APP_NAME = "NC ROM Editor"
+APP_VERSION = "0.1.0"
+APP_VERSION_STRING = f"v{APP_VERSION}"
+APP_DESCRIPTION = "An open-source ROM editor for NC Miata ECUs"
 
-from .constants import MAX_RECENT_FILES
+# Main window settings
+MAIN_WINDOW_X = 100
+MAIN_WINDOW_Y = 100
+MAIN_WINDOW_WIDTH = 1400
+MAIN_WINDOW_HEIGHT = 900
+MAIN_SPLITTER_LEFT = 420  # Table browser width (30%)
+MAIN_SPLITTER_RIGHT = 980  # Activity log width (70%)
 
+# Table browser settings
+TABLE_BROWSER_COLUMN_WIDTH = 300  # Width of name column
 
-class AppSettings:
-    """Application settings manager using QSettings for persistence"""
+# Log console settings
+LOG_CONSOLE_MAX_LINES = 1000  # Maximum lines kept in console
+LOG_CONSOLE_CLEAR_BUTTON_WIDTH = 80
+LOG_CONSOLE_FONT_FAMILY = "Courier New"
+LOG_CONSOLE_FONT_SIZE = 9
 
-    def __init__(self):
-        """Initialize settings manager"""
-        self.settings = QSettings("NCRomEditor", "NCRomEditor")
+# Logging configuration
+LOG_FILE_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+LOG_FILE_BACKUP_COUNT = 5
 
-    def get_metadata_directory(self) -> str:
-        """
-        Get the configured metadata directory path
+# Settings
+MAX_RECENT_FILES = 10
 
-        Returns:
-            str: Path to metadata directory (defaults to ./metadata relative to app)
-        """
-        # Default to 'metadata' directory in the application root
-        default_path = str(Path.cwd() / "metadata")
-        return self.settings.value("paths/metadata_directory", default_path)
-
-    def set_metadata_directory(self, path: str):
-        """
-        Set the metadata directory path
-
-        Args:
-            path: Path to metadata directory
-        """
-        self.settings.setValue("paths/metadata_directory", path)
-        self.settings.sync()
-
-    def get_window_geometry(self):
-        """Get saved window geometry"""
-        return self.settings.value("window/geometry")
-
-    def set_window_geometry(self, geometry):
-        """Save window geometry"""
-        self.settings.setValue("window/geometry", geometry)
-        self.settings.sync()
-
-    def get_splitter_state(self):
-        """Get saved splitter state"""
-        return self.settings.value("window/splitter_state")
-
-    def set_splitter_state(self, state):
-        """Save splitter state"""
-        self.settings.setValue("window/splitter_state", state)
-        self.settings.sync()
-
-    def get_recent_files(self) -> list:
-        """
-        Get list of recently opened ROM files
-
-        Returns:
-            list: List of file paths
-        """
-        files = self.settings.value("recent_files", [])
-        if files is None:
-            return []
-        # Ensure it's always a list
-        if isinstance(files, str):
-            return [files] if files else []
-        return files
-
-    def add_recent_file(self, file_path: str, max_recent: int = MAX_RECENT_FILES):
-        """
-        Add a file to the recent files list
-
-        Args:
-            file_path: Path to ROM file
-            max_recent: Maximum number of recent files to keep
-        """
-        recent = self.get_recent_files()
-
-        # Remove if already in list
-        if file_path in recent:
-            recent.remove(file_path)
-
-        # Add to front of list
-        recent.insert(0, file_path)
-
-        # Limit to max_recent
-        recent = recent[:max_recent]
-
-        self.settings.setValue("recent_files", recent)
-        self.settings.sync()
-
-    def clear_recent_files(self):
-        """Clear the recent files list"""
-        self.settings.setValue("recent_files", [])
-        self.settings.sync()
-
-
-# Global settings instance
-_settings = None
-
-
-def get_settings() -> AppSettings:
-    """
-    Get the global settings instance
-
-    Returns:
-        AppSettings: Global settings instance
-    """
-    global _settings
-    if _settings is None:
-        _settings = AppSettings()
-    return _settings
+# Table viewer window
+TABLE_VIEWER_DEFAULT_WIDTH = 800
+TABLE_VIEWER_DEFAULT_HEIGHT = 600
 </file>
 
 <file path="src/__init__.py">
@@ -6893,11 +6509,6 @@ def sample_rom_path(examples_dir):
 def sample_xml_path(metadata_dir):
     """Return path to sample XML definition"""
     return metadata_dir / "lf9veb.xml"
-</file>
-
-<file path=".gitattributes">
-# Use bd merge for beads JSONL files
-.beads/issues.jsonl merge=beads
 </file>
 
 <file path="pytest.ini">
@@ -7363,411 +6974,660 @@ class RomDetector:
         ]
 </file>
 
-<file path="src/core/rom_reader.py">
+<file path="src/ui/log_console.py">
 """
-ROM Binary File Reader
+Log Console Widget
 
-Reads binary ROM files using ROM definition metadata.
-Extracts and scales table data based on definitions.
+Displays application logs and messages in a console-like interface.
+Similar to ECUFlash's message window.
 """
 
-import struct
-import numpy as np
-from pathlib import Path
-from typing import Optional, Union
 import logging
-from simpleeval import simple_eval
-
-from .rom_definition import RomDefinition, Table, Scaling, TableType
-from .exceptions import (
-    RomFileNotFoundError,
-    RomReadError,
-    RomWriteError,
-    ScalingConversionError,
-    ScalingNotFoundError,
-    InvalidRomFileError
+from ..utils.constants import (
+    LOG_CONSOLE_MAX_LINES,
+    LOG_CONSOLE_CLEAR_BUTTON_WIDTH,
+    LOG_CONSOLE_FONT_FAMILY,
+    LOG_CONSOLE_FONT_SIZE
 )
+from PySide6.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QTextEdit,
+    QLabel,
+    QPushButton,
+    QHBoxLayout
+)
+from PySide6.QtGui import QTextCursor, QFont
+from PySide6.QtCore import Qt, Signal, QObject
 
-logger = logging.getLogger(__name__)
 
-
-class ScalingConverter:
+class QtLogHandler(logging.Handler, QObject):
     """
-    Converts values between raw binary and display using scaling expressions
+    Custom logging handler that emits Qt signals for thread-safe log display
     """
+    log_message = Signal(str, int)  # message, level
 
-    def __init__(self, scaling: Scaling):
-        """
-        Initialize converter with a scaling definition
+    def __init__(self):
+        logging.Handler.__init__(self)
+        QObject.__init__(self)
 
-        Args:
-            scaling: Scaling definition with conversion expressions
-        """
-        self.scaling = scaling
-
-    def to_display(self, raw_value: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
-        """
-        Convert raw binary value(s) to display value(s)
-
-        Args:
-            raw_value: Raw value or array of values
-
-        Returns:
-            Converted value or array
-
-        Raises:
-            ScalingConversionError: If conversion fails
-        """
-        try:
-            # Use simpleeval for safe expression evaluation
-            if isinstance(raw_value, np.ndarray):
-                return np.array([simple_eval(self.scaling.toexpr, names={'x': v}) for v in raw_value])
-            else:
-                return simple_eval(self.scaling.toexpr, names={'x': raw_value})
-        except Exception as e:
-            logger.error(f"Error converting to display with expr '{self.scaling.toexpr}': {e}")
-            raise ScalingConversionError(
-                f"Failed to convert raw value to display using expression '{self.scaling.toexpr}': {e}"
-            )
-
-    def from_display(self, display_value: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
-        """
-        Convert display value(s) back to raw binary value(s)
-
-        Args:
-            display_value: Display value or array of values
-
-        Returns:
-            Raw value or array for writing to ROM
-
-        Raises:
-            ScalingConversionError: If conversion fails
-        """
-        try:
-            if isinstance(display_value, np.ndarray):
-                return np.array([simple_eval(self.scaling.frexpr, names={'x': v}) for v in display_value])
-            else:
-                return simple_eval(self.scaling.frexpr, names={'x': display_value})
-        except Exception as e:
-            logger.error(f"Error converting from display with expr '{self.scaling.frexpr}': {e}")
-            raise ScalingConversionError(
-                f"Failed to convert display value to raw using expression '{self.scaling.frexpr}': {e}"
-            )
+    def emit(self, record):
+        """Emit log record as Qt signal"""
+        msg = self.format(record)
+        self.log_message.emit(msg, record.levelno)
 
 
-class RomReader:
+class LogConsole(QWidget):
     """
-    Reads data from ROM binary files based on ROM definitions
+    Console widget for displaying application logs and messages
     """
 
-    def __init__(self, rom_path: str, definition: RomDefinition):
+    def __init__(self, parent=None, auto_register=True):
         """
-        Initialize ROM reader
+        Initialize log console
 
         Args:
-            rom_path: Path to ROM binary file
-            definition: ROM definition with table/scaling metadata
-
-        Raises:
-            RomFileNotFoundError: If ROM file doesn't exist
+            parent: Parent widget
+            auto_register: If True, automatically register with root logger
         """
-        self.rom_path = Path(rom_path)
-        if not self.rom_path.exists():
-            logger.error(f"ROM file not found: {rom_path}")
-            raise RomFileNotFoundError(f"ROM file not found: {rom_path}")
+        super().__init__(parent)
+        self.max_lines = LOG_CONSOLE_MAX_LINES
+        self.log_handler = None
+        self.init_ui()
 
-        self.definition = definition
-        self.rom_data = None
+        if auto_register:
+            self.setup_logging()
 
-        logger.info(f"Initializing ROM reader for {rom_path}")
-        # Load entire ROM into memory (they're < 1MB)
-        self._load_rom()
+    def init_ui(self):
+        """Initialize the user interface"""
+        layout = QVBoxLayout()
+        self.setLayout(layout)
 
-    def _load_rom(self):
-        """
-        Load ROM binary file into memory
+        # Header with title and controls
+        header_layout = QHBoxLayout()
 
-        Raises:
-            RomReadError: If ROM file cannot be read
-        """
-        try:
-            with open(self.rom_path, 'rb') as f:
-                self.rom_data = f.read()
-            logger.info(f"Loaded {len(self.rom_data)} bytes from ROM file")
-        except IOError as e:
-            logger.error(f"Failed to read ROM file {self.rom_path}: {e}")
-            raise RomReadError(f"Failed to read ROM file: {e}")
+        # Title label
+        title_label = QLabel("Activity Log")
+        title_label.setStyleSheet("font-weight: bold; font-size: 12px;")
+        header_layout.addWidget(title_label)
 
-    def verify_rom_id(self) -> bool:
-        """
-        Verify that the ROM matches the expected ID
+        header_layout.addStretch()
 
-        Returns:
-            True if ROM ID matches, False otherwise
-        """
-        try:
-            address = self.definition.romid.internal_id_address_int
-            expected_id = self.definition.romid.internalidstring
-            id_length = len(expected_id)
+        # Clear button
+        clear_button = QPushButton("Clear")
+        clear_button.setMaximumWidth(LOG_CONSOLE_CLEAR_BUTTON_WIDTH)
+        clear_button.clicked.connect(self.clear)
+        header_layout.addWidget(clear_button)
 
-            actual_id = self.rom_data[address:address + id_length].decode('ascii', errors='ignore')
-            match = actual_id == expected_id
+        layout.addLayout(header_layout)
 
-            if match:
-                logger.info(f"ROM ID verified: {actual_id}")
-            else:
-                logger.warning(f"ROM ID mismatch - Expected: {expected_id}, Found: {actual_id}")
+        # Console text area
+        self.console = QTextEdit()
+        self.console.setReadOnly(True)
+        self.console.setLineWrapMode(QTextEdit.NoWrap)
 
-            return match
-        except Exception as e:
-            logger.error(f"Error verifying ROM ID: {e}")
-            return False
+        # Use monospace font for console-like appearance
+        font = QFont(LOG_CONSOLE_FONT_FAMILY, LOG_CONSOLE_FONT_SIZE)
+        self.console.setFont(font)
 
-    def _read_raw_values(self, address: int, count: int, scaling: Scaling) -> np.ndarray:
-        """
-        Read raw binary values from ROM
+        # Style the console
+        self.console.setStyleSheet("""
+            QTextEdit {
+                background-color: #1e1e1e;
+                color: #d4d4d4;
+                border: 1px solid #3c3c3c;
+            }
+        """)
 
-        Args:
-            address: Starting address
-            count: Number of elements to read
-            scaling: Scaling definition with storage type info
+        layout.addWidget(self.console)
 
-        Returns:
-            NumPy array of raw values
-
-        Raises:
-            RomReadError: If address is out of bounds
-        """
-        bytes_per_elem = scaling.bytes_per_element
-        total_bytes = count * bytes_per_elem
-
-        # Validate bounds
-        if address < 0:
-            raise RomReadError(f"Invalid address: {hex(address)} (negative)")
-        if address >= len(self.rom_data):
-            raise RomReadError(
-                f"Address out of bounds: {hex(address)} "
-                f"(ROM size: {len(self.rom_data)} bytes)"
-            )
-        if address + total_bytes > len(self.rom_data):
-            raise RomReadError(
-                f"Read operation exceeds ROM bounds: "
-                f"trying to read {total_bytes} bytes from {hex(address)} "
-                f"(ROM size: {len(self.rom_data)} bytes)"
-            )
-
-        # Extract bytes
-        data_bytes = self.rom_data[address:address + total_bytes]
-
-        # Determine struct format
-        endian_char = '>' if scaling.endian == 'big' else '<'
-
-        # Map storage types to struct format characters
-        type_map = {
-            'uint8': 'B',
-            'int8': 'b',
-            'uint16': 'H',
-            'int16': 'h',
-            'uint32': 'I',
-            'int32': 'i',
-            'float': 'f',
-            'double': 'd',
-        }
-
-        format_char = type_map.get(scaling.storagetype.lower(), 'f')
-        format_string = f"{endian_char}{count}{format_char}"
-
-        # Unpack binary data
-        try:
-            values = struct.unpack(format_string, data_bytes)
-            logger.debug(f"Read {count} values from address {hex(address)}")
-            return np.array(values)
-        except struct.error as e:
-            logger.error(f"Error unpacking data at address {hex(address)}: {e}")
-            raise RomReadError(f"Failed to unpack data at address {hex(address)}: {e}")
-
-    def read_table_data(self, table: Table) -> Optional[dict]:
-        """
-        Read table data from ROM and apply scaling
-
-        Args:
-            table: Table definition
-
-        Returns:
-            Dictionary with:
-                - 'values': Main table values (scaled)
-                - 'x_axis': X axis values if 3D (scaled)
-                - 'y_axis': Y axis values if 2D/3D (scaled)
-                - 'raw_values': Raw unscaled main values
-
-        Raises:
-            ScalingNotFoundError: If scaling definition is not found
-            RomReadError: If reading table data fails
-        """
-        logger.debug(f"Reading table data: {table.name}")
-
-        # Get scaling for main table
-        scaling = self.definition.get_scaling(table.scaling)
-        if not scaling:
-            logger.error(f"Scaling '{table.scaling}' not found for table '{table.name}'")
-            raise ScalingNotFoundError(
-                f"Scaling '{table.scaling}' not found for table '{table.name}'"
-            )
-
-        # Read main table values
-        raw_values = self._read_raw_values(
-            address=table.address_int,
-            count=table.elements,
-            scaling=scaling
+        # Status bar at bottom
+        self.status_label = QLabel("Ready")
+        self.status_label.setStyleSheet(
+            "padding: 4px; background-color: #2d2d2d; color: #888;"
         )
+        layout.addWidget(self.status_label)
 
-        # Convert to display values
-        converter = ScalingConverter(scaling)
-        display_values = converter.to_display(raw_values)
+    def setup_logging(self):
+        """
+        Setup custom logging handler to display logs in console
 
-        result = {
-            'values': display_values,
-            'raw_values': raw_values,
+        Note: This modifies the root logger. Call unregister_logging() to clean up.
+        """
+        if self.log_handler is not None:
+            # Already registered
+            return
+
+        self.log_handler = QtLogHandler()
+        self.log_handler.setFormatter(
+            logging.Formatter('%(asctime)s - %(levelname)s - %(message)s',
+                            datefmt='%H:%M:%S')
+        )
+        self.log_handler.log_message.connect(self.append_log)
+
+        # Add handler to root logger
+        logging.getLogger().addHandler(self.log_handler)
+
+    def unregister_logging(self):
+        """Remove log handler from root logger"""
+        if self.log_handler is not None:
+            logging.getLogger().removeHandler(self.log_handler)
+            self.log_handler = None
+
+    def append_log(self, message: str, level: int):
+        """
+        Append log message to console with appropriate color
+
+        Args:
+            message: Log message text
+            level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        """
+        # Color coding based on log level
+        colors = {
+            logging.DEBUG: "#808080",      # Gray
+            logging.INFO: "#4ec9b0",       # Cyan
+            logging.WARNING: "#dcdcaa",    # Yellow
+            logging.ERROR: "#f48771",      # Red
+            logging.CRITICAL: "#ff0000"    # Bright Red
         }
 
-        # Read axes for 2D/3D tables
-        if table.type in [TableType.TWO_D, TableType.THREE_D]:
-            # Read Y axis (exists for both 2D and 3D)
-            y_axis = table.y_axis
-            if y_axis:
-                y_scaling = self.definition.get_scaling(y_axis.scaling)
-                if y_scaling:
-                    y_raw = self._read_raw_values(
-                        address=y_axis.address_int,
-                        count=y_axis.elements,
-                        scaling=y_scaling
-                    )
-                    y_converter = ScalingConverter(y_scaling)
-                    result['y_axis'] = y_converter.to_display(y_raw)
+        color = colors.get(level, "#d4d4d4")  # Default white
 
-        if table.type == TableType.THREE_D:
-            # Read X axis (only for 3D)
-            x_axis = table.x_axis
-            if x_axis:
-                x_scaling = self.definition.get_scaling(x_axis.scaling)
-                if x_scaling:
-                    x_raw = self._read_raw_values(
-                        address=x_axis.address_int,
-                        count=x_axis.elements,
-                        scaling=x_scaling
-                    )
-                    x_converter = ScalingConverter(x_scaling)
-                    result['x_axis'] = x_converter.to_display(x_raw)
+        # Format with HTML for colors
+        html_message = f'<span style="color: {color};">{message}</span>'
 
-            # Reshape 3D table data into 2D grid
-            if 'x_axis' in result and 'y_axis' in result:
-                x_len = len(result['x_axis'])
-                y_len = len(result['y_axis'])
-                if len(display_values) == x_len * y_len:
-                    # Reshape to (y_len, x_len) - rows are Y, columns are X
-                    result['values'] = display_values.reshape((y_len, x_len))
+        # Append to console
+        self.console.append(html_message)
 
-        logger.info(f"Successfully read table: {table.name} ({table.type.value})")
-        return result
+        # Auto-scroll to bottom
+        cursor = self.console.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        self.console.setTextCursor(cursor)
 
-    def write_table_data(self, table: Table, values: np.ndarray) -> None:
+        # Limit number of lines
+        self._limit_lines()
+
+    def _limit_lines(self):
+        """Limit console to max_lines by removing old lines"""
+        document = self.console.document()
+        if document.blockCount() > self.max_lines:
+            cursor = QTextCursor(document.findBlockByLineNumber(0))
+            cursor.select(QTextCursor.BlockUnderCursor)
+            cursor.removeSelectedText()
+            cursor.deleteChar()  # Remove the newline
+
+    def log_info(self, message: str):
+        """Log an info message"""
+        logging.info(message)
+
+    def log_warning(self, message: str):
+        """Log a warning message"""
+        logging.warning(message)
+
+    def log_error(self, message: str):
+        """Log an error message"""
+        logging.error(message)
+
+    def log_success(self, message: str):
+        """Log a success message (info level with custom formatting)"""
+        logging.info(f"✓ {message}")
+
+    def clear(self):
+        """Clear the console"""
+        self.console.clear()
+        self.log_info("Console cleared")
+
+    def update_status(self, message: str):
+        """Update the status bar at the bottom"""
+        self.status_label.setText(message)
+
+    def closeEvent(self, event):
+        """Remove log handler when widget is closed"""
+        self.unregister_logging()
+        event.accept()
+</file>
+
+<file path="src/ui/rom_document.py">
+"""
+ROM Document Widget
+
+Represents a single ROM file with its own table browser and state.
+Each ROM is displayed in its own tab.
+"""
+
+from pathlib import Path
+from PySide6.QtWidgets import (
+    QWidget,
+    QSplitter,
+    QHBoxLayout
+)
+from PySide6.QtCore import Qt, Signal
+
+from .table_browser import TableBrowser
+from ..core.rom_definition import RomDefinition, Table
+from ..core.rom_reader import RomReader
+
+
+class RomDocument(QWidget):
+    """Widget representing a single open ROM document"""
+
+    # Signal emitted when a table is selected
+    table_selected = Signal(Table, object)  # table, rom_reader
+
+    def __init__(self, rom_path: str, rom_definition: RomDefinition, rom_reader: RomReader, parent=None):
+        super().__init__(parent)
+        self.rom_path = rom_path
+        self.rom_definition = rom_definition
+        self.rom_reader = rom_reader
+        self.file_name = Path(rom_path).name
+        self.init_ui()
+
+    def init_ui(self):
+        """Initialize the user interface"""
+        layout = QHBoxLayout()
+        self.setLayout(layout)
+
+        # Table browser takes full width (log console is now shared at bottom of main window)
+        self.table_browser = TableBrowser()
+        self.table_browser.load_definition(self.rom_definition)
+        self.table_browser.table_selected.connect(self.on_table_selected)
+        layout.addWidget(self.table_browser)
+
+    def on_table_selected(self, table: Table):
+        """Handle table selection from browser"""
+        # Emit signal with both table and this document's rom_reader
+        self.table_selected.emit(table, self.rom_reader)
+
+    def get_tab_title(self) -> str:
         """
-        Write modified table data back to ROM (in memory, not to file yet)
+        Get the title for this document's tab
+
+        Returns:
+            str: Tab title (filename + ROM ID)
+        """
+        return f"{self.file_name} ({self.rom_definition.romid.xmlid})"
+
+    def get_short_title(self) -> str:
+        """
+        Get short title for tab (just filename)
+
+        Returns:
+            str: Short filename
+        """
+        return self.file_name
+
+    def is_modified(self) -> bool:
+        """
+        Check if this ROM has been modified
+
+        Returns:
+            bool: True if modified (TODO: implement tracking)
+        """
+        # TODO: Implement modification tracking
+        return False
+
+    def save(self, file_path: str = None):
+        """
+        Save this ROM
+
+        Args:
+            file_path: Optional new path for save-as
+        """
+        save_path = file_path if file_path else self.rom_path
+        self.rom_reader.save_rom(save_path)
+
+        # Update path if it changed
+        if file_path:
+            self.rom_path = file_path
+            self.file_name = Path(file_path).name
+</file>
+
+<file path="src/ui/table_viewer_window.py">
+"""
+Table Viewer Window
+
+Displays table data in a separate, independent window.
+Allows opening multiple tables simultaneously for comparison.
+"""
+
+from PySide6.QtWidgets import QMainWindow, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt
+
+from ..utils.constants import TABLE_VIEWER_DEFAULT_WIDTH, TABLE_VIEWER_DEFAULT_HEIGHT, APP_NAME
+from .table_viewer import TableViewer
+from ..core.rom_definition import Table, RomDefinition
+
+
+class TableViewerWindow(QMainWindow):
+    """
+    Standalone window for viewing a single table
+
+    Features:
+    - Independent window that can be moved/resized
+    - Shows table name in window title
+    - Contains TableViewer widget for displaying data
+    - Can have multiple windows open simultaneously
+    """
+
+    def __init__(self, table: Table, data: dict, rom_definition: RomDefinition, parent=None):
+        """
+        Initialize table viewer window
 
         Args:
             table: Table definition
-            values: New values to write (in display units)
-
-        Raises:
-            ScalingNotFoundError: If scaling definition is not found
-            RomWriteError: If writing table data fails
+            data: Table data dictionary from RomReader
+            rom_definition: ROM definition containing scalings
+            parent: Parent widget (optional)
         """
-        logger.debug(f"Writing table data: {table.name}")
+        super().__init__(parent)
 
-        scaling = self.definition.get_scaling(table.scaling)
-        if not scaling:
-            logger.error(f"Scaling '{table.scaling}' not found for table '{table.name}'")
-            raise ScalingNotFoundError(
-                f"Scaling '{table.scaling}' not found for table '{table.name}'"
-            )
+        self.table = table
+        self.data = data
+        self.rom_definition = rom_definition
 
-        # Convert display values back to raw
-        converter = ScalingConverter(scaling)
+        # Set window properties
+        self.setWindowTitle(f"{table.name} - {APP_NAME}")
+        self.resize(TABLE_VIEWER_DEFAULT_WIDTH, TABLE_VIEWER_DEFAULT_HEIGHT)
 
-        # Flatten if 2D array
-        if isinstance(values, np.ndarray) and values.ndim > 1:
-            values = values.flatten()
+        # Create central widget
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
 
-        raw_values = converter.from_display(values)
+        layout = QVBoxLayout()
+        central_widget.setLayout(layout)
 
-        # Pack back to binary
-        address = table.address_int
-        bytes_per_elem = scaling.bytes_per_element
-        endian_char = '>' if scaling.endian == 'big' else '<'
+        # Create table viewer widget
+        self.viewer = TableViewer(rom_definition)
+        layout.addWidget(self.viewer)
 
-        type_map = {
-            'uint8': 'B', 'int8': 'b',
-            'uint16': 'H', 'int16': 'h',
-            'uint32': 'I', 'int32': 'i',
-            'float': 'f', 'double': 'd',
-        }
-        format_char = type_map.get(scaling.storagetype.lower(), 'f')
-        format_string = f"{endian_char}{len(raw_values)}{format_char}"
+        # Display the table data
+        self.viewer.display_table(table, data)
 
-        try:
-            packed_data = struct.pack(format_string, *raw_values)
+    def closeEvent(self, event):
+        """Handle window close event"""
+        # Clean up if needed
+        event.accept()
+</file>
 
-            # Validate bounds before writing
-            if address < 0:
-                raise RomWriteError(f"Invalid address: {hex(address)} (negative)")
-            if address >= len(self.rom_data):
-                raise RomWriteError(
-                    f"Address out of bounds: {hex(address)} "
-                    f"(ROM size: {len(self.rom_data)} bytes)"
-                )
-            if address + len(packed_data) > len(self.rom_data):
-                raise RomWriteError(
-                    f"Write operation exceeds ROM bounds: "
-                    f"trying to write {len(packed_data)} bytes at {hex(address)} "
-                    f"(ROM size: {len(self.rom_data)} bytes)"
-                )
+<file path="src/utils/logging_config.py">
+"""
+Logging configuration for NC ROM Editor
 
-            # Modify ROM data in memory
-            self.rom_data = (
-                self.rom_data[:address] +
-                packed_data +
-                self.rom_data[address + len(packed_data):]
-            )
-            logger.info(f"Successfully wrote table data: {table.name}")
-        except RomWriteError:
-            # Re-raise our own exceptions
-            raise
-        except Exception as e:
-            logger.error(f"Error writing table data for '{table.name}': {e}")
-            raise RomWriteError(f"Failed to write table data: {e}")
+Provides centralized logging setup with file and console handlers.
+"""
 
-    def save_rom(self, output_path: Optional[str] = None):
+import logging
+import logging.handlers
+from pathlib import Path
+from typing import Optional
+
+from .constants import LOG_FILE_MAX_BYTES, LOG_FILE_BACKUP_COUNT
+
+
+# Default log format
+DEFAULT_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+DETAILED_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
+
+
+def setup_logging(
+    level: int = logging.INFO,
+    log_file: Optional[str] = None,
+    console: bool = True,
+    detailed: bool = False
+) -> None:
+    """
+    Configure logging for the application
+
+    Args:
+        level: Logging level (e.g., logging.INFO, logging.DEBUG)
+        log_file: Path to log file (creates rotating file handler if provided)
+        console: Whether to enable console logging
+        detailed: Whether to use detailed log format with file/line info
+    """
+    # Get root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+
+    # Clear any existing handlers
+    root_logger.handlers.clear()
+
+    # Choose format
+    log_format = DETAILED_FORMAT if detailed else DEFAULT_FORMAT
+    formatter = logging.Formatter(log_format)
+
+    # Console handler
+    if console:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(level)
+        console_handler.setFormatter(formatter)
+        root_logger.addHandler(console_handler)
+
+    # File handler (rotating)
+    if log_file:
+        log_path = Path(log_file)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        file_handler = logging.handlers.RotatingFileHandler(
+            log_file,
+            maxBytes=LOG_FILE_MAX_BYTES,
+            backupCount=LOG_FILE_BACKUP_COUNT,
+            encoding='utf-8'
+        )
+        file_handler.setLevel(level)
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
+
+
+def get_logger(name: str) -> logging.Logger:
+    """
+    Get a logger instance for a module
+
+    Args:
+        name: Logger name (typically __name__)
+
+    Returns:
+        Logger instance
+    """
+    return logging.getLogger(name)
+
+
+def set_log_level(level: int) -> None:
+    """
+    Set the logging level for all handlers
+
+    Args:
+        level: Logging level (e.g., logging.DEBUG, logging.INFO)
+    """
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+    for handler in root_logger.handlers:
+        handler.setLevel(level)
+
+
+# Default configuration on import
+setup_logging(level=logging.INFO, console=True, detailed=False)
+</file>
+
+<file path="src/utils/settings.py">
+"""
+Application Settings Management
+
+Handles loading, saving, and accessing application settings using QSettings.
+"""
+
+from pathlib import Path
+from PySide6.QtCore import QSettings
+
+from .constants import MAX_RECENT_FILES
+
+
+class AppSettings:
+    """Application settings manager using QSettings for persistence"""
+
+    def __init__(self):
+        """Initialize settings manager"""
+        self.settings = QSettings("NCRomEditor", "NCRomEditor")
+
+    def get_metadata_directory(self) -> str:
         """
-        Save modified ROM to file
+        Get the configured metadata directory path
+
+        Returns:
+            str: Path to metadata directory (defaults to ./metadata relative to app)
+        """
+        # Default to 'metadata' directory in the application root
+        default_path = str(Path.cwd() / "metadata")
+        return self.settings.value("paths/metadata_directory", default_path)
+
+    def set_metadata_directory(self, path: str):
+        """
+        Set the metadata directory path
 
         Args:
-            output_path: Output file path, defaults to overwriting original
-
-        Raises:
-            RomWriteError: If writing ROM file fails
+            path: Path to metadata directory
         """
-        if output_path is None:
-            output_path = self.rom_path
+        self.settings.setValue("paths/metadata_directory", path)
+        self.settings.sync()
 
-        logger.info(f"Saving ROM to {output_path}")
+    def get_window_geometry(self):
+        """Get saved window geometry"""
+        return self.settings.value("window/geometry")
 
-        try:
-            with open(output_path, 'wb') as f:
-                f.write(self.rom_data)
-            logger.info(f"Successfully saved {len(self.rom_data)} bytes to {output_path}")
-        except IOError as e:
-            logger.error(f"Failed to save ROM file to {output_path}: {e}")
-            raise RomWriteError(f"Failed to save ROM file: {e}")
+    def set_window_geometry(self, geometry):
+        """Save window geometry"""
+        self.settings.setValue("window/geometry", geometry)
+        self.settings.sync()
+
+    def get_splitter_state(self):
+        """Get saved splitter state"""
+        return self.settings.value("window/splitter_state")
+
+    def set_splitter_state(self, state):
+        """Save splitter state"""
+        self.settings.setValue("window/splitter_state", state)
+        self.settings.sync()
+
+    def get_recent_files(self) -> list:
+        """
+        Get list of recently opened ROM files
+
+        Returns:
+            list: List of file paths
+        """
+        files = self.settings.value("recent_files", [])
+        if files is None:
+            return []
+        # Ensure it's always a list
+        if isinstance(files, str):
+            return [files] if files else []
+        return files
+
+    def add_recent_file(self, file_path: str, max_recent: int = MAX_RECENT_FILES):
+        """
+        Add a file to the recent files list
+
+        Args:
+            file_path: Path to ROM file
+            max_recent: Maximum number of recent files to keep
+        """
+        recent = self.get_recent_files()
+
+        # Remove if already in list
+        if file_path in recent:
+            recent.remove(file_path)
+
+        # Add to front of list
+        recent.insert(0, file_path)
+
+        # Limit to max_recent
+        recent = recent[:max_recent]
+
+        self.settings.setValue("recent_files", recent)
+        self.settings.sync()
+
+    def clear_recent_files(self):
+        """Clear the recent files list"""
+        self.settings.setValue("recent_files", [])
+        self.settings.sync()
+
+    def get_session_files(self) -> list:
+        """
+        Get list of files from last session
+
+        Returns:
+            list: List of file paths that were open when app last closed
+        """
+        files = self.settings.value("session/open_files", [])
+        if files is None:
+            return []
+        if isinstance(files, str):
+            return [files] if files else []
+        return files
+
+    def set_session_files(self, file_paths: list):
+        """
+        Save list of currently open files for session restore
+
+        Args:
+            file_paths: List of ROM file paths currently open
+        """
+        self.settings.setValue("session/open_files", file_paths)
+        self.settings.sync()
+
+    def get_gradient_mode(self) -> str:
+        """
+        Get gradient coloring mode for table cells
+
+        Returns:
+            str: 'minmax' (default) or 'neighbors'
+        """
+        return self.settings.value("display/gradient_mode", "minmax")
+
+    def set_gradient_mode(self, mode: str):
+        """
+        Set gradient coloring mode for table cells
+
+        Args:
+            mode: 'minmax' or 'neighbors'
+        """
+        self.settings.setValue("display/gradient_mode", mode)
+        self.settings.sync()
+
+    def get_table_font_size(self) -> int:
+        """
+        Get font size for table cells
+
+        Returns:
+            int: Font size in pixels (default 10)
+        """
+        return int(self.settings.value("display/table_font_size", 10))
+
+    def set_table_font_size(self, size: int):
+        """
+        Set font size for table cells
+
+        Args:
+            size: Font size in pixels
+        """
+        self.settings.setValue("display/table_font_size", size)
+        self.settings.sync()
+
+
+# Global settings instance
+_settings = None
+
+
+def get_settings() -> AppSettings:
+    """
+    Get the global settings instance
+
+    Returns:
+        AppSettings: Global settings instance
+    """
+    global _settings
+    if _settings is None:
+        _settings = AppSettings()
+    return _settings
 </file>
 
 <file path="tests/test_definition_parser.py">
@@ -8780,70 +8640,6 @@ coverage.xml
 .tox/
 </file>
 
-<file path="AGENTS.md">
-# Agent Instructions
-
-This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
-
-## Session Start Checklist
-
-**EVERY NEW SESSION, you MUST:**
-
-1. **Refresh Repomix** - Get latest codebase snapshot:
-   ```bash
-   repomix mix
-   ```
-   This creates/updates `repomix-output.xml` with the entire codebase in AI-friendly format
-
-2. **Check available work:**
-   ```bash
-   bd ready
-   ```
-
-## Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --status in_progress  # Claim work
-bd close <id>         # Complete work
-bd sync               # Sync with git
-repomix mix           # Refresh codebase snapshot for AI consumption
-```
-
-## Landing the Plane (Session Completion)
-
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **Refresh Repomix** - Update codebase snapshot for next session:
-   ```bash
-   repomix mix
-   git add repomix-output.xml
-   git commit -m "Update repomix snapshot"
-   ```
-5. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd sync
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-6. **Clean up** - Clear stashes, prune remote branches
-7. **Verify** - All changes committed AND pushed, repomix refreshed
-8. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
-</file>
-
 <file path="requirements.txt">
 # GUI Framework
 PySide6~=6.6.0
@@ -9136,338 +8932,411 @@ def load_definition(xml_path: str) -> RomDefinition:
     return parser.parse()
 </file>
 
-<file path="src/ui/table_browser.py">
+<file path="src/core/rom_reader.py">
 """
-Table Browser Widget
+ROM Binary File Reader
 
-Shows a tree view of all available tables organized by category.
+Reads binary ROM files using ROM definition metadata.
+Extracts and scales table data based on definitions.
 """
 
-from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QTreeWidget,
-    QTreeWidgetItem,
-    QLabel,
-    QLineEdit,
-    QPushButton,
-    QStyledItemDelegate
+import struct
+import numpy as np
+from pathlib import Path
+from typing import Optional, Union
+import logging
+from simpleeval import simple_eval
+
+from .rom_definition import RomDefinition, Table, Scaling, TableType
+from .exceptions import (
+    RomFileNotFoundError,
+    RomReadError,
+    RomWriteError,
+    ScalingConversionError,
+    ScalingNotFoundError,
+    InvalidRomFileError
 )
-from PySide6.QtCore import Signal, Qt
-from PySide6.QtGui import QShortcut, QKeySequence
 
-from ..utils.constants import TABLE_BROWSER_COLUMN_WIDTH
-from ..core.rom_definition import RomDefinition, Table
+logger = logging.getLogger(__name__)
 
 
-class HtmlDelegate(QStyledItemDelegate):
-    """Custom delegate to render HTML in tree widget items"""
+class ScalingConverter:
+    """
+    Converts values between raw binary and display using scaling expressions
+    """
 
-    def paint(self, painter, option, index):
-        """Paint the item with HTML support"""
-        from PySide6.QtGui import QTextDocument
-        from PySide6.QtCore import QRectF
-
-        options = option
-        self.initStyleOption(options, index)
-
-        # Check if text contains HTML tags
-        if '<span' not in options.text:
-            # No HTML, use default painting
-            super().paint(painter, option, index)
-            return
-
-        painter.save()
-
-        # Create a text document for HTML rendering
-        doc = QTextDocument()
-        doc.setHtml(options.text)
-        doc.setDefaultFont(options.font)
-
-        # Clear the text so the default drawing doesn't happen
-        options.text = ""
-
-        # Draw the item background
-        if options.widget:
-            style = options.widget.style()
-        else:
-            from PySide6.QtWidgets import QApplication
-            style = QApplication.style()
-
-        style.drawControl(style.CE_ItemViewItem, options, painter)
-
-        # Calculate text rect
-        text_rect = style.subElementRect(style.SE_ItemViewItemText, options)
-
-        # Draw the HTML text
-        painter.translate(text_rect.topLeft())
-        clip = QRectF(0, 0, text_rect.width(), text_rect.height())
-        doc.drawContents(painter, clip)
-
-        painter.restore()
-
-    def sizeHint(self, option, index):
-        """Return size hint for the item"""
-        # Use default size hint
-        return super().sizeHint(option, index)
-
-
-class TableBrowser(QWidget):
-    """Widget for browsing tables by category"""
-
-    # Signal emitted when a table is selected
-    table_selected = Signal(Table)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.definition = None
-        self.init_ui()
-
-    def init_ui(self):
-        """Initialize the user interface"""
-        layout = QVBoxLayout()
-        self.setLayout(layout)
-
-        # Label
-        label = QLabel("Tables")
-        layout.addWidget(label)
-
-        # Search box
-        search_layout = QHBoxLayout()
-        self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("Search tables... (Ctrl+F)")
-        self.search_box.textChanged.connect(self._filter_tables)
-        self.search_box.setClearButtonEnabled(True)
-        search_layout.addWidget(self.search_box)
-
-        clear_button = QPushButton("Clear")
-        clear_button.clicked.connect(self.search_box.clear)
-        search_layout.addWidget(clear_button)
-
-        layout.addLayout(search_layout)
-
-        # Tree widget for categories and tables
-        self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Name", "Type", "Address"])
-        self.tree.setColumnWidth(0, TABLE_BROWSER_COLUMN_WIDTH)
-        self.tree.itemClicked.connect(self._on_item_clicked)
-
-        # Set custom delegate for HTML rendering
-        self.html_delegate = HtmlDelegate(self.tree)
-        self.tree.setItemDelegate(self.html_delegate)
-
-        layout.addWidget(self.tree)
-
-        # Keyboard shortcut for search (Ctrl+F)
-        self.search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
-        self.search_shortcut.activated.connect(self._focus_search)
-
-    def load_definition(self, definition: RomDefinition):
+    def __init__(self, scaling: Scaling):
         """
-        Load ROM definition and populate tree
+        Initialize converter with a scaling definition
 
         Args:
-            definition: ROM definition with tables
+            scaling: Scaling definition with conversion expressions
         """
-        self.definition = definition
-        self.tree.clear()
+        self.scaling = scaling
 
-        # Get tables grouped by category
-        categories = definition.get_tables_by_category()
-
-        # Sort categories alphabetically
-        for category in sorted(categories.keys()):
-            tables = categories[category]
-
-            # Create category item
-            category_item = QTreeWidgetItem([category, "", ""])
-            category_item.setData(0, 100, None)  # Store None for category items
-            self.tree.addTopLevelItem(category_item)
-
-            # Sort tables by name within category
-            for table in sorted(tables, key=lambda t: t.name):
-                # Create table item
-                table_item = QTreeWidgetItem([
-                    table.name,
-                    table.type.value,
-                    f"0x{table.address}"
-                ])
-                # Store table object
-                table_item.setData(0, 100, table)
-                category_item.addChild(table_item)
-
-            # Collapse categories initially
-            category_item.setExpanded(False)
-
-    def _on_item_clicked(self, item, column):
-        """Handle item click in tree"""
-        # Get table object stored in item
-        table = item.data(0, 100)
-        if table is not None:  # Not a category
-            self.table_selected.emit(table)
-
-    def _focus_search(self):
-        """Focus the search box and select all text"""
-        self.search_box.setFocus()
-        self.search_box.selectAll()
-
-    def _highlight_text(self, text: str, search_text: str) -> str:
+    def to_display(self, raw_value: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
         """
-        Highlight matching portions of text with HTML
+        Convert raw binary value(s) to display value(s)
 
         Args:
-            text: Original text
-            search_text: Text to highlight
+            raw_value: Raw value or array of values
 
         Returns:
-            str: Text with HTML highlighting
+            Converted value or array
+
+        Raises:
+            ScalingConversionError: If conversion fails
         """
-        if not search_text:
-            return text
+        try:
+            # Use simpleeval for safe expression evaluation
+            if isinstance(raw_value, np.ndarray):
+                return np.array([simple_eval(self.scaling.toexpr, names={'x': v}) for v in raw_value])
+            else:
+                return simple_eval(self.scaling.toexpr, names={'x': raw_value})
+        except Exception as e:
+            logger.error(f"Error converting to display with expr '{self.scaling.toexpr}': {e}")
+            raise ScalingConversionError(
+                f"Failed to convert raw value to display using expression '{self.scaling.toexpr}': {e}"
+            )
 
-        # Case-insensitive search for position
-        lower_text = text.lower()
-        lower_search = search_text.lower()
-
-        result = text
-        pos = 0
-        highlighted = []
-
-        while True:
-            index = lower_text.find(lower_search, pos)
-            if index == -1:
-                # Add remaining text
-                highlighted.append(result[pos:])
-                break
-
-            # Add text before match
-            highlighted.append(result[pos:index])
-
-            # Add highlighted match (subtle background color)
-            match_text = result[index:index + len(search_text)]
-            highlighted.append(f'<span style="background-color: #E3F2FD; color: #1976D2; font-weight: 500;">{match_text}</span>')
-
-            pos = index + len(search_text)
-
-        return ''.join(highlighted)
-
-    def _filter_tables(self, search_text: str):
+    def from_display(self, display_value: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
         """
-        Filter the table tree based on search text and highlight matches
+        Convert display value(s) back to raw binary value(s)
 
         Args:
-            search_text: Text to search for in table names and categories
+            display_value: Display value or array of values
+
+        Returns:
+            Raw value or array for writing to ROM
+
+        Raises:
+            ScalingConversionError: If conversion fails
         """
-        search_text = search_text.lower().strip()
-
-        # If search is empty, show all items and clear highlighting
-        if not search_text:
-            self._show_all_items()
-            return
-
-        # Iterate through all category items
-        for i in range(self.tree.topLevelItemCount()):
-            category_item = self.tree.topLevelItem(i)
-            # Get original text (stored in data)
-            original_category = category_item.data(0, Qt.UserRole)
-            if original_category is None:
-                original_category = category_item.text(0)
-                category_item.setData(0, Qt.UserRole, original_category)
-
-            category_name_lower = original_category.lower()
-            category_has_match = False
-
-            # Check if category name matches
-            category_matches = search_text in category_name_lower
-
-            # Set category text with or without highlighting
-            if category_matches:
-                category_item.setText(0, self._highlight_text(original_category, search_text))
+        try:
+            if isinstance(display_value, np.ndarray):
+                return np.array([simple_eval(self.scaling.frexpr, names={'x': v}) for v in display_value])
             else:
-                category_item.setText(0, original_category)
+                return simple_eval(self.scaling.frexpr, names={'x': display_value})
+        except Exception as e:
+            logger.error(f"Error converting from display with expr '{self.scaling.frexpr}': {e}")
+            raise ScalingConversionError(
+                f"Failed to convert display value to raw using expression '{self.scaling.frexpr}': {e}"
+            )
 
-            # Check all table children
-            for j in range(category_item.childCount()):
-                table_item = category_item.child(j)
 
-                # Get original texts (stored in data)
-                original_name = table_item.data(0, Qt.UserRole)
-                original_type = table_item.data(1, Qt.UserRole)
-                original_address = table_item.data(2, Qt.UserRole)
+class RomReader:
+    """
+    Reads data from ROM binary files based on ROM definitions
+    """
 
-                if original_name is None:
-                    original_name = table_item.text(0)
-                    original_type = table_item.text(1)
-                    original_address = table_item.text(2)
-                    table_item.setData(0, Qt.UserRole, original_name)
-                    table_item.setData(1, Qt.UserRole, original_type)
-                    table_item.setData(2, Qt.UserRole, original_address)
+    def __init__(self, rom_path: str, definition: RomDefinition):
+        """
+        Initialize ROM reader
 
-                # Match against table name, type, or address
-                name_matches = search_text in original_name.lower()
-                type_matches = search_text in original_type.lower()
-                address_matches = search_text in original_address.lower()
-                matches = name_matches or type_matches or address_matches
+        Args:
+            rom_path: Path to ROM binary file
+            definition: ROM definition with table/scaling metadata
 
-                # Set text with highlighting for matching columns
-                if name_matches:
-                    table_item.setText(0, self._highlight_text(original_name, search_text))
-                else:
-                    table_item.setText(0, original_name)
+        Raises:
+            RomFileNotFoundError: If ROM file doesn't exist
+        """
+        self.rom_path = Path(rom_path)
+        if not self.rom_path.exists():
+            logger.error(f"ROM file not found: {rom_path}")
+            raise RomFileNotFoundError(f"ROM file not found: {rom_path}")
 
-                if type_matches:
-                    table_item.setText(1, self._highlight_text(original_type, search_text))
-                else:
-                    table_item.setText(1, original_type)
+        self.definition = definition
+        self.rom_data = None
 
-                if address_matches:
-                    table_item.setText(2, self._highlight_text(original_address, search_text))
-                else:
-                    table_item.setText(2, original_address)
+        logger.info(f"Initializing ROM reader for {rom_path}")
+        # Load entire ROM into memory (they're < 1MB)
+        self._load_rom()
 
-                # Show/hide table item
-                table_item.setHidden(not matches and not category_matches)
+    def _load_rom(self):
+        """
+        Load ROM binary file into memory
 
-                if matches:
-                    category_has_match = True
+        Raises:
+            RomReadError: If ROM file cannot be read
+        """
+        try:
+            with open(self.rom_path, 'rb') as f:
+                self.rom_data = f.read()
+            logger.info(f"Loaded {len(self.rom_data)} bytes from ROM file")
+        except IOError as e:
+            logger.error(f"Failed to read ROM file {self.rom_path}: {e}")
+            raise RomReadError(f"Failed to read ROM file: {e}")
 
-            # Show category if it matches or has matching children
-            category_item.setHidden(not (category_matches or category_has_match))
+    def verify_rom_id(self) -> bool:
+        """
+        Verify that the ROM matches the expected ID
 
-            # Expand categories that have matches
-            if category_has_match or category_matches:
-                category_item.setExpanded(True)
+        Returns:
+            True if ROM ID matches, False otherwise
+        """
+        try:
+            address = self.definition.romid.internal_id_address_int
+            expected_id = self.definition.romid.internalidstring
+            id_length = len(expected_id)
 
-    def _show_all_items(self):
-        """Show all items in the tree, collapse categories, and clear highlighting"""
-        for i in range(self.tree.topLevelItemCount()):
-            category_item = self.tree.topLevelItem(i)
-            category_item.setHidden(False)
+            actual_id = self.rom_data[address:address + id_length].decode('ascii', errors='ignore')
+            match = actual_id == expected_id
 
-            # Restore original text without highlighting
-            original_category = category_item.data(0, Qt.UserRole)
-            if original_category:
-                category_item.setText(0, original_category)
+            if match:
+                logger.info(f"ROM ID verified: {actual_id}")
+            else:
+                logger.warning(f"ROM ID mismatch - Expected: {expected_id}, Found: {actual_id}")
 
-            for j in range(category_item.childCount()):
-                table_item = category_item.child(j)
-                table_item.setHidden(False)
+            return match
+        except Exception as e:
+            logger.error(f"Error verifying ROM ID: {e}")
+            return False
 
-                # Restore original texts without highlighting
-                original_name = table_item.data(0, Qt.UserRole)
-                original_type = table_item.data(1, Qt.UserRole)
-                original_address = table_item.data(2, Qt.UserRole)
+    def _read_raw_values(self, address: int, count: int, scaling: Scaling) -> np.ndarray:
+        """
+        Read raw binary values from ROM
 
-                if original_name:
-                    table_item.setText(0, original_name)
-                if original_type:
-                    table_item.setText(1, original_type)
-                if original_address:
-                    table_item.setText(2, original_address)
+        Args:
+            address: Starting address
+            count: Number of elements to read
+            scaling: Scaling definition with storage type info
 
-            # Collapse categories when search is cleared
-            category_item.setExpanded(False)
+        Returns:
+            NumPy array of raw values
+
+        Raises:
+            RomReadError: If address is out of bounds
+        """
+        bytes_per_elem = scaling.bytes_per_element
+        total_bytes = count * bytes_per_elem
+
+        # Validate bounds
+        if address < 0:
+            raise RomReadError(f"Invalid address: {hex(address)} (negative)")
+        if address >= len(self.rom_data):
+            raise RomReadError(
+                f"Address out of bounds: {hex(address)} "
+                f"(ROM size: {len(self.rom_data)} bytes)"
+            )
+        if address + total_bytes > len(self.rom_data):
+            raise RomReadError(
+                f"Read operation exceeds ROM bounds: "
+                f"trying to read {total_bytes} bytes from {hex(address)} "
+                f"(ROM size: {len(self.rom_data)} bytes)"
+            )
+
+        # Extract bytes
+        data_bytes = self.rom_data[address:address + total_bytes]
+
+        # Determine struct format
+        endian_char = '>' if scaling.endian == 'big' else '<'
+
+        # Map storage types to struct format characters
+        type_map = {
+            'uint8': 'B',
+            'int8': 'b',
+            'uint16': 'H',
+            'int16': 'h',
+            'uint32': 'I',
+            'int32': 'i',
+            'float': 'f',
+            'double': 'd',
+        }
+
+        format_char = type_map.get(scaling.storagetype.lower(), 'f')
+        format_string = f"{endian_char}{count}{format_char}"
+
+        # Unpack binary data
+        try:
+            values = struct.unpack(format_string, data_bytes)
+            logger.debug(f"Read {count} values from address {hex(address)}")
+            return np.array(values)
+        except struct.error as e:
+            logger.error(f"Error unpacking data at address {hex(address)}: {e}")
+            raise RomReadError(f"Failed to unpack data at address {hex(address)}: {e}")
+
+    def read_table_data(self, table: Table) -> Optional[dict]:
+        """
+        Read table data from ROM and apply scaling
+
+        Args:
+            table: Table definition
+
+        Returns:
+            Dictionary with:
+                - 'values': Main table values (scaled)
+                - 'x_axis': X axis values if 3D (scaled)
+                - 'y_axis': Y axis values if 2D/3D (scaled)
+                - 'raw_values': Raw unscaled main values
+
+        Raises:
+            ScalingNotFoundError: If scaling definition is not found
+            RomReadError: If reading table data fails
+        """
+        logger.debug(f"Reading table data: {table.name}")
+
+        # Get scaling for main table
+        scaling = self.definition.get_scaling(table.scaling)
+        if not scaling:
+            logger.error(f"Scaling '{table.scaling}' not found for table '{table.name}'")
+            raise ScalingNotFoundError(
+                f"Scaling '{table.scaling}' not found for table '{table.name}'"
+            )
+
+        # Read main table values
+        raw_values = self._read_raw_values(
+            address=table.address_int,
+            count=table.elements,
+            scaling=scaling
+        )
+
+        # Convert to display values
+        converter = ScalingConverter(scaling)
+        display_values = converter.to_display(raw_values)
+
+        result = {
+            'values': display_values,
+            'raw_values': raw_values,
+        }
+
+        # Read axes for 2D/3D tables
+        if table.type in [TableType.TWO_D, TableType.THREE_D]:
+            # Read Y axis (exists for both 2D and 3D)
+            y_axis = table.y_axis
+            if y_axis:
+                y_scaling = self.definition.get_scaling(y_axis.scaling)
+                if y_scaling:
+                    y_raw = self._read_raw_values(
+                        address=y_axis.address_int,
+                        count=y_axis.elements,
+                        scaling=y_scaling
+                    )
+                    y_converter = ScalingConverter(y_scaling)
+                    result['y_axis'] = y_converter.to_display(y_raw)
+
+        if table.type == TableType.THREE_D:
+            # Read X axis (only for 3D)
+            x_axis = table.x_axis
+            if x_axis:
+                x_scaling = self.definition.get_scaling(x_axis.scaling)
+                if x_scaling:
+                    x_raw = self._read_raw_values(
+                        address=x_axis.address_int,
+                        count=x_axis.elements,
+                        scaling=x_scaling
+                    )
+                    x_converter = ScalingConverter(x_scaling)
+                    result['x_axis'] = x_converter.to_display(x_raw)
+
+            # Reshape 3D table data into 2D grid
+            if 'x_axis' in result and 'y_axis' in result:
+                x_len = len(result['x_axis'])
+                y_len = len(result['y_axis'])
+                if len(display_values) == x_len * y_len:
+                    # Reshape to (y_len, x_len) - rows are Y, columns are X
+                    result['values'] = display_values.reshape((y_len, x_len))
+
+        logger.info(f"Successfully read table: {table.name} ({table.type.value})")
+        return result
+
+    def write_table_data(self, table: Table, values: np.ndarray) -> None:
+        """
+        Write modified table data back to ROM (in memory, not to file yet)
+
+        Args:
+            table: Table definition
+            values: New values to write (in display units)
+
+        Raises:
+            ScalingNotFoundError: If scaling definition is not found
+            RomWriteError: If writing table data fails
+        """
+        logger.debug(f"Writing table data: {table.name}")
+
+        scaling = self.definition.get_scaling(table.scaling)
+        if not scaling:
+            logger.error(f"Scaling '{table.scaling}' not found for table '{table.name}'")
+            raise ScalingNotFoundError(
+                f"Scaling '{table.scaling}' not found for table '{table.name}'"
+            )
+
+        # Convert display values back to raw
+        converter = ScalingConverter(scaling)
+
+        # Flatten if 2D array
+        if isinstance(values, np.ndarray) and values.ndim > 1:
+            values = values.flatten()
+
+        raw_values = converter.from_display(values)
+
+        # Pack back to binary
+        address = table.address_int
+        bytes_per_elem = scaling.bytes_per_element
+        endian_char = '>' if scaling.endian == 'big' else '<'
+
+        type_map = {
+            'uint8': 'B', 'int8': 'b',
+            'uint16': 'H', 'int16': 'h',
+            'uint32': 'I', 'int32': 'i',
+            'float': 'f', 'double': 'd',
+        }
+        format_char = type_map.get(scaling.storagetype.lower(), 'f')
+        format_string = f"{endian_char}{len(raw_values)}{format_char}"
+
+        try:
+            packed_data = struct.pack(format_string, *raw_values)
+
+            # Validate bounds before writing
+            if address < 0:
+                raise RomWriteError(f"Invalid address: {hex(address)} (negative)")
+            if address >= len(self.rom_data):
+                raise RomWriteError(
+                    f"Address out of bounds: {hex(address)} "
+                    f"(ROM size: {len(self.rom_data)} bytes)"
+                )
+            if address + len(packed_data) > len(self.rom_data):
+                raise RomWriteError(
+                    f"Write operation exceeds ROM bounds: "
+                    f"trying to write {len(packed_data)} bytes at {hex(address)} "
+                    f"(ROM size: {len(self.rom_data)} bytes)"
+                )
+
+            # Modify ROM data in memory
+            self.rom_data = (
+                self.rom_data[:address] +
+                packed_data +
+                self.rom_data[address + len(packed_data):]
+            )
+            logger.info(f"Successfully wrote table data: {table.name}")
+        except RomWriteError:
+            # Re-raise our own exceptions
+            raise
+        except Exception as e:
+            logger.error(f"Error writing table data for '{table.name}': {e}")
+            raise RomWriteError(f"Failed to write table data: {e}")
+
+    def save_rom(self, output_path: Optional[str] = None):
+        """
+        Save modified ROM to file
+
+        Args:
+            output_path: Output file path, defaults to overwriting original
+
+        Raises:
+            RomWriteError: If writing ROM file fails
+        """
+        if output_path is None:
+            output_path = self.rom_path
+
+        logger.info(f"Saving ROM to {output_path}")
+
+        try:
+            with open(output_path, 'wb') as f:
+                f.write(self.rom_data)
+            logger.info(f"Successfully saved {len(self.rom_data)} bytes to {output_path}")
+        except IOError as e:
+            logger.error(f"Failed to save ROM file to {output_path}: {e}")
+            raise RomWriteError(f"Failed to save ROM file: {e}")
 </file>
 
 <file path="README.md">
@@ -9646,6 +9515,189 @@ TBD
 Modifying your ECU can damage your vehicle or violate emissions regulations. Use this software at your own risk. Always keep backups of your stock ROM.
 </file>
 
+<file path="src/ui/table_browser.py">
+"""
+Table Browser Widget
+
+Shows a tree view of all available tables organized by category.
+"""
+
+from PySide6.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+)
+from PySide6.QtCore import Signal
+from PySide6.QtGui import QShortcut, QKeySequence
+
+from ..utils.constants import TABLE_BROWSER_COLUMN_WIDTH
+from ..core.rom_definition import RomDefinition, Table
+
+
+class TableBrowser(QWidget):
+    """Widget for browsing tables by category"""
+
+    # Signal emitted when a table is selected
+    table_selected = Signal(Table)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.definition = None
+        self.init_ui()
+
+    def init_ui(self):
+        """Initialize the user interface"""
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        # Label
+        label = QLabel("Tables")
+        layout.addWidget(label)
+
+        # Search box
+        search_layout = QHBoxLayout()
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("Search tables... (Ctrl+F)")
+        self.search_box.textChanged.connect(self._filter_tables)
+        self.search_box.setClearButtonEnabled(True)
+        search_layout.addWidget(self.search_box)
+
+        clear_button = QPushButton("Clear")
+        clear_button.clicked.connect(self.search_box.clear)
+        search_layout.addWidget(clear_button)
+
+        layout.addLayout(search_layout)
+
+        # Tree widget for categories and tables
+        self.tree = QTreeWidget()
+        self.tree.setHeaderLabels(["Name", "Type", "Address"])
+        self.tree.setColumnWidth(0, TABLE_BROWSER_COLUMN_WIDTH)
+        self.tree.itemClicked.connect(self._on_item_clicked)
+
+        layout.addWidget(self.tree)
+
+        # Keyboard shortcut for search (Ctrl+F)
+        self.search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
+        self.search_shortcut.activated.connect(self._focus_search)
+
+    def load_definition(self, definition: RomDefinition):
+        """
+        Load ROM definition and populate tree
+
+        Args:
+            definition: ROM definition with tables
+        """
+        self.definition = definition
+        self.tree.clear()
+
+        # Get tables grouped by category
+        categories = definition.get_tables_by_category()
+
+        # Sort categories alphabetically
+        for category in sorted(categories.keys()):
+            tables = categories[category]
+
+            # Create category item
+            category_item = QTreeWidgetItem([category, "", ""])
+            category_item.setData(0, 100, None)  # Store None for category items
+            self.tree.addTopLevelItem(category_item)
+
+            # Sort tables by name within category
+            for table in sorted(tables, key=lambda t: t.name):
+                # Create table item
+                table_item = QTreeWidgetItem([
+                    table.name,
+                    table.type.value,
+                    f"0x{table.address}"
+                ])
+                # Store table object
+                table_item.setData(0, 100, table)
+                category_item.addChild(table_item)
+
+            # Collapse categories initially
+            category_item.setExpanded(False)
+
+    def _on_item_clicked(self, item, column):
+        """Handle item click in tree"""
+        # Get table object stored in item
+        table = item.data(0, 100)
+        if table is not None:  # Not a category
+            self.table_selected.emit(table)
+
+    def _focus_search(self):
+        """Focus the search box and select all text"""
+        self.search_box.setFocus()
+        self.search_box.selectAll()
+
+    def _filter_tables(self, search_text: str):
+        """
+        Filter the table tree based on search text
+
+        Args:
+            search_text: Text to search for in table names and categories
+        """
+        search_text = search_text.lower().strip()
+
+        # If search is empty, show all items
+        if not search_text:
+            self._show_all_items()
+            return
+
+        # Iterate through all category items
+        for i in range(self.tree.topLevelItemCount()):
+            category_item = self.tree.topLevelItem(i)
+            category_name = category_item.text(0)
+            category_has_match = False
+
+            # Check if category name matches
+            category_matches = search_text in category_name.lower()
+
+            # Check all table children
+            for j in range(category_item.childCount()):
+                table_item = category_item.child(j)
+                name = table_item.text(0)
+                type_text = table_item.text(1)
+                address = table_item.text(2)
+
+                # Match against table name, type, or address
+                matches = (
+                    search_text in name.lower() or
+                    search_text in type_text.lower() or
+                    search_text in address.lower()
+                )
+
+                # Show/hide table item
+                table_item.setHidden(not matches and not category_matches)
+
+                if matches:
+                    category_has_match = True
+
+            # Show category if it matches or has matching children
+            category_item.setHidden(not (category_matches or category_has_match))
+
+            # Expand categories that have matches
+            if category_has_match or category_matches:
+                category_item.setExpanded(True)
+
+    def _show_all_items(self):
+        """Show all items in the tree and collapse categories"""
+        for i in range(self.tree.topLevelItemCount()):
+            category_item = self.tree.topLevelItem(i)
+            category_item.setHidden(False)
+
+            for j in range(category_item.childCount()):
+                table_item = category_item.child(j)
+                table_item.setHidden(False)
+
+            # Collapse categories when search is cleared
+            category_item.setExpanded(False)
+</file>
+
 <file path="main.py">
 #!/usr/bin/env python3
 """
@@ -9772,6 +9824,9 @@ class MainWindow(QMainWindow):
 
         # Log startup message
         self.log_startup_message()
+
+        # Restore previous session
+        self._restore_session()
 
     def check_metadata_directory(self) -> bool:
         """
@@ -10192,7 +10247,9 @@ class MainWindow(QMainWindow):
 
             if data:
                 # Create and show new table viewer window
-                viewer_window = TableViewerWindow(table, data, parent=self)
+                viewer_window = TableViewerWindow(
+                    table, data, rom_reader.definition, parent=self
+                )
                 viewer_window.show()
 
                 # Track the window
@@ -10273,6 +10330,40 @@ class MainWindow(QMainWindow):
             "Works with RomDrop for ECU flashing."
         )
 
+    def _restore_session(self):
+        """Restore files from previous session"""
+        session_files = self.settings.get_session_files()
+
+        if not session_files:
+            return
+
+        logger.info(f"Restoring session: {len(session_files)} file(s)")
+
+        for file_path in session_files:
+            if Path(file_path).exists():
+                try:
+                    self._open_rom_file(file_path)
+                except Exception as e:
+                    logger.warning(f"Failed to restore session file: {file_path} - {e}")
+            else:
+                logger.warning(f"Session file no longer exists: {file_path}")
+
+    def closeEvent(self, event):
+        """Save session state before closing"""
+        # Collect paths of all open ROM documents
+        open_files = []
+        for i in range(self.tab_widget.count()):
+            document = self.tab_widget.widget(i)
+            if document and hasattr(document, 'rom_path'):
+                open_files.append(document.rom_path)
+
+        # Save to settings
+        self.settings.set_session_files(open_files)
+        logger.info(f"Session saved: {len(open_files)} file(s)")
+
+        # Accept close event
+        event.accept()
+
 
 def main():
     """Application entry point"""
@@ -10305,25 +10396,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-</file>
-
-<file path=".beads/issues.jsonl">
-{"id":"nc-rom-editor-013","title":"Complete error handling and logging improvements","description":"Continue work started on error handling and logging:\n\nCOMPLETED:\n- Created custom exception classes (src/core/exceptions.py)\n- Created logging framework (src/utils/logging_config.py)\n- Updated rom_detector.py with proper logging and exceptions\n\nREMAINING:\n- Update definition_parser.py with logging/exceptions\n- Update rom_reader.py with logging/exceptions\n- Update main.py to initialize logging\n- Update tests for new exception types\n- Add logging configuration documentation","status":"closed","priority":1,"issue_type":"task","created_at":"2026-01-06T15:33:41.219562491-05:00","created_by":"root","updated_at":"2026-01-06T19:57:49.090599222-05:00","closed_at":"2026-01-06T19:57:49.090599222-05:00","close_reason":"Completed error handling and logging integration. All modules updated with logging and custom exceptions. Tests passing. Documentation added."}
-{"id":"nc-rom-editor-020","title":"Make table viewer windows modal (multiple windows)","description":"Change table viewer to open in separate modal windows instead of a single panel, allowing users to:\n- Open multiple tables simultaneously\n- Compare tables side-by-side\n- Each window should be independent and closeable","status":"closed","priority":2,"issue_type":"task","created_at":"2026-01-06T15:27:48.342367512-05:00","created_by":"root","updated_at":"2026-01-06T20:09:23.470420009-05:00","closed_at":"2026-01-06T20:09:23.470420009-05:00","close_reason":"Implemented modal table viewer windows:\n- Created TableViewerWindow class for independent table windows\n- Each table opens in its own window (can have multiple open)\n- Removed embedded viewer from main window\n- Main window now shows table browser only\n- Track open windows and clean up closed ones automatically\n- Window title shows table name\n- Status bar shows count of open table windows\n- Allows side-by-side comparison of multiple tables","dependencies":[{"issue_id":"nc-rom-editor-020","depends_on_id":"nc-rom-editor-3in","type":"parent-child","created_at":"2026-01-06T20:04:00.288845319-05:00","created_by":"root"}]}
-{"id":"nc-rom-editor-1kt","title":"Implement ROM modification tracking and project management","description":"Create a Git-like modification tracking system for ROM edits with project organization.\n\n## Problem Statement\nUsers currently track ROM modifications manually in Excel spreadsheets. Multiple ROMs often have the same filename (e.g., 'stock.bin'), making organization difficult. Need a built-in system to:\n- Track all table modifications with comments\n- Organize multiple ROMs under projects with aliases\n- View change history and compare versions\n- Export modification logs\n\n## Core Features\n\n### 1. Project Management System\n**Purpose:** Organize related ROMs under a single project\n- Create/open/save projects (.ncproj files)\n- Project contains: name, description, list of ROMs\n- Each ROM has an alias (user-friendly name like 'Stock', 'Stage 1', 'Final Tune')\n- Projects stored as SQLite database or JSON file\n- Recent projects list in File menu\n\n### 2. Modification Tracking\n**Purpose:** Record every table edit automatically\n- Track when table values are changed\n- Record: timestamp, table name, address, old value, new value, user comment\n- Store baseline (original ROM) for comparison\n- Automatic tracking (no manual saving required)\n- Optional: attach comments when making changes\n\n### 3. Change History Viewer\n**Purpose:** View all modifications made to a ROM\n- List all changes chronologically\n- Filter by: table name, date range, comment text\n- Show before/after values\n- Edit/add comments retroactively\n- Undo changes (revert to previous value)\n\n### 4. Comparison Tools\n**Purpose:** Compare ROMs and track differences\n- Compare current ROM to baseline (show what changed)\n- Compare two ROMs in the same project (Stock vs Tuned)\n- Highlight modified tables in tree view\n- Show delta values (e.g., '+5.0', '-10%')\n- Visual diff viewer for tables\n\n### 5. Export \u0026 Documentation\n**Purpose:** Generate modification reports\n- Export change log to PDF/text/CSV\n- Include: all changes, comments, timestamps\n- Useful for documentation or sharing with tuner\n\n## Technical Design\n\n### Data Model\n\n\n### Storage Options\n1. **SQLite Database** (recommended)\n   - Single .ncproj file\n   - Efficient querying for history/filtering\n   - Supports large projects\n   \n2. **JSON File** (simpler alternative)\n   - Human-readable\n   - Easier to implement\n   - May be slow for large change logs\n\n### Implementation Phases\n\n**Phase 1: Project Structure (Foundation)**\n- Create Project data model\n- Implement project file format (SQLite schema or JSON structure)\n- Add File \u003e New Project, Open Project, Save Project\n- Add ROM to project with alias\n- Basic project settings dialog\n\n**Phase 2: Change Tracking Backend**\n- Modify table_viewer to emit change events\n- Create ChangeTracker class to record modifications\n- Store baseline ROM data when project is created\n- Intercept write_table_data() calls to log changes\n- Add comment dialog when saving changes\n\n**Phase 3: Change History UI**\n- Create ChangeHistoryWindow to display modifications\n- List all changes with filters (date, table, comment)\n- Show old value → new value\n- Allow editing comments\n- Add Tools \u003e Change History menu\n\n**Phase 4: Comparison Features**\n- Compare current ROM to baseline (modified tables indicator)\n- Compare two ROMs side-by-side\n- Add visual indicators in table browser (modified tables)\n- Highlight changed cells in table viewer\n- Delta calculation and display\n\n**Phase 5: Export \u0026 Polish**\n- Export change log to PDF/text/CSV\n- Add project templates\n- Project backup/restore\n- Settings: auto-comment frequency, track anonymous changes\n\n## UI Mockups\n\n### Main Window Changes\n- Menu: File \u003e New Project, Open Project, Recent Projects\n- Menu: Tools \u003e Change History, Compare ROMs\n- Status bar: Show current project name\n- Table browser: Icon/color for modified tables\n\n### Change History Window\n\n\n### Comment Dialog (when saving changes)\n\n\n## Example Use Case\n\n**Scenario:** User is tuning their NC Miata\n\n1. Create project: 'NC1 Stage 1 Tune'\n2. Add ROMs:\n   - 'Stock' (baseline)\n   - 'Working Tune' (current edits)\n3. Edit fuel table in 'Working Tune'\n4. App prompts: 'Add comment?' → 'Richened WOT for safety'\n5. Later: View change history → see all modifications with comments\n6. Compare 'Working Tune' to 'Stock' → see all differences\n7. Export change log → PDF report for dyno shop\n\n## Dependencies\n- Requires table editing functionality (nc-rom-editor-3in.6)\n- Nice-to-have: ROM comparison tool (nc-rom-editor-3in.8)\n\n## Benefits\n- No more Excel spreadsheets\n- Complete audit trail of changes\n- Professional documentation\n- Easy comparison of tune versions\n- Safer tuning (can revert changes)\n- Share change logs with tuners/shops","status":"open","priority":2,"issue_type":"feature","created_at":"2026-01-06T20:18:35.042153846-05:00","created_by":"root","updated_at":"2026-01-06T20:18:35.042153846-05:00","dependencies":[{"issue_id":"nc-rom-editor-1kt","depends_on_id":"nc-rom-editor-3in","type":"parent-child","created_at":"2026-01-06T20:18:47.146121306-05:00","created_by":"root"}]}
-{"id":"nc-rom-editor-3in","title":"Build NC Miata ROM Editor - Core functionality","status":"open","priority":2,"issue_type":"epic","created_at":"2026-01-05T20:02:43.071751471-05:00","created_by":"root","updated_at":"2026-01-05T20:02:43.071751471-05:00"}
-{"id":"nc-rom-editor-3in.10","title":"Add error handling and validation","description":"Add validation logic for ROM files:\n\nINFRASTRUCTURE COMPLETE (via nc-rom-editor-013):\n✓ Custom exception classes exist (RomFileError, InvalidRomFileError, etc.)\n✓ Logging framework in place\n✓ Error handling throughout codebase\n✓ Meaningful error messages shown to users\n\nREMAINING VALIDATION LOGIC:\n- Validate ROM file structure (size, format, headers)\n- Detect corrupt or malformed ROM files\n- Validate checksums before reading (if available)\n- Validate table addresses are within ROM bounds\n- Validate scaling expressions are safe/valid\n- Add file integrity checks (magic numbers, expected patterns)\n- Handle edge cases (truncated files, invalid data types)\n- Add unit tests for validation logic","status":"open","priority":2,"issue_type":"task","created_at":"2026-01-05T20:05:07.181142605-05:00","created_by":"root","updated_at":"2026-01-06T20:02:15.514371399-05:00","dependencies":[{"issue_id":"nc-rom-editor-3in.10","depends_on_id":"nc-rom-editor-3in","type":"parent-child","created_at":"2026-01-05T20:05:07.210048994-05:00","created_by":"root"}]}
-{"id":"nc-rom-editor-3in.11","title":"Create packaging for Windows distribution","description":"Use PyInstaller to package as standalone .exe for Windows. Test on clean Windows system.","status":"open","priority":2,"issue_type":"task","created_at":"2026-01-05T20:05:13.949048623-05:00","created_by":"root","updated_at":"2026-01-05T20:05:13.949048623-05:00","dependencies":[{"issue_id":"nc-rom-editor-3in.11","depends_on_id":"nc-rom-editor-3in","type":"parent-child","created_at":"2026-01-05T20:05:13.971455518-05:00","created_by":"root"}]}
-{"id":"nc-rom-editor-3in.12","title":"Implement ROM ID detection and XML matching","description":"Read ROM ID from binary file and automatically find/load the matching XML definition file from metadata/ directory. Remove hardcoded definition path.","status":"closed","priority":1,"issue_type":"task","created_at":"2026-01-05T20:47:48.65793008-05:00","created_by":"root","updated_at":"2026-01-06T14:38:46.902887037-05:00","closed_at":"2026-01-06T14:38:46.902887037-05:00","close_reason":"Closed","dependencies":[{"issue_id":"nc-rom-editor-3in.12","depends_on_id":"nc-rom-editor-3in","type":"parent-child","created_at":"2026-01-05T20:47:48.679972509-05:00","created_by":"root"}]}
-{"id":"nc-rom-editor-3in.3","title":"Implement ROM binary file I/O","description":"Read and write NC Miata ECU ROM binary files (.bin). Handle file opening, saving, and basic validation.","notes":"Completed: ROM definition parser, ROM binary reader with scaling, table browser/viewer UI. Working viewer loads and displays tables. Identified issue: hardcoded definition must be replaced with ROM ID detection.","status":"closed","priority":2,"issue_type":"task","created_at":"2026-01-05T20:03:58.252183195-05:00","created_by":"root","updated_at":"2026-01-05T20:48:00.870960866-05:00","closed_at":"2026-01-05T20:48:00.870967266-05:00","dependencies":[{"issue_id":"nc-rom-editor-3in.3","depends_on_id":"nc-rom-editor-3in","type":"parent-child","created_at":"2026-01-05T20:03:58.281849492-05:00","created_by":"root"}]}
-{"id":"nc-rom-editor-3in.4","title":"Parse RomDrop metadata/definition files","description":"Parse XML definition files from RomDrop that describe ROM structure, table locations, data types, and conversions.","notes":"Created ROM definition parser that successfully loads lf9veb.xml with 511 tables and 838 scalings","status":"closed","priority":2,"issue_type":"task","created_at":"2026-01-05T20:04:10.790277342-05:00","created_by":"root","updated_at":"2026-01-05T20:28:50.453912984-05:00","closed_at":"2026-01-05T20:28:50.453959884-05:00","dependencies":[{"issue_id":"nc-rom-editor-3in.4","depends_on_id":"nc-rom-editor-3in","type":"parent-child","created_at":"2026-01-05T20:04:10.820421839-05:00","created_by":"root"}]}
-{"id":"nc-rom-editor-3in.5","title":"Build table viewer UI component","description":"Create PySide6 UI components to display 2D and 3D calibration tables (fuel maps, ignition timing, etc.) with proper visualization.","notes":"Created table browser and viewer widgets with full ROM definition integration","status":"closed","priority":2,"issue_type":"task","created_at":"2026-01-05T20:04:26.221117225-05:00","created_by":"root","updated_at":"2026-01-05T20:30:51.302581048-05:00","closed_at":"2026-01-05T20:30:51.302591048-05:00","dependencies":[{"issue_id":"nc-rom-editor-3in.5","depends_on_id":"nc-rom-editor-3in","type":"parent-child","created_at":"2026-01-05T20:04:26.24635663-05:00","created_by":"root"}]}
-{"id":"nc-rom-editor-3in.6","title":"Implement table editing operations","description":"Add/subtract values from cells, interpolate values, copy/paste table data, undo/redo functionality.","status":"open","priority":2,"issue_type":"task","created_at":"2026-01-05T20:04:33.026049731-05:00","created_by":"root","updated_at":"2026-01-05T20:04:33.026049731-05:00","dependencies":[{"issue_id":"nc-rom-editor-3in.6","depends_on_id":"nc-rom-editor-3in","type":"parent-child","created_at":"2026-01-05T20:04:33.055866828-05:00","created_by":"root"}]}
-{"id":"nc-rom-editor-3in.7","title":"Implement checksum calculation and validation","description":"Calculate and verify ROM checksums. Auto-recalculate when saving modified ROM files.","status":"open","priority":2,"issue_type":"task","created_at":"2026-01-05T20:04:39.788890626-05:00","created_by":"root","updated_at":"2026-01-05T20:04:39.788890626-05:00","dependencies":[{"issue_id":"nc-rom-editor-3in.7","depends_on_id":"nc-rom-editor-3in","type":"parent-child","created_at":"2026-01-05T20:04:39.819690819-05:00","created_by":"root"}]}
-{"id":"nc-rom-editor-3in.8","title":"Build ROM comparison tool","description":"Compare two ROM files (e.g., stock vs modified) and highlight differences in tables and raw data.","status":"open","priority":2,"issue_type":"task","created_at":"2026-01-05T20:04:46.824565775-05:00","created_by":"root","updated_at":"2026-01-05T20:04:46.824565775-05:00","dependencies":[{"issue_id":"nc-rom-editor-3in.8","depends_on_id":"nc-rom-editor-3in","type":"parent-child","created_at":"2026-01-05T20:04:46.852583771-05:00","created_by":"root"}]}
-{"id":"nc-rom-editor-3in.9","title":"Implement import/export functionality","description":"Export individual tables or full ROM files. Import tables from other ROMs.","status":"open","priority":2,"issue_type":"task","created_at":"2026-01-05T20:05:00.453944899-05:00","created_by":"root","updated_at":"2026-01-05T20:05:00.453944899-05:00","dependencies":[{"issue_id":"nc-rom-editor-3in.9","depends_on_id":"nc-rom-editor-3in","type":"parent-child","created_at":"2026-01-05T20:05:00.487198387-05:00","created_by":"root"}]}
-{"id":"nc-rom-editor-7uo","title":"Polish UI for professional look and feel","description":"Improve the UI polish to make the application feel professional and modern. Qt is capable of beautiful UIs but current implementation is functional MVP without visual polish.\n\n**Visual Styling:**\n- Add modern stylesheet with proper color scheme (dark/light theme support)\n- Improve typography (fonts, sizes, weights)\n- Add proper spacing, padding, and margins throughout\n- Add visual hierarchy (headers, sections, grouping)\n- Style tables with alternating row colors\n- Add hover effects and visual feedback\n- Polish buttons, inputs, and controls\n\n**Icons \u0026 Graphics:**\n- Add icons to menu items (File \u003e Open, Save, etc.)\n- Add icons to tree view items (categories, table types)\n- Add toolbar with icon buttons for common actions\n- Add status bar icons for feedback\n- Consider custom window icon/logo\n\n**User Experience:**\n- Add keyboard shortcuts (Ctrl+O, Ctrl+S, Ctrl+Q, Ctrl+F, etc.)\n- Add tooltips to all interactive elements\n- Add context menus (right-click) for tables\n- Add loading indicators/progress bars for long operations\n- Improve status messages with better formatting\n- Add search box for table filtering (complements nc-rom-editor-jf2)\n\n**Layout Improvements:**\n- Better splitter ratios and remember user preferences\n- Add proper minimum sizes for widgets\n- Responsive layout that works at different window sizes\n- Add scrollbars where needed\n- Improve table headers and column sizing\n\n**Data Display:**\n- Color-code table cells by value (heatmap for 3D tables)\n- Add formatting options for numbers (decimals, scientific notation)\n- Highlight modified cells\n- Add visual indicators for out-of-range values\n\n**Modern Features:**\n- Consider tabbed interface for multiple ROMs\n- Add recent files menu\n- Add preferences/settings dialog\n- Add about dialog with version info and credits\n\n**Reference:**\nLook at professional Qt apps like VLC, OBS Studio, or Qt Creator for inspiration. The framework is capable of beautiful UIs - we just need to use its features.","status":"in_progress","priority":2,"issue_type":"task","created_at":"2026-01-06T19:58:11.974751498-05:00","created_by":"root","updated_at":"2026-01-07T14:07:17.989837633-05:00","dependencies":[{"issue_id":"nc-rom-editor-7uo","depends_on_id":"nc-rom-editor-3in","type":"parent-child","created_at":"2026-01-06T20:04:21.572307924-05:00","created_by":"root"}]}
-{"id":"nc-rom-editor-jf2","title":"Add filter/search to table browser","description":"Add search/filter functionality to the table tree (left panel) to filter tables by:\n- Category/group name\n- Table name\nShould support real-time filtering as user types.","status":"closed","priority":2,"issue_type":"task","created_at":"2026-01-06T15:27:41.444321555-05:00","created_by":"root","updated_at":"2026-01-06T20:07:29.457598169-05:00","closed_at":"2026-01-06T20:07:29.457598169-05:00","close_reason":"Implemented table browser search/filter feature with:\n- Search box with real-time filtering\n- Filters by table name, type, address, and category\n- Keyboard shortcut (Ctrl+F) to focus search\n- Clear button to reset filter\n- Auto-expands matching categories\n- Case-insensitive search","dependencies":[{"issue_id":"nc-rom-editor-jf2","depends_on_id":"nc-rom-editor-3in","type":"parent-child","created_at":"2026-01-06T20:04:11.283379388-05:00","created_by":"root"}]}
 </file>
 
 </files>

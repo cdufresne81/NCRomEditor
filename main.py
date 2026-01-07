@@ -124,6 +124,9 @@ class MainWindow(QMainWindow):
         # Log startup message
         self.log_startup_message()
 
+        # Restore previous session
+        self._restore_session()
+
     def check_metadata_directory(self) -> bool:
         """
         Check if metadata directory is configured and valid
@@ -543,7 +546,9 @@ class MainWindow(QMainWindow):
 
             if data:
                 # Create and show new table viewer window
-                viewer_window = TableViewerWindow(table, data, parent=self)
+                viewer_window = TableViewerWindow(
+                    table, data, rom_reader.definition, parent=self
+                )
                 viewer_window.show()
 
                 # Track the window
@@ -623,6 +628,40 @@ class MainWindow(QMainWindow):
             "Designed to replace EcuFlash for ROM editing tasks.\n"
             "Works with RomDrop for ECU flashing."
         )
+
+    def _restore_session(self):
+        """Restore files from previous session"""
+        session_files = self.settings.get_session_files()
+
+        if not session_files:
+            return
+
+        logger.info(f"Restoring session: {len(session_files)} file(s)")
+
+        for file_path in session_files:
+            if Path(file_path).exists():
+                try:
+                    self._open_rom_file(file_path)
+                except Exception as e:
+                    logger.warning(f"Failed to restore session file: {file_path} - {e}")
+            else:
+                logger.warning(f"Session file no longer exists: {file_path}")
+
+    def closeEvent(self, event):
+        """Save session state before closing"""
+        # Collect paths of all open ROM documents
+        open_files = []
+        for i in range(self.tab_widget.count()):
+            document = self.tab_widget.widget(i)
+            if document and hasattr(document, 'rom_path'):
+                open_files.append(document.rom_path)
+
+        # Save to settings
+        self.settings.set_session_files(open_files)
+        logger.info(f"Session saved: {len(open_files)} file(s)")
+
+        # Accept close event
+        event.accept()
 
 
 def main():

@@ -99,6 +99,68 @@ class AppSettings:
         self.settings.setValue("recent_files", [])
         self.settings.sync()
 
+    def get_session_files(self) -> list:
+        """
+        Get list of files from last session
+
+        Returns:
+            list: List of file paths that were open when app last closed
+        """
+        files = self.settings.value("session/open_files", [])
+        if files is None:
+            return []
+        if isinstance(files, str):
+            return [files] if files else []
+        return files
+
+    def set_session_files(self, file_paths: list):
+        """
+        Save list of currently open files for session restore
+
+        Args:
+            file_paths: List of ROM file paths currently open
+        """
+        self.settings.setValue("session/open_files", file_paths)
+        self.settings.sync()
+
+    def get_gradient_mode(self) -> str:
+        """
+        Get gradient coloring mode for table cells
+
+        Returns:
+            str: 'minmax' (default) or 'neighbors'
+        """
+        return self.settings.value("display/gradient_mode", "minmax")
+
+    def set_gradient_mode(self, mode: str):
+        """
+        Set gradient coloring mode for table cells
+
+        Args:
+            mode: 'minmax' or 'neighbors'
+        """
+        self.settings.setValue("display/gradient_mode", mode)
+        self.settings.sync()
+
+    def get_table_font_size(self) -> int:
+        """
+        Get font size for table cells
+
+        Returns:
+            int: Font size in pixels (default 10)
+        """
+        return int(self.settings.value("display/table_font_size", 10))
+
+    def set_table_font_size(self, size: int):
+        """
+        Set font size for table cells
+
+        Args:
+            size: Font size in pixels
+        """
+        self.settings.setValue("display/table_font_size", size)
+        self.settings.sync()
+
 
 # Global settings instance
 _settings = None

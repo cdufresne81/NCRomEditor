@@ -17,7 +17,9 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QLineEdit,
     QFileDialog,
-    QGroupBox
+    QGroupBox,
+    QComboBox,
+    QSpinBox
 )
 from PySide6.QtCore import Qt, Signal
 
@@ -100,11 +102,29 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout()
         tab.setLayout(layout)
 
-        # Placeholder label
-        label = QLabel("Appearance settings will be added here\n(Theme, colors, fonts, etc.)")
-        label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(label)
+        # Table display group
+        table_group = QGroupBox("Table Display")
+        table_layout = QFormLayout()
+        table_group.setLayout(table_layout)
 
+        # Font size setting
+        self.font_size_spin = QSpinBox()
+        self.font_size_spin.setRange(6, 16)
+        self.font_size_spin.setSuffix(" px")
+        table_layout.addRow("Table font size:", self.font_size_spin)
+
+        # Gradient mode setting
+        self.gradient_mode_combo = QComboBox()
+        self.gradient_mode_combo.addItem("Min/Max of table", "minmax")
+        self.gradient_mode_combo.addItem("Relative to neighbors", "neighbors")
+        table_layout.addRow("Cell gradient coloring:", self.gradient_mode_combo)
+
+        # Help text
+        help_label = QLabel("Note: Changes take effect on newly opened tables")
+        help_label.setStyleSheet("color: gray; font-size: 10px;")
+        table_layout.addRow("", help_label)
+
+        layout.addWidget(table_group)
         layout.addStretch()
 
         self.tabs.addTab(tab, "Appearance")
@@ -130,6 +150,16 @@ class SettingsDialog(QDialog):
         metadata_dir = self.settings.get_metadata_directory()
         self.metadata_path_edit.setText(metadata_dir)
 
+        # Load gradient mode
+        gradient_mode = self.settings.get_gradient_mode()
+        index = self.gradient_mode_combo.findData(gradient_mode)
+        if index >= 0:
+            self.gradient_mode_combo.setCurrentIndex(index)
+
+        # Load font size
+        font_size = self.settings.get_table_font_size()
+        self.font_size_spin.setValue(font_size)
+
     def browse_metadata_directory(self):
         """Open directory browser for metadata directory"""
         current_path = self.metadata_path_edit.text()
@@ -152,6 +182,14 @@ class SettingsDialog(QDialog):
         metadata_dir = self.metadata_path_edit.text().strip()
         if metadata_dir:
             self.settings.set_metadata_directory(metadata_dir)
+
+        # Save gradient mode
+        gradient_mode = self.gradient_mode_combo.currentData()
+        self.settings.set_gradient_mode(gradient_mode)
+
+        # Save font size
+        font_size = self.font_size_spin.value()
+        self.settings.set_table_font_size(font_size)
 
         # Emit signal that settings changed
         self.settings_changed.emit()
