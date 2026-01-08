@@ -299,7 +299,10 @@ class RomReader:
                 y_len = len(result['y_axis'])
                 if len(display_values) == x_len * y_len:
                     # Reshape to (y_len, x_len) - rows are Y, columns are X
-                    result['values'] = display_values.reshape((y_len, x_len))
+                    # Use 'F' (Fortran/column-major) order when swapxy is true
+                    # because data is stored column-by-column in ROM
+                    order = 'F' if table.swapxy else 'C'
+                    result['values'] = display_values.reshape((y_len, x_len), order=order)
 
         logger.info(f"Successfully read table: {table.name} ({table.type.value})")
         return result
@@ -379,6 +382,85 @@ class RomReader:
         except Exception as e:
             logger.error(f"Error writing table data for '{table.name}': {e}")
             raise RomWriteError(f"Failed to write table data: {e}")
+
+    def write_cell_value(self, table: Table, row: int, col: int, raw_value: float) -> None:
+        """
+        Write a single cell value to ROM (in memory)
+
+        Args:
+            table: Table definition
+            row: Row index in the table
+            col: Column index in the table (0 for 1D/2D tables)
+            raw_value: Raw binary value to write
+
+        Raises:
+            ScalingNotFoundError: If scaling definition is not found
+            RomWriteError: If writing fails
+        """
+        scaling = self.definition.get_scaling(table.scaling)
+        if not scaling:
+            raise ScalingNotFoundError(
+                f"Scaling '{table.scaling}' not found for table '{table.name}'"
+            )
+
+        # Calculate the linear index and byte offset
+        if table.type.value == "3D":
+            # For 3D tables, calculate linear index from row, col
+            x_axis = table.x_axis
+            y_axis = table.y_axis
+            cols = x_axis.elements if x_axis else 1
+            rows = y_axis.elements if y_axis else 1
+
+            # Must match the reshape order used in read_table_data
+            if table.swapxy:
+                # Column-major (Fortran order): data stored column-by-column
+                linear_index = col * rows + row
+            else:
+                # Row-major (C order): data stored row-by-row
+                linear_index = row * cols + col
+        else:
+            # For 1D/2D tables, just use row
+            linear_index = row
+
+        bytes_per_elem = scaling.bytes_per_element
+        address = table.address_int + (linear_index * bytes_per_elem)
+        endian_char = '>' if scaling.endian == 'big' else '<'
+
+        type_map = {
+            'uint8': 'B', 'int8': 'b',
+            'uint16': 'H', 'int16': 'h',
+            'uint32': 'I', 'int32': 'i',
+            'float': 'f', 'double': 'd',
+        }
+        format_char = type_map.get(scaling.storagetype.lower(), 'f')
+        format_string = f"{endian_char}{format_char}"
+
+        try:
+            # Convert to appropriate integer type if needed
+            if format_char in ('B', 'b', 'H', 'h', 'I', 'i'):
+                raw_value = int(round(raw_value))
+
+            packed_data = struct.pack(format_string, raw_value)
+
+            # Validate bounds
+            if address < 0 or address >= len(self.rom_data):
+                raise RomWriteError(f"Address out of bounds: {hex(address)}")
+            if address + len(packed_data) > len(self.rom_data):
+                raise RomWriteError(f"Write exceeds ROM bounds at {hex(address)}")
+
+            # Modify ROM data in memory
+            self.rom_data = (
+                self.rom_data[:address] +
+                packed_data +
+                self.rom_data[address + len(packed_data):]
+            )
+            logger.debug(f"Wrote cell [{row},{col}] = {raw_value} at {hex(address)}")
+
+        except RomWriteError:
+            raise
+        except Exception as e:
+            logger.error(f"Error writing cell value: {e}")
+            raise RomWriteError(f"Failed to write cell value: {e}")
 
     def save_rom(self, output_path: Optional[str] = None):
         """

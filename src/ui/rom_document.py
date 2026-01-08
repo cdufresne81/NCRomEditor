@@ -24,12 +24,16 @@ class RomDocument(QWidget):
     # Signal emitted when a table is selected
     table_selected = Signal(Table, object)  # table, rom_reader
 
+    # Signal emitted when modified state changes
+    modified_changed = Signal(bool)
+
     def __init__(self, rom_path: str, rom_definition: RomDefinition, rom_reader: RomReader, parent=None):
         super().__init__(parent)
         self.rom_path = rom_path
         self.rom_definition = rom_definition
         self.rom_reader = rom_reader
         self.file_name = Path(rom_path).name
+        self._modified = False
         self.init_ui()
 
     def init_ui(self):
@@ -71,10 +75,20 @@ class RomDocument(QWidget):
         Check if this ROM has been modified
 
         Returns:
-            bool: True if modified (TODO: implement tracking)
+            bool: True if modified
         """
-        # TODO: Implement modification tracking
-        return False
+        return self._modified
+
+    def set_modified(self, modified: bool):
+        """
+        Set the modified state
+
+        Args:
+            modified: True if document has unsaved changes
+        """
+        if self._modified != modified:
+            self._modified = modified
+            self.modified_changed.emit(modified)
 
     def save(self, file_path: str = None):
         """

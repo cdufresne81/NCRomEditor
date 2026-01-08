@@ -60,6 +60,7 @@ class TableBrowser(QWidget):
         self.tree.setHeaderLabels(["Name", "Type", "Address"])
         self.tree.setColumnWidth(0, TABLE_BROWSER_COLUMN_WIDTH)
         self.tree.itemClicked.connect(self._on_item_clicked)
+        self.tree.itemActivated.connect(self._on_item_activated)  # Enter key or double-click
 
         layout.addWidget(self.tree)
 
@@ -106,6 +107,13 @@ class TableBrowser(QWidget):
 
     def _on_item_clicked(self, item, column):
         """Handle item click in tree"""
+        # Get table object stored in item
+        table = item.data(0, 100)
+        if table is not None:  # Not a category
+            self.table_selected.emit(table)
+
+    def _on_item_activated(self, item, column):
+        """Handle item activation (Enter key or double-click)"""
         # Get table object stored in item
         table = item.data(0, 100)
         if table is not None:  # Not a category

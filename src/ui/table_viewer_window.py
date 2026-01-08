@@ -6,7 +6,8 @@ Allows opening multiple tables simultaneously for comparison.
 """
 
 from PySide6.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QApplication
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
 
 from ..utils.constants import APP_NAME
 from .table_viewer import TableViewer
@@ -22,7 +23,16 @@ class TableViewerWindow(QMainWindow):
     - Shows table name in window title
     - Contains TableViewer widget for displaying data
     - Can have multiple windows open simultaneously
+    - Editable cells with change tracking
     """
+
+    # Forward cell_changed signal from viewer
+    # Args: table, row, col, old_value, new_value, old_raw, new_raw
+    cell_changed = Signal(Table, int, int, float, float, float, float)
+
+    # Signals for undo/redo requests (forwarded to main window)
+    undo_requested = Signal()
+    redo_requested = Signal()
 
     def __init__(self, table: Table, data: dict, rom_definition: RomDefinition,
                  rom_path: str = None, parent=None):
@@ -46,17 +56,27 @@ class TableViewerWindow(QMainWindow):
         # Set window properties
         self.setWindowTitle(f"{table.name} - {APP_NAME}")
 
-        # Create central widget
+        # Create central widget with minimal margins
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
         layout = QVBoxLayout()
-        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         central_widget.setLayout(layout)
 
         # Create table viewer widget
         self.viewer = TableViewer(rom_definition)
         layout.addWidget(self.viewer)
+
+        # Connect cell_changed signal
+        self.viewer.cell_changed.connect(self._on_cell_changed)
+
+        # Set up undo/redo shortcuts for this window
+        undo_shortcut = QShortcut(QKeySequence.Undo, self)
+        undo_shortcut.activated.connect(self.undo_requested.emit)
+        redo_shortcut = QShortcut(QKeySequence.Redo, self)
+        redo_shortcut.activated.connect(self.redo_requested.emit)
 
         # Display the table data
         self.viewer.display_table(table, data)
@@ -64,8 +84,16 @@ class TableViewerWindow(QMainWindow):
         # Auto-size window to fit content
         self._auto_size_window()
 
+    def _on_cell_changed(self, table_name: str, row: int, col: int,
+                         old_value: float, new_value: float,
+                         old_raw: float, new_raw: float):
+        """Forward cell change signal with table object"""
+        self.cell_changed.emit(
+            self.table, row, col, old_value, new_value, old_raw, new_raw
+        )
+
     def _auto_size_window(self):
-        """Auto-size window to fit table content"""
+        """Auto-size window to fit table content - compact like ECUFlash"""
         table_widget = self.viewer.table_widget
 
         # Calculate content width
@@ -77,22 +105,23 @@ class TableViewerWindow(QMainWindow):
         if table_widget.verticalHeader().isVisible():
             content_width += table_widget.verticalHeader().width()
 
-        # Add scroll bar width margin
-        content_width += 20
+        # Minimal margin for scrollbar/border
+        content_width += 4
 
         # Calculate content height
         content_height = 0
         for row in range(table_widget.rowCount()):
             content_height += table_widget.rowHeight(row)
 
-        # Add horizontal header height
-        content_height += table_widget.horizontalHeader().height()
+        # Add horizontal header height if visible
+        if table_widget.horizontalHeader().isVisible():
+            content_height += table_widget.horizontalHeader().height()
 
         # Add info label height
         content_height += self.viewer.info_label.sizeHint().height()
 
-        # Add margins and padding
-        content_height += 40  # Layout margins + extra padding
+        # Add window title bar (approximately)
+        content_height += 30
 
         # Get screen size to limit window size
         screen = QApplication.primaryScreen()
@@ -104,9 +133,9 @@ class TableViewerWindow(QMainWindow):
             max_width = 1600
             max_height = 900
 
-        # Apply size limits
-        min_width = 200
-        min_height = 150
+        # Apply size limits (allow small tables to be very compact)
+        min_width = 80
+        min_height = 60
         final_width = max(min_width, min(content_width, max_width))
         final_height = max(min_height, min(content_height, max_height))
 

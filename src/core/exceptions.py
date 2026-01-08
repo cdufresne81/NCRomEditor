@@ -113,3 +113,24 @@ class TableNotFoundError(TableError):
 class InvalidTableDataError(TableError):
     """Raised when table data is invalid"""
     pass
+
+
+# Project Errors
+class ProjectError(RomEditorError):
+    """Base exception for project-related errors"""
+    pass
+
+
+class ProjectNotFoundError(ProjectError):
+    """Raised when a project folder or file cannot be found"""
+    pass
+
+
+class ProjectCorruptError(ProjectError):
+    """Raised when project data is corrupted or invalid"""
+    pass
+
+
+class ProjectSaveError(ProjectError):
+    """Raised when saving a project fails"""
+    pass
