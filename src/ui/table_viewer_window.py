@@ -85,11 +85,60 @@ class TableViewerWindow(QMainWindow):
         redo_shortcut = QShortcut(QKeySequence.Redo, self)
         redo_shortcut.activated.connect(self.redo_requested.emit)
 
+        # Set up Esc key to close window
+        close_shortcut = QShortcut(QKeySequence(Qt.Key_Escape), self)
+        close_shortcut.activated.connect(self.close)
+
+        # Create menu bar
+        self._create_menu_bar()
+
         # Display the table data
         self.viewer.display_table(table, data)
 
         # Auto-size window to fit content
         self._auto_size_window()
+
+    def _create_menu_bar(self):
+        """Create menu bar with Data Manipulation menu"""
+        menubar = self.menuBar()
+
+        # Data Manipulation menu
+        data_menu = menubar.addMenu("Data")
+
+        increment_action = data_menu.addAction("Increment")
+        increment_action.setShortcut("+")
+        increment_action.triggered.connect(self.viewer.increment_selection)
+
+        decrement_action = data_menu.addAction("Decrement")
+        decrement_action.setShortcut("-")
+        decrement_action.triggered.connect(self.viewer.decrement_selection)
+
+        data_menu.addSeparator()
+
+        add_action = data_menu.addAction("Add to Data...")
+        add_action.triggered.connect(self.viewer.add_to_selection)
+
+        multiply_action = data_menu.addAction("Multiply Data...")
+        multiply_action.setShortcut("*")
+        multiply_action.triggered.connect(self.viewer.multiply_selection)
+
+        set_action = data_menu.addAction("Set Value...")
+        set_action.setShortcut("=")
+        set_action.triggered.connect(self.viewer.set_value_selection)
+
+        data_menu.addSeparator()
+
+        interp_v_action = data_menu.addAction("Interpolate Vertically")
+        interp_v_action.setShortcut("V")
+        interp_v_action.triggered.connect(self.viewer.interpolate_vertical)
+
+        interp_h_action = data_menu.addAction("Interpolate Horizontally")
+        interp_h_action.setShortcut("H")
+        interp_h_action.triggered.connect(self.viewer.interpolate_horizontal)
+
+        interp_2d_action = data_menu.addAction("Interpolate 2D")
+        interp_2d_action.setShortcut("B")
+        interp_2d_action.triggered.connect(self.viewer.interpolate_2d)
 
     def _on_cell_changed(self, table_name: str, row: int, col: int,
                          old_value: float, new_value: float,
