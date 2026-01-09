@@ -158,29 +158,33 @@ class TableViewer(QWidget):
         elif table.type == TableType.THREE_D:
             self._display_3d(values, data.get('x_axis'), data.get('y_axis'))
 
-    def _apply_uniform_column_width(self):
+    def _apply_uniform_column_width_3d(self):
         """
-        Apply uniform width to all columns based on the widest cell content.
-        This ensures all cells in the table have the same width.
+        Apply uniform width to DATA columns only (excluding Y-axis column 0).
+        For 3D tables, this ensures all data cells have the same width while
+        allowing the Y-axis column to size naturally based on its content.
         """
         # First, let Qt calculate optimal widths for all columns
         self.table_widget.resizeColumnsToContents()
 
-        # Find the maximum width among all columns
+        # Find the maximum width among DATA columns only (skip column 0 = Y-axis)
         max_width = 0
-        for col in range(self.table_widget.columnCount()):
+        for col in range(1, self.table_widget.columnCount()):  # Start from column 1
             width = self.table_widget.columnWidth(col)
             if width > max_width:
                 max_width = width
 
-        # Apply the maximum width to all columns
+        # Apply the maximum width to DATA columns only (not column 0)
         if max_width > 0:
             header = self.table_widget.horizontalHeader()
-            header.setSectionResizeMode(QHeaderView.Fixed)
-            for col in range(self.table_widget.columnCount()):
+            # Set column 0 (Y-axis) to ResizeToContents
+            header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+            # Set all other columns to Fixed with uniform width
+            for col in range(1, self.table_widget.columnCount()):
+                header.setSectionResizeMode(col, QHeaderView.Fixed)
                 self.table_widget.setColumnWidth(col, max_width)
 
-            logger.debug(f"Applied uniform column width: {max_width}px across {self.table_widget.columnCount()} columns")
+            logger.debug(f"Applied uniform width {max_width}px to {self.table_widget.columnCount() - 1} data columns (excluding Y-axis)")
 
     def _display_1d(self, values: np.ndarray):
         """Display 1D table (single value)"""
@@ -203,9 +207,6 @@ class TableViewer(QWidget):
             self.table_widget.setItem(0, 0, item)
         finally:
             self._editing_in_progress = False
-
-        # Apply uniform column width
-        self._apply_uniform_column_width()
 
     def _display_2d(self, values: np.ndarray, y_axis: np.ndarray):
         """Display 2D table (1D array with Y axis)"""
@@ -263,9 +264,6 @@ class TableViewer(QWidget):
                 self.table_widget.setItem(i, 1, value_item)
         finally:
             self._editing_in_progress = False
-
-        # Apply uniform column width
-        self._apply_uniform_column_width()
 
     def _display_3d(self, values: np.ndarray, x_axis: np.ndarray, y_axis: np.ndarray):
         """Display 3D table (2D grid with X and Y axes)"""
@@ -369,8 +367,8 @@ class TableViewer(QWidget):
         finally:
             self._editing_in_progress = False
 
-        # Apply uniform column width
-        self._apply_uniform_column_width()
+        # Apply uniform column width to data columns (excluding Y-axis column 0)
+        self._apply_uniform_column_width_3d()
 
     def clear(self):
         """Clear the viewer"""
