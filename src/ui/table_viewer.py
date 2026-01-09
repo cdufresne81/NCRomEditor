@@ -123,6 +123,12 @@ class TableViewer(QWidget):
             QTableWidget::item {{
                 padding: 0px 1px;
             }}
+            QTableWidget::item:selected {{
+                background-color: rgba(255, 165, 0, 0.4);
+                border: 2px solid #FF8C00;
+                color: black;
+                font-weight: bold;
+            }}
         """)
 
         # Tight row height - just enough for the font
