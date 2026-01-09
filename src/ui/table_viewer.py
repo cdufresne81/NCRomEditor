@@ -1211,18 +1211,26 @@ class TableViewer(QWidget):
 
     def interpolate_vertical(self):
         """Fill gaps vertically with linear interpolation (V key)"""
+        logger.debug("interpolate_vertical() called")
+
         if not self.current_table or not self.current_data:
+            logger.debug("No current table or data")
             return
 
         selected_ranges = self.table_widget.selectedRanges()
         if not selected_ranges:
+            logger.debug("No selection")
             return
+
+        logger.debug(f"Processing {len(selected_ranges)} selection range(s)")
 
         from PySide6.QtWidgets import QTableWidgetSelectionRange
 
         all_changes = []
 
         for sel_range in selected_ranges:
+            logger.debug(f"Selection range: rows {sel_range.topRow()}-{sel_range.bottomRow()}, cols {sel_range.leftColumn()}-{sel_range.rightColumn()}")
+
             # For each column in the selection
             for col in range(sel_range.leftColumn(), sel_range.rightColumn() + 1):
                 # Collect data cells in this column
@@ -1238,31 +1246,52 @@ class TableViewer(QWidget):
                         except ValueError:
                             continue
 
+                logger.debug(f"Column {col}: found {len(cells)} data cells")
+
                 # Need at least 2 cells to interpolate
                 if len(cells) < 2:
+                    logger.debug(f"Column {col}: skipping (need at least 2 cells)")
                     continue
 
                 # Get first and last values
                 first_row, first_val, first_coords = cells[0]
                 last_row, last_val, last_coords = cells[-1]
 
-                # If only 2 cells, nothing to interpolate between them
-                if len(cells) == 2 and last_row - first_row == 1:
+                logger.debug(f"Column {col}: first cell at row {first_row} = {first_val}, last cell at row {last_row} = {last_val}")
+
+                # If first and last are the same row, can't interpolate vertically
+                if last_row == first_row:
+                    logger.debug(f"Column {col}: skipping (first and last on same row)")
                     continue
 
-                # Calculate linear interpolation for rows between first and last
-                if last_row == first_row:
-                    continue  # Same row, can't interpolate vertically
+                # If only 2 adjacent cells, nothing between them to interpolate
+                if len(cells) == 2 and last_row - first_row == 1:
+                    logger.debug(f"Column {col}: skipping (only 2 adjacent cells, nothing between)")
+                    continue
 
-                for i in range(1, len(cells) - 1):
-                    row, old_val, coords = cells[i]
+                # Interpolate ALL cells between first and last
+                cells_interpolated = 0
+                for row in range(first_row + 1, last_row):
+                    # Get the cell at this position
+                    item = self.table_widget.item(row, col)
+                    if not item or item.data(Qt.UserRole) is None:
+                        logger.debug(f"Column {col}, row {row}: skipping (not a data cell)")
+                        continue
+
+                    coords = item.data(Qt.UserRole)
+
+                    # Get current value
+                    try:
+                        old_val = float(item.text())
+                    except ValueError:
+                        logger.debug(f"Column {col}, row {row}: skipping (can't parse value)")
+                        continue
+
                     # Linear interpolation based on position
                     t = (row - first_row) / (last_row - first_row)
                     new_val = first_val + t * (last_val - first_val)
 
                     if abs(new_val - old_val) > 1e-9:  # Only if changed
-                        # Update cell
-                        item = self.table_widget.item(row, col)
                         old_raw = self.current_data['values'][coords]
 
                         # Convert to raw and back to ensure consistency
@@ -1279,24 +1308,38 @@ class TableViewer(QWidget):
 
                             all_changes.append((coords[0], coords[1] if len(coords) > 1 else 0,
                                               old_val, new_val, old_raw, new_raw))
+                            cells_interpolated += 1
+
+                logger.debug(f"Column {col}: interpolated {cells_interpolated} cells")
 
         if all_changes:
+            logger.info(f"Vertical interpolation: updated {len(all_changes)} cells")
             self.bulk_changes.emit(all_changes)
+        else:
+            logger.debug("Vertical interpolation: no changes made")
 
     def interpolate_horizontal(self):
         """Fill gaps horizontally with linear interpolation (H key)"""
+        logger.debug("interpolate_horizontal() called")
+
         if not self.current_table or not self.current_data:
+            logger.debug("No current table or data")
             return
 
         selected_ranges = self.table_widget.selectedRanges()
         if not selected_ranges:
+            logger.debug("No selection")
             return
+
+        logger.debug(f"Processing {len(selected_ranges)} selection range(s)")
 
         from PySide6.QtWidgets import QTableWidgetSelectionRange
 
         all_changes = []
 
         for sel_range in selected_ranges:
+            logger.debug(f"Selection range: rows {sel_range.topRow()}-{sel_range.bottomRow()}, cols {sel_range.leftColumn()}-{sel_range.rightColumn()}")
+
             # For each row in the selection
             for row in range(sel_range.topRow(), sel_range.bottomRow() + 1):
                 # Collect data cells in this row
@@ -1312,31 +1355,52 @@ class TableViewer(QWidget):
                         except ValueError:
                             continue
 
+                logger.debug(f"Row {row}: found {len(cells)} data cells")
+
                 # Need at least 2 cells to interpolate
                 if len(cells) < 2:
+                    logger.debug(f"Row {row}: skipping (need at least 2 cells)")
                     continue
 
                 # Get first and last values
                 first_col, first_val, first_coords = cells[0]
                 last_col, last_val, last_coords = cells[-1]
 
-                # If only 2 cells, nothing to interpolate between them
-                if len(cells) == 2 and last_col - first_col == 1:
+                logger.debug(f"Row {row}: first cell at col {first_col} = {first_val}, last cell at col {last_col} = {last_val}")
+
+                # If first and last are the same column, can't interpolate horizontally
+                if last_col == first_col:
+                    logger.debug(f"Row {row}: skipping (first and last on same column)")
                     continue
 
-                # Calculate linear interpolation for columns between first and last
-                if last_col == first_col:
-                    continue  # Same column, can't interpolate horizontally
+                # If only 2 adjacent cells, nothing between them to interpolate
+                if len(cells) == 2 and last_col - first_col == 1:
+                    logger.debug(f"Row {row}: skipping (only 2 adjacent cells, nothing between)")
+                    continue
 
-                for i in range(1, len(cells) - 1):
-                    col, old_val, coords = cells[i]
+                # Interpolate ALL cells between first and last
+                cells_interpolated = 0
+                for col in range(first_col + 1, last_col):
+                    # Get the cell at this position
+                    item = self.table_widget.item(row, col)
+                    if not item or item.data(Qt.UserRole) is None:
+                        logger.debug(f"Row {row}, col {col}: skipping (not a data cell)")
+                        continue
+
+                    coords = item.data(Qt.UserRole)
+
+                    # Get current value
+                    try:
+                        old_val = float(item.text())
+                    except ValueError:
+                        logger.debug(f"Row {row}, col {col}: skipping (can't parse value)")
+                        continue
+
                     # Linear interpolation based on position
                     t = (col - first_col) / (last_col - first_col)
                     new_val = first_val + t * (last_val - first_val)
 
                     if abs(new_val - old_val) > 1e-9:  # Only if changed
-                        # Update cell
-                        item = self.table_widget.item(row, col)
                         old_raw = self.current_data['values'][coords]
 
                         # Convert to raw and back to ensure consistency
@@ -1353,17 +1417,27 @@ class TableViewer(QWidget):
 
                             all_changes.append((coords[0], coords[1] if len(coords) > 1 else 0,
                                               old_val, new_val, old_raw, new_raw))
+                            cells_interpolated += 1
+
+                logger.debug(f"Row {row}: interpolated {cells_interpolated} cells")
 
         if all_changes:
+            logger.info(f"Horizontal interpolation: updated {len(all_changes)} cells")
             self.bulk_changes.emit(all_changes)
+        else:
+            logger.debug("Horizontal interpolation: no changes made")
 
     def interpolate_2d(self):
         """2D bilinear interpolation for 3D tables (B key)"""
+        logger.debug("interpolate_2d() called")
+
         if not self.current_table or not self.current_data:
+            logger.debug("No current table or data")
             return
 
         # Only works for 3D tables
         if self.current_table.type != TableType.THREE_D:
+            logger.debug("Not a 3D table")
             QMessageBox.warning(
                 self,
                 "Invalid Operation",
@@ -1373,7 +1447,10 @@ class TableViewer(QWidget):
 
         selected_ranges = self.table_widget.selectedRanges()
         if not selected_ranges:
+            logger.debug("No selection")
             return
+
+        logger.debug(f"Processing {len(selected_ranges)} selection range(s)")
 
         from PySide6.QtWidgets import QTableWidgetSelectionRange
 
@@ -1385,8 +1462,11 @@ class TableViewer(QWidget):
             left_col = sel_range.leftColumn()
             right_col = sel_range.rightColumn()
 
+            logger.debug(f"Selection range: rows {top_row}-{bottom_row}, cols {left_col}-{right_col}")
+
             # Need at least 2x2 selection
             if (bottom_row - top_row < 1) or (right_col - left_col < 1):
+                logger.debug("Selection too small (need at least 2x2)")
                 continue
 
             # Get corner values
@@ -1405,8 +1485,11 @@ class TableViewer(QWidget):
             v01 = get_corner_value(bottom_row, left_col)   # Bottom-left
             v11 = get_corner_value(bottom_row, right_col)  # Bottom-right
 
+            logger.debug(f"Corner values: TL={v00}, TR={v10}, BL={v01}, BR={v11}")
+
             # All corners must have values
             if None in (v00, v10, v01, v11):
+                logger.debug("Missing corner value(s), skipping this selection")
                 continue
 
             # Apply bilinear interpolation to all cells in the selection
@@ -1462,4 +1545,7 @@ class TableViewer(QWidget):
                                               old_val, new_val, old_raw, new_raw))
 
         if all_changes:
+            logger.info(f"2D bilinear interpolation: updated {len(all_changes)} cells")
             self.bulk_changes.emit(all_changes)
+        else:
+            logger.debug("2D bilinear interpolation: no changes made")
