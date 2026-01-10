@@ -191,9 +191,11 @@ class TableDisplayHelper:
         try:
             rows, cols = values.shape
 
-            # Set up table dimensions (+2 for label row/col and value row/col)
+            # Set up table dimensions:
+            # Rows: +2 (row 0 for labels, row 1 for X-axis values, rows 2+ for data)
+            # Cols: +1 (col 0 for Y-axis values, cols 1+ for data)
             self.ctx.table_widget.setRowCount(rows + 2)
-            self.ctx.table_widget.setColumnCount(cols + 2)
+            self.ctx.table_widget.setColumnCount(cols + 1)
 
             # Hide Qt headers since we use cells for axes
             self.ctx.table_widget.horizontalHeader().setVisible(False)
@@ -223,40 +225,27 @@ class TableDisplayHelper:
             # Gray background color for label cells
             label_bg = QBrush(QColor(220, 220, 220))
 
-            # === Row 0: X-axis LABEL row (gray) ===
-            # Corner cell (0,0) - empty or could show table info
-            corner_item = QTableWidgetItem("")
-            corner_item.setFlags(corner_item.flags() & ~Qt.ItemIsEditable)
-            corner_item.setBackground(label_bg)
-            self.ctx.table_widget.setItem(0, 0, corner_item)
+            # === Row 0: X-axis LABEL row (gray) - label appears ONCE ===
+            # Cell (0,0) - Y-axis label (gray)
+            y_corner_item = QTableWidgetItem(y_label)
+            y_corner_item.setFlags(y_corner_item.flags() & ~Qt.ItemIsEditable)
+            y_corner_item.setBackground(label_bg)
+            self.ctx.table_widget.setItem(0, 0, y_corner_item)
 
-            # Cell (0,1) - Y-axis label in the Y-value column header position
-            y_label_header = QTableWidgetItem(y_label)
-            y_label_header.setFlags(y_label_header.flags() & ~Qt.ItemIsEditable)
-            y_label_header.setBackground(label_bg)
-            self.ctx.table_widget.setItem(0, 1, y_label_header)
-
-            # X-axis label repeated across row 0 (columns 2+)
-            for col in range(cols):
-                x_label_item = QTableWidgetItem(x_label)
-                x_label_item.setFlags(x_label_item.flags() & ~Qt.ItemIsEditable)
-                x_label_item.setBackground(label_bg)
-                self.ctx.table_widget.setItem(0, col + 2, x_label_item)
+            # Cell (0,1) - X-axis label (gray) - appears once here
+            x_label_item = QTableWidgetItem(x_label)
+            x_label_item.setFlags(x_label_item.flags() & ~Qt.ItemIsEditable)
+            x_label_item.setBackground(label_bg)
+            self.ctx.table_widget.setItem(0, 1, x_label_item)
 
             # === Row 1: X-axis VALUES row (colored) ===
-            # Cell (1,0) - Y-axis label in the label column
-            y_label_item = QTableWidgetItem(y_label)
-            y_label_item.setFlags(y_label_item.flags() & ~Qt.ItemIsEditable)
-            y_label_item.setBackground(label_bg)
-            self.ctx.table_widget.setItem(1, 0, y_label_item)
+            # Cell (1,0) - empty gray cell
+            empty_item = QTableWidgetItem("")
+            empty_item.setFlags(empty_item.flags() & ~Qt.ItemIsEditable)
+            empty_item.setBackground(label_bg)
+            self.ctx.table_widget.setItem(1, 0, empty_item)
 
-            # Cell (1,1) - empty corner between Y-values and X-values
-            corner2_item = QTableWidgetItem("")
-            corner2_item.setFlags(corner2_item.flags() & ~Qt.ItemIsEditable)
-            corner2_item.setBackground(label_bg)
-            self.ctx.table_widget.setItem(1, 1, corner2_item)
-
-            # X-axis values in row 1 (columns 2+) with gradient
+            # X-axis values in row 1 (columns 1+) with gradient
             if display_x_axis is not None and len(display_x_axis) == cols:
                 x_min, x_max = np.min(display_x_axis), np.max(display_x_axis)
                 for col in range(cols):
@@ -270,25 +259,19 @@ class TableDisplayHelper:
                     x_item.setData(Qt.UserRole, ('x_axis', data_idx))
                     if self.ctx.read_only:
                         x_item.setFlags(x_item.flags() & ~Qt.ItemIsEditable)
-                    self.ctx.table_widget.setItem(1, col + 2, x_item)
+                    self.ctx.table_widget.setItem(1, col + 1, x_item)
             else:
                 for col in range(cols):
                     x_item = QTableWidgetItem(str(col))
                     x_item.setFlags(x_item.flags() & ~Qt.ItemIsEditable)
                     x_item.setBackground(label_bg)
-                    self.ctx.table_widget.setItem(1, col + 2, x_item)
+                    self.ctx.table_widget.setItem(1, col + 1, x_item)
 
-            # === Column 0 & 1: Y-axis LABEL and VALUES (rows 2+) ===
+            # === Column 0: Y-axis VALUES (rows 2+) ===
             if display_y_axis is not None and len(display_y_axis) == rows:
                 y_min, y_max = np.min(display_y_axis), np.max(display_y_axis)
                 for row in range(rows):
-                    # Col 0: Y-axis label (gray)
-                    y_lbl_item = QTableWidgetItem(y_label)
-                    y_lbl_item.setFlags(y_lbl_item.flags() & ~Qt.ItemIsEditable)
-                    y_lbl_item.setBackground(label_bg)
-                    self.ctx.table_widget.setItem(row + 2, 0, y_lbl_item)
-
-                    # Col 1: Y-axis value (colored)
+                    # Col 0: Y-axis value (colored)
                     y_val_item = QTableWidgetItem(self.format_value(display_y_axis[row], y_fmt))
                     if y_max != y_min:
                         ratio = (display_y_axis[row] - y_min) / (y_max - y_min)
@@ -299,22 +282,16 @@ class TableDisplayHelper:
                     y_val_item.setData(Qt.UserRole, ('y_axis', data_idx))
                     if self.ctx.read_only:
                         y_val_item.setFlags(y_val_item.flags() & ~Qt.ItemIsEditable)
-                    self.ctx.table_widget.setItem(row + 2, 1, y_val_item)
+                    self.ctx.table_widget.setItem(row + 2, 0, y_val_item)
             else:
                 for row in range(rows):
-                    # Col 0: Y-axis label (gray)
-                    y_lbl_item = QTableWidgetItem(y_label)
-                    y_lbl_item.setFlags(y_lbl_item.flags() & ~Qt.ItemIsEditable)
-                    y_lbl_item.setBackground(label_bg)
-                    self.ctx.table_widget.setItem(row + 2, 0, y_lbl_item)
-
-                    # Col 1: Row index (gray, no axis data)
+                    # Col 0: Row index (gray, no axis data)
                     y_val_item = QTableWidgetItem(str(row))
                     y_val_item.setFlags(y_val_item.flags() & ~Qt.ItemIsEditable)
                     y_val_item.setBackground(label_bg)
-                    self.ctx.table_widget.setItem(row + 2, 1, y_val_item)
+                    self.ctx.table_widget.setItem(row + 2, 0, y_val_item)
 
-            # === Data cells (rows 2+, cols 2+) ===
+            # === Data cells (rows 2+, cols 1+) ===
             for row in range(rows):
                 for col in range(cols):
                     value_item = QTableWidgetItem(self.format_value(display_values[row, col], value_fmt))
@@ -325,7 +302,7 @@ class TableDisplayHelper:
                     value_item.setData(Qt.UserRole, (data_row, data_col))
                     if self.ctx.read_only:
                         value_item.setFlags(value_item.flags() & ~Qt.ItemIsEditable)
-                    self.ctx.table_widget.setItem(row + 2, col + 2, value_item)
+                    self.ctx.table_widget.setItem(row + 2, col + 1, value_item)
         finally:
             self.ctx.editing_in_progress = False
 
@@ -334,18 +311,17 @@ class TableDisplayHelper:
 
     def _apply_uniform_column_width_3d(self):
         """
-        Apply uniform width to DATA columns only (excluding Y-axis label col 0 and Y-axis values col 1).
+        Apply uniform width to DATA columns only (excluding Y-axis values col 0).
         For 3D tables with ECUFlash layout:
-        - Col 0: Y-axis label (resize to contents)
-        - Col 1: Y-axis values (resize to contents)
-        - Col 2+: Data columns (uniform width)
+        - Col 0: Y-axis values (resize to contents)
+        - Col 1+: Data columns (uniform width)
         """
         # First, let Qt calculate optimal widths for all columns
         self.ctx.table_widget.resizeColumnsToContents()
 
-        # Find the maximum width among DATA columns only (skip columns 0 and 1)
+        # Find the maximum width among DATA columns only (skip column 0)
         max_width = 0
-        for col in range(2, self.ctx.table_widget.columnCount()):
+        for col in range(1, self.ctx.table_widget.columnCount()):
             width = self.ctx.table_widget.columnWidth(col)
             if width > max_width:
                 max_width = width
@@ -353,16 +329,14 @@ class TableDisplayHelper:
         # Apply the maximum width to DATA columns only
         if max_width > 0:
             header = self.ctx.table_widget.horizontalHeader()
-            # Set column 0 (Y-axis label) to ResizeToContents
+            # Set column 0 (Y-axis values) to ResizeToContents
             header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-            # Set column 1 (Y-axis values) to ResizeToContents
-            header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
-            # Set data columns (2+) to Fixed with uniform width
-            for col in range(2, self.ctx.table_widget.columnCount()):
+            # Set data columns (1+) to Fixed with uniform width
+            for col in range(1, self.ctx.table_widget.columnCount()):
                 header.setSectionResizeMode(col, QHeaderView.Fixed)
                 self.ctx.table_widget.setColumnWidth(col, max_width)
 
-            logger.debug(f"Applied uniform width {max_width}px to {self.ctx.table_widget.columnCount() - 2} data columns")
+            logger.debug(f"Applied uniform width {max_width}px to {self.ctx.table_widget.columnCount() - 1} data columns")
 
     def _get_axis_label(self, table: Table, axis_type: AxisType) -> str:
         """
