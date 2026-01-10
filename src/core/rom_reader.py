@@ -13,6 +13,7 @@ import logging
 from simpleeval import simple_eval
 
 from .rom_definition import RomDefinition, Table, Scaling, TableType
+from .storage_types import STORAGE_TYPE_FORMAT, DEFAULT_FORMAT_CHAR
 from .exceptions import (
     RomFileNotFoundError,
     RomReadError,
@@ -196,19 +197,7 @@ class RomReader:
         # Determine struct format
         endian_char = '>' if scaling.endian == 'big' else '<'
 
-        # Map storage types to struct format characters
-        type_map = {
-            'uint8': 'B',
-            'int8': 'b',
-            'uint16': 'H',
-            'int16': 'h',
-            'uint32': 'I',
-            'int32': 'i',
-            'float': 'f',
-            'double': 'd',
-        }
-
-        format_char = type_map.get(scaling.storagetype.lower(), 'f')
+        format_char = STORAGE_TYPE_FORMAT.get(scaling.storagetype.lower(), DEFAULT_FORMAT_CHAR)
         format_string = f"{endian_char}{count}{format_char}"
 
         # Unpack binary data
@@ -342,13 +331,7 @@ class RomReader:
         bytes_per_elem = scaling.bytes_per_element
         endian_char = '>' if scaling.endian == 'big' else '<'
 
-        type_map = {
-            'uint8': 'B', 'int8': 'b',
-            'uint16': 'H', 'int16': 'h',
-            'uint32': 'I', 'int32': 'i',
-            'float': 'f', 'double': 'd',
-        }
-        format_char = type_map.get(scaling.storagetype.lower(), 'f')
+        format_char = STORAGE_TYPE_FORMAT.get(scaling.storagetype.lower(), DEFAULT_FORMAT_CHAR)
         format_string = f"{endian_char}{len(raw_values)}{format_char}"
 
         try:
@@ -426,13 +409,7 @@ class RomReader:
         address = table.address_int + (linear_index * bytes_per_elem)
         endian_char = '>' if scaling.endian == 'big' else '<'
 
-        type_map = {
-            'uint8': 'B', 'int8': 'b',
-            'uint16': 'H', 'int16': 'h',
-            'uint32': 'I', 'int32': 'i',
-            'float': 'f', 'double': 'd',
-        }
-        format_char = type_map.get(scaling.storagetype.lower(), 'f')
+        format_char = STORAGE_TYPE_FORMAT.get(scaling.storagetype.lower(), DEFAULT_FORMAT_CHAR)
         format_string = f"{endian_char}{format_char}"
 
         try:

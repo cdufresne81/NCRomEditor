@@ -57,3 +57,13 @@ desktop.ini
 htmlcov/
 coverage.xml
 .tox/
+
+# Debug and utility scripts
+debug_*.py
+*_debug.py
+test_*.sh
+run.sh
+run_with_logging.sh
+
+# Generated output files
+repomix-output.xml

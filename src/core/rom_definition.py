@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from typing import Optional, Dict, List
 from enum import Enum
 
+from .storage_types import STORAGE_TYPE_BYTES, DEFAULT_BYTE_SIZE
+
 
 class TableType(Enum):
     """Type of calibration table"""
@@ -68,17 +70,7 @@ class Scaling:
     @property
     def bytes_per_element(self) -> int:
         """Calculate bytes per element based on storage type"""
-        type_map = {
-            'uint8': 1,
-            'int8': 1,
-            'uint16': 2,
-            'int16': 2,
-            'uint32': 4,
-            'int32': 4,
-            'float': 4,
-            'double': 8,
-        }
-        return type_map.get(self.storagetype.lower(), 4)
+        return STORAGE_TYPE_BYTES.get(self.storagetype.lower(), DEFAULT_BYTE_SIZE)
 
     @property
     def is_float(self) -> bool:

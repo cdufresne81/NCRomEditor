@@ -77,33 +77,18 @@ class TableViewer(QWidget):
         # Connect to cell changed signal for editing
         self.table_widget.cellChanged.connect(self._on_cell_changed)
 
-        # Set up copy/paste shortcuts
+        # Set up copy/paste shortcuts (not in menu, widget-level only)
         copy_shortcut = QShortcut(QKeySequence.Copy, self.table_widget)
         copy_shortcut.activated.connect(self.copy_selection)
         paste_shortcut = QShortcut(QKeySequence.Paste, self.table_widget)
         paste_shortcut.activated.connect(self.paste_selection)
 
-        # Set up increment/decrement shortcuts
-        increment_shortcut = QShortcut(QKeySequence("+"), self.table_widget)
-        increment_shortcut.activated.connect(self.increment_selection)
-        decrement_shortcut = QShortcut(QKeySequence("-"), self.table_widget)
-        decrement_shortcut.activated.connect(self.decrement_selection)
-
-        # Set up set value shortcut
-        set_value_shortcut = QShortcut(QKeySequence("="), self.table_widget)
-        set_value_shortcut.activated.connect(self.set_value_selection)
-
-        # Set up select all shortcut
+        # Set up select all shortcut (not in menu, widget-level only)
         select_all_shortcut = QShortcut(QKeySequence.SelectAll, self.table_widget)
         select_all_shortcut.activated.connect(self.select_all_data)
 
-        # Set up interpolation shortcuts
-        v_shortcut = QShortcut(QKeySequence("V"), self.table_widget)
-        v_shortcut.activated.connect(self.interpolate_vertical)
-        h_shortcut = QShortcut(QKeySequence("H"), self.table_widget)
-        h_shortcut.activated.connect(self.interpolate_horizontal)
-        b_shortcut = QShortcut(QKeySequence("B"), self.table_widget)
-        b_shortcut.activated.connect(self.interpolate_2d)
+        # Note: All data manipulation shortcuts (+, -, *, =, V, H, B) are defined
+        # in TableViewerWindow menu to avoid duplicate shortcut conflicts
 
         layout.addWidget(self.table_widget)
 
@@ -1056,9 +1041,12 @@ class TableViewer(QWidget):
         if not self.current_table:
             return
 
-        # Get increment value (default: 1.0)
-        # TODO: Read from ROM metadata when implemented
+        # Get increment from scaling metadata if available
         increment = 1.0
+        if self.rom_definition and self.current_table.scaling:
+            scaling = self.rom_definition.get_scaling(self.current_table.scaling)
+            if scaling and scaling.inc:
+                increment = scaling.inc
 
         # Apply operation
         changes = self._apply_bulk_operation(
@@ -1075,9 +1063,12 @@ class TableViewer(QWidget):
         if not self.current_table:
             return
 
-        # Get decrement value (default: 1.0)
-        # TODO: Read from ROM metadata when implemented
+        # Get decrement from scaling metadata if available
         decrement = 1.0
+        if self.rom_definition and self.current_table.scaling:
+            scaling = self.rom_definition.get_scaling(self.current_table.scaling)
+            if scaling and scaling.inc:
+                decrement = scaling.inc
 
         # Apply operation
         changes = self._apply_bulk_operation(
@@ -1292,7 +1283,11 @@ class TableViewer(QWidget):
                     new_val = first_val + t * (last_val - first_val)
 
                     if abs(new_val - old_val) > 1e-9:  # Only if changed
-                        old_raw = self.current_data['values'][coords]
+                        # Get old raw value - unpack coords for proper numpy indexing
+                        if len(coords) == 2:
+                            old_raw = self.current_data['values'][coords[0], coords[1]]
+                        else:
+                            old_raw = self.current_data['values'][coords[0]]
 
                         # Convert to raw and back to ensure consistency
                         scaling = self.rom_definition.get_scaling(self.current_table.scaling)
@@ -1302,12 +1297,27 @@ class TableViewer(QWidget):
                             new_raw = converter.from_display(new_val)
                             new_val = converter.to_display(new_raw)
 
-                            # Update display and data
-                            item.setText(f"{new_val:.{self._get_precision()}f}")
-                            self.current_data['values'][coords] = new_raw
+                            # Update display and data (disable cell_changed signal during bulk operation)
+                            self._editing_in_progress = True
+                            try:
+                                value_fmt = self._get_value_format()
+                                item.setText(self._format_value(new_val, value_fmt))
+                                # Update display value in values array - unpack coords for proper numpy indexing
+                                if len(coords) == 2:
+                                    self.current_data['values'][coords[0], coords[1]] = new_val
+                                else:
+                                    self.current_data['values'][coords[0]] = new_val
+                                # Update cell color
+                                color = self._get_cell_color(new_val, self.current_data['values'],
+                                                            coords[0], coords[1] if len(coords) > 1 else 0)
+                                item.setBackground(QBrush(color))
+                            finally:
+                                self._editing_in_progress = False
 
-                            all_changes.append((coords[0], coords[1] if len(coords) > 1 else 0,
-                                              old_val, new_val, old_raw, new_raw))
+                            # Convert numpy types to Python native types for undo/redo
+                            change_tuple = (coords[0], coords[1] if len(coords) > 1 else 0,
+                                          float(old_val), float(new_val), float(old_raw), float(new_raw))
+                            all_changes.append(change_tuple)
                             cells_interpolated += 1
 
                 logger.debug(f"Column {col}: interpolated {cells_interpolated} cells")
@@ -1401,7 +1411,11 @@ class TableViewer(QWidget):
                     new_val = first_val + t * (last_val - first_val)
 
                     if abs(new_val - old_val) > 1e-9:  # Only if changed
-                        old_raw = self.current_data['values'][coords]
+                        # Get old raw value - unpack coords for proper numpy indexing
+                        if len(coords) == 2:
+                            old_raw = self.current_data['values'][coords[0], coords[1]]
+                        else:
+                            old_raw = self.current_data['values'][coords[0]]
 
                         # Convert to raw and back to ensure consistency
                         scaling = self.rom_definition.get_scaling(self.current_table.scaling)
@@ -1411,12 +1425,27 @@ class TableViewer(QWidget):
                             new_raw = converter.from_display(new_val)
                             new_val = converter.to_display(new_raw)
 
-                            # Update display and data
-                            item.setText(f"{new_val:.{self._get_precision()}f}")
-                            self.current_data['values'][coords] = new_raw
+                            # Update display and data (disable cell_changed signal during bulk operation)
+                            self._editing_in_progress = True
+                            try:
+                                value_fmt = self._get_value_format()
+                                item.setText(self._format_value(new_val, value_fmt))
+                                # Update display value in values array - unpack coords for proper numpy indexing
+                                if len(coords) == 2:
+                                    self.current_data['values'][coords[0], coords[1]] = new_val
+                                else:
+                                    self.current_data['values'][coords[0]] = new_val
+                                # Update cell color
+                                color = self._get_cell_color(new_val, self.current_data['values'],
+                                                            coords[0], coords[1] if len(coords) > 1 else 0)
+                                item.setBackground(QBrush(color))
+                            finally:
+                                self._editing_in_progress = False
 
-                            all_changes.append((coords[0], coords[1] if len(coords) > 1 else 0,
-                                              old_val, new_val, old_raw, new_raw))
+                            # Convert numpy types to Python native types for undo/redo
+                            change_tuple = (coords[0], coords[1] if len(coords) > 1 else 0,
+                                          float(old_val), float(new_val), float(old_raw), float(new_raw))
+                            all_changes.append(change_tuple)
                             cells_interpolated += 1
 
                 logger.debug(f"Row {row}: interpolated {cells_interpolated} cells")
@@ -1527,7 +1556,11 @@ class TableViewer(QWidget):
                         continue
 
                     if abs(new_val - old_val) > 1e-9:  # Only if changed
-                        old_raw = self.current_data['values'][coords]
+                        # Get old raw value - unpack coords for proper numpy indexing
+                        if len(coords) == 2:
+                            old_raw = self.current_data['values'][coords[0], coords[1]]
+                        else:
+                            old_raw = self.current_data['values'][coords[0]]
 
                         # Convert to raw and back to ensure consistency
                         scaling = self.rom_definition.get_scaling(self.current_table.scaling)
@@ -1537,12 +1570,27 @@ class TableViewer(QWidget):
                             new_raw = converter.from_display(new_val)
                             new_val = converter.to_display(new_raw)
 
-                            # Update display and data
-                            item.setText(f"{new_val:.{self._get_precision()}f}")
-                            self.current_data['values'][coords] = new_raw
+                            # Update display and data (disable cell_changed signal during bulk operation)
+                            self._editing_in_progress = True
+                            try:
+                                value_fmt = self._get_value_format()
+                                item.setText(self._format_value(new_val, value_fmt))
+                                # Update display value in values array - unpack coords for proper numpy indexing
+                                if len(coords) == 2:
+                                    self.current_data['values'][coords[0], coords[1]] = new_val
+                                else:
+                                    self.current_data['values'][coords[0]] = new_val
+                                # Update cell color
+                                color = self._get_cell_color(new_val, self.current_data['values'],
+                                                            coords[0], coords[1] if len(coords) > 1 else 0)
+                                item.setBackground(QBrush(color))
+                            finally:
+                                self._editing_in_progress = False
 
-                            all_changes.append((coords[0], coords[1] if len(coords) > 1 else 0,
-                                              old_val, new_val, old_raw, new_raw))
+                            # Convert numpy types to Python native types for undo/redo
+                            change_tuple = (coords[0], coords[1] if len(coords) > 1 else 0,
+                                          float(old_val), float(new_val), float(old_raw), float(new_raw))
+                            all_changes.append(change_tuple)
 
         if all_changes:
             logger.info(f"2D bilinear interpolation: updated {len(all_changes)} cells")

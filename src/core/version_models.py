@@ -2,12 +2,35 @@
 Version Control Data Models
 
 Dataclasses for representing changes, commits, and projects.
+
+Serialization Pattern:
+- All serializable classes implement to_dict() and from_dict()
+- Required fields use direct dict access (raises KeyError if missing)
+- Optional/default fields use .get() with defaults
+- Nested objects delegate to their own from_dict()
+- datetime fields use .isoformat() / datetime.fromisoformat()
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Protocol, TypeVar, runtime_checkable
 from datetime import datetime
 import uuid
+
+T = TypeVar('T')
+
+
+@runtime_checkable
+class Serializable(Protocol):
+    """Protocol for JSON-serializable dataclasses"""
+
+    def to_dict(self) -> dict:
+        """Serialize to dictionary for JSON storage"""
+        ...
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'Serializable':
+        """Deserialize from dictionary"""
+        ...
 
 
 @dataclass
