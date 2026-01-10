@@ -1,0 +1,292 @@
+"""
+Table Operations Helper
+
+Handles bulk data operations for TableViewer.
+"""
+
+import logging
+from typing import TYPE_CHECKING, List, Tuple, Callable
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QBrush
+from PySide6.QtWidgets import QDialog, QTableWidgetSelectionRange
+
+from ...core.rom_definition import TableType
+from .context import TableViewerContext
+
+if TYPE_CHECKING:
+    from .display import TableDisplayHelper
+    from .editing import TableEditHelper
+
+logger = logging.getLogger(__name__)
+
+
+class TableOperationsHelper:
+    """Helper class for bulk data operations"""
+
+    def __init__(self, ctx: TableViewerContext, display: 'TableDisplayHelper', edit: 'TableEditHelper'):
+        self.ctx = ctx
+        self.display = display
+        self.edit = edit
+
+    def apply_bulk_operation(self, operation_fn: Callable[[float], float],
+                             operation_name: str) -> List[Tuple]:
+        """
+        Apply an operation to all selected data cells
+
+        Args:
+            operation_fn: Function(old_value) -> new_value
+            operation_name: Description for logging
+
+        Returns:
+            List of (row, col, old_value, new_value, old_raw, new_raw) tuples
+        """
+        if self.ctx.read_only or not self.ctx.current_table or not self.ctx.current_data:
+            return []
+
+        # Get selected ranges
+        selected = self.ctx.table_widget.selectedRanges()
+        if not selected:
+            logger.debug(f"{operation_name}: No selection")
+            return []
+
+        # Get bounding rectangle of selection
+        min_row = min(r.topRow() for r in selected)
+        max_row = max(r.bottomRow() for r in selected)
+        min_col = min(r.leftColumn() for r in selected)
+        max_col = max(r.rightColumn() for r in selected)
+
+        changes_made = []
+
+        # Iterate through selection
+        for row in range(min_row, max_row + 1):
+            for col in range(min_col, max_col + 1):
+                item = self.ctx.table_widget.item(row, col)
+                if not item:
+                    continue
+
+                # Check if this is a data cell (not axis)
+                data_indices = item.data(Qt.UserRole)
+                if data_indices is None:
+                    continue  # Skip axis cells
+
+                data_row, data_col = data_indices
+
+                # Get current value
+                values = self.ctx.current_data['values']
+                if values.ndim == 1:
+                    old_value = float(values[data_row])
+                else:
+                    old_value = float(values[data_row, data_col])
+
+                # Apply operation
+                try:
+                    new_value = float(operation_fn(old_value))
+                except Exception as e:
+                    logger.warning(f"Operation failed for cell [{data_row},{data_col}]: {e}")
+                    continue
+
+                # Skip if no change
+                if abs(new_value - old_value) < 1e-10:
+                    continue
+
+                # Validate against scaling if available
+                if self.ctx.rom_definition and self.ctx.current_table.scaling:
+                    scaling = self.ctx.rom_definition.get_scaling(self.ctx.current_table.scaling)
+                    if scaling:
+                        if scaling.min is not None and new_value < scaling.min:
+                            logger.warning(f"Value {new_value} below minimum {scaling.min}, skipping")
+                            continue
+                        if scaling.max is not None and new_value > scaling.max:
+                            logger.warning(f"Value {new_value} above maximum {scaling.max}, skipping")
+                            continue
+
+                # Convert to raw values
+                old_raw = self.edit.display_to_raw(old_value)
+                new_raw = self.edit.display_to_raw(new_value)
+                if old_raw is None or new_raw is None:
+                    continue
+
+                # Update internal data
+                if values.ndim == 1:
+                    self.ctx.current_data['values'][data_row] = new_value
+                else:
+                    self.ctx.current_data['values'][data_row, data_col] = new_value
+
+                # Update cell display
+                self.ctx.editing_in_progress = True
+                try:
+                    value_fmt = self.display.get_value_format()
+                    item.setText(self.display.format_value(new_value, value_fmt))
+                    color = self.display.get_cell_color(new_value, self.ctx.current_data['values'], data_row, data_col)
+                    item.setBackground(QBrush(color))
+                finally:
+                    self.ctx.editing_in_progress = False
+
+                # Record change
+                changes_made.append((data_row, data_col, old_value, new_value, old_raw, new_raw))
+
+        logger.debug(f"{operation_name}: Modified {len(changes_made)} cell(s)")
+        return changes_made
+
+    def increment_selection(self):
+        """Increment selected cells by fixed amount"""
+        if not self.ctx.current_table:
+            return
+
+        # Get increment from scaling metadata if available
+        increment = 1.0
+        if self.ctx.rom_definition and self.ctx.current_table.scaling:
+            scaling = self.ctx.rom_definition.get_scaling(self.ctx.current_table.scaling)
+            if scaling and scaling.inc:
+                increment = scaling.inc
+
+        # Apply operation
+        changes = self.apply_bulk_operation(
+            lambda v: v + increment,
+            f"Increment by {increment}"
+        )
+
+        # Emit bulk changes signal
+        if changes:
+            self.ctx.viewer.bulk_changes.emit(changes)
+
+    def decrement_selection(self):
+        """Decrement selected cells by fixed amount"""
+        if not self.ctx.current_table:
+            return
+
+        # Get decrement from scaling metadata if available
+        decrement = 1.0
+        if self.ctx.rom_definition and self.ctx.current_table.scaling:
+            scaling = self.ctx.rom_definition.get_scaling(self.ctx.current_table.scaling)
+            if scaling and scaling.inc:
+                decrement = scaling.inc
+
+        # Apply operation
+        changes = self.apply_bulk_operation(
+            lambda v: v - decrement,
+            f"Decrement by {decrement}"
+        )
+
+        # Emit bulk changes signal
+        if changes:
+            self.ctx.viewer.bulk_changes.emit(changes)
+
+    def add_to_selection(self):
+        """Add custom value to selected cells (dialog)"""
+        logger.debug("add_to_selection() called")
+        if not self.ctx.current_table:
+            logger.debug("No current table, returning")
+            return
+
+        from ..data_operation_dialogs import AddValueDialog
+
+        logger.debug("Creating AddValueDialog")
+        dialog = AddValueDialog(self.ctx.viewer)
+        logger.debug("Showing dialog")
+        result = dialog.exec()
+        logger.debug(f"Dialog result: {result}")
+        if result == QDialog.Accepted:
+            value = dialog.get_value()
+
+            # Apply operation
+            changes = self.apply_bulk_operation(
+                lambda v: v + value,
+                f"Add {value}"
+            )
+
+            # Emit bulk changes signal
+            if changes:
+                self.ctx.viewer.bulk_changes.emit(changes)
+
+    def multiply_selection(self):
+        """Multiply selected cells by factor (dialog)"""
+        logger.debug("multiply_selection() called")
+        if not self.ctx.current_table:
+            logger.debug("No current table, returning")
+            return
+
+        from ..data_operation_dialogs import MultiplyDialog
+
+        logger.debug("Creating MultiplyDialog")
+        dialog = MultiplyDialog(self.ctx.viewer)
+        logger.debug("Showing dialog")
+        result = dialog.exec()
+        logger.debug(f"Dialog result: {result}")
+        if result == QDialog.Accepted:
+            factor = dialog.get_factor()
+
+            # Apply operation
+            changes = self.apply_bulk_operation(
+                lambda v: v * factor,
+                f"Multiply by {factor}"
+            )
+
+            # Emit bulk changes signal
+            if changes:
+                self.ctx.viewer.bulk_changes.emit(changes)
+
+    def set_value_selection(self):
+        """Set all selected cells to value (dialog)"""
+        if not self.ctx.current_table:
+            return
+
+        from ..data_operation_dialogs import SetValueDialog
+
+        # Count selected cells for preview
+        selected = self.ctx.table_widget.selectedRanges()
+        if not selected:
+            return
+
+        cell_count = sum(
+            (r.bottomRow() - r.topRow() + 1) * (r.rightColumn() - r.leftColumn() + 1)
+            for r in selected
+        )
+
+        dialog = SetValueDialog(cell_count, self.ctx.viewer)
+        if dialog.exec() == QDialog.Accepted:
+            value = dialog.get_value()
+
+            # Apply operation
+            changes = self.apply_bulk_operation(
+                lambda v: value,
+                f"Set to {value}"
+            )
+
+            # Emit bulk changes signal
+            if changes:
+                self.ctx.viewer.bulk_changes.emit(changes)
+
+    def select_all_data(self):
+        """Select all data cells (excluding axes)"""
+        if not self.ctx.current_table:
+            return
+
+        table_type = self.ctx.current_table.type
+
+        if table_type == TableType.ONE_D:
+            # Single cell at (0, 0)
+            selection = QTableWidgetSelectionRange(0, 0, 0, 0)
+            self.ctx.table_widget.setRangeSelected(selection, True)
+            self.ctx.table_widget.setCurrentCell(0, 0)
+
+        elif table_type == TableType.TWO_D:
+            # Select value column (skip Y axis in column 0)
+            num_rows = self.ctx.table_widget.rowCount()
+            if num_rows > 0:
+                # Column 1 is the value column
+                selection = QTableWidgetSelectionRange(0, 1, num_rows - 1, 1)
+                self.ctx.table_widget.setRangeSelected(selection, True)
+                self.ctx.table_widget.setCurrentCell(0, 1)
+
+        elif table_type == TableType.THREE_D:
+            # Select data region (skip X axis in row 0, Y axis in column 0)
+            num_rows = self.ctx.table_widget.rowCount()
+            num_cols = self.ctx.table_widget.columnCount()
+
+            if num_rows > 1 and num_cols > 1:
+                # Data starts at row 1, col 1
+                selection = QTableWidgetSelectionRange(1, 1, num_rows - 1, num_cols - 1)
+                self.ctx.table_widget.setRangeSelected(selection, True)
+                self.ctx.table_widget.setCurrentCell(1, 1)
