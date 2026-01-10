@@ -20,9 +20,9 @@ When ending a work session, complete ALL steps below. Work is NOT complete until
    git status  # MUST show "up to date with origin"
    ```
 
-4. **Verify** - All changes committed AND pushed
+3. **Verify** - All changes committed AND pushed
 
-5. **Hand off** - Provide context summary for next session
+4. **Hand off** - Provide context summary for next session
 
 **Rules:**
 - Work is NOT complete until `git push` succeeds
