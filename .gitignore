@@ -58,12 +58,10 @@ htmlcov/
 coverage.xml
 .tox/
 
-# Debug and utility scripts
+# Debug scripts (not launchers)
 debug_*.py
 *_debug.py
-test_*.sh
-run.sh
-run_with_logging.sh
+*_debug.log
 
 # Generated output files
 repomix-output.xml
