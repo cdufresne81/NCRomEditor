@@ -173,7 +173,16 @@ class TableDisplayHelper:
             self.ctx.editing_in_progress = False
 
     def _display_3d(self, values: np.ndarray, x_axis: np.ndarray, y_axis: np.ndarray):
-        """Display 3D table (2D grid with X and Y axes)"""
+        """
+        Display 3D table (2D grid with X and Y axes) - ECUFlash style layout
+
+        Layout:
+        - Row 0: X-axis LABEL (gray background)
+        - Row 1: X-axis VALUES (colored gradient)
+        - Col 0: Y-axis LABEL (gray background)
+        - Col 1: Y-axis VALUES (colored gradient)
+        - Data starts at (row 2, col 2)
+        """
         if values.ndim != 2:
             self._display_1d(values.flatten())
             return
@@ -182,12 +191,11 @@ class TableDisplayHelper:
         try:
             rows, cols = values.shape
 
-            # Set up table dimensions (+1 for axis row and column)
-            # Row 0: X axis values, Col 0: Y axis values
-            self.ctx.table_widget.setRowCount(rows + 1)
-            self.ctx.table_widget.setColumnCount(cols + 1)
+            # Set up table dimensions (+2 for label row/col and value row/col)
+            self.ctx.table_widget.setRowCount(rows + 2)
+            self.ctx.table_widget.setColumnCount(cols + 2)
 
-            # Hide headers since we use cells for axes
+            # Hide Qt headers since we use cells for axes
             self.ctx.table_widget.horizontalHeader().setVisible(False)
 
             # Get axis labels with units
@@ -212,108 +220,149 @@ class TableDisplayHelper:
             if flipx:
                 display_values = display_values[:, ::-1]
 
-            # Top-left corner cell (axis labels)
-            corner_item = QTableWidgetItem(f"{y_label}\\{x_label}")
+            # Gray background color for label cells
+            label_bg = QBrush(QColor(220, 220, 220))
+
+            # === Row 0: X-axis LABEL row (gray) ===
+            # Corner cell (0,0) - empty or could show table info
+            corner_item = QTableWidgetItem("")
             corner_item.setFlags(corner_item.flags() & ~Qt.ItemIsEditable)
-            corner_item.setBackground(QBrush(QColor(240, 240, 240)))
+            corner_item.setBackground(label_bg)
             self.ctx.table_widget.setItem(0, 0, corner_item)
 
-            # Row 0: X axis values with gradient
+            # Cell (0,1) - Y-axis label in the Y-value column header position
+            y_label_header = QTableWidgetItem(y_label)
+            y_label_header.setFlags(y_label_header.flags() & ~Qt.ItemIsEditable)
+            y_label_header.setBackground(label_bg)
+            self.ctx.table_widget.setItem(0, 1, y_label_header)
+
+            # X-axis label repeated across row 0 (columns 2+)
+            for col in range(cols):
+                x_label_item = QTableWidgetItem(x_label)
+                x_label_item.setFlags(x_label_item.flags() & ~Qt.ItemIsEditable)
+                x_label_item.setBackground(label_bg)
+                self.ctx.table_widget.setItem(0, col + 2, x_label_item)
+
+            # === Row 1: X-axis VALUES row (colored) ===
+            # Cell (1,0) - Y-axis label in the label column
+            y_label_item = QTableWidgetItem(y_label)
+            y_label_item.setFlags(y_label_item.flags() & ~Qt.ItemIsEditable)
+            y_label_item.setBackground(label_bg)
+            self.ctx.table_widget.setItem(1, 0, y_label_item)
+
+            # Cell (1,1) - empty corner between Y-values and X-values
+            corner2_item = QTableWidgetItem("")
+            corner2_item.setFlags(corner2_item.flags() & ~Qt.ItemIsEditable)
+            corner2_item.setBackground(label_bg)
+            self.ctx.table_widget.setItem(1, 1, corner2_item)
+
+            # X-axis values in row 1 (columns 2+) with gradient
             if display_x_axis is not None and len(display_x_axis) == cols:
                 x_min, x_max = np.min(display_x_axis), np.max(display_x_axis)
                 for col in range(cols):
                     x_item = QTableWidgetItem(self.format_value(display_x_axis[col], x_fmt))
-                    # Apply gradient based on X axis values
                     if x_max != x_min:
                         ratio = (display_x_axis[col] - x_min) / (x_max - x_min)
                     else:
                         ratio = 0.5
                     x_item.setBackground(QBrush(self.ratio_to_color(ratio)))
-                    # Store axis identification: ('x_axis', data_index)
-                    # Account for flip when storing the actual data index
                     data_idx = (cols - 1 - col) if flipx else col
                     x_item.setData(Qt.UserRole, ('x_axis', data_idx))
                     if self.ctx.read_only:
                         x_item.setFlags(x_item.flags() & ~Qt.ItemIsEditable)
-                    self.ctx.table_widget.setItem(0, col + 1, x_item)
+                    self.ctx.table_widget.setItem(1, col + 2, x_item)
             else:
                 for col in range(cols):
                     x_item = QTableWidgetItem(str(col))
-                    x_item.setFlags(x_item.flags() & ~Qt.ItemIsEditable)  # No axis data, not editable
-                    x_item.setBackground(QBrush(QColor(240, 240, 240)))
-                    self.ctx.table_widget.setItem(0, col + 1, x_item)
+                    x_item.setFlags(x_item.flags() & ~Qt.ItemIsEditable)
+                    x_item.setBackground(label_bg)
+                    self.ctx.table_widget.setItem(1, col + 2, x_item)
 
-            # Column 0: Y axis values with gradient (starting at row 1)
+            # === Column 0 & 1: Y-axis LABEL and VALUES (rows 2+) ===
             if display_y_axis is not None and len(display_y_axis) == rows:
                 y_min, y_max = np.min(display_y_axis), np.max(display_y_axis)
                 for row in range(rows):
-                    y_item = QTableWidgetItem(self.format_value(display_y_axis[row], y_fmt))
-                    # Apply gradient based on Y axis values
+                    # Col 0: Y-axis label (gray)
+                    y_lbl_item = QTableWidgetItem(y_label)
+                    y_lbl_item.setFlags(y_lbl_item.flags() & ~Qt.ItemIsEditable)
+                    y_lbl_item.setBackground(label_bg)
+                    self.ctx.table_widget.setItem(row + 2, 0, y_lbl_item)
+
+                    # Col 1: Y-axis value (colored)
+                    y_val_item = QTableWidgetItem(self.format_value(display_y_axis[row], y_fmt))
                     if y_max != y_min:
                         ratio = (display_y_axis[row] - y_min) / (y_max - y_min)
                     else:
                         ratio = 0.5
-                    y_item.setBackground(QBrush(self.ratio_to_color(ratio)))
-                    # Store axis identification: ('y_axis', data_index)
-                    # Account for flip when storing the actual data index
+                    y_val_item.setBackground(QBrush(self.ratio_to_color(ratio)))
                     data_idx = (rows - 1 - row) if flipy else row
-                    y_item.setData(Qt.UserRole, ('y_axis', data_idx))
+                    y_val_item.setData(Qt.UserRole, ('y_axis', data_idx))
                     if self.ctx.read_only:
-                        y_item.setFlags(y_item.flags() & ~Qt.ItemIsEditable)
-                    self.ctx.table_widget.setItem(row + 1, 0, y_item)
+                        y_val_item.setFlags(y_val_item.flags() & ~Qt.ItemIsEditable)
+                    self.ctx.table_widget.setItem(row + 2, 1, y_val_item)
             else:
                 for row in range(rows):
-                    y_item = QTableWidgetItem(str(row))
-                    y_item.setFlags(y_item.flags() & ~Qt.ItemIsEditable)  # No axis data, not editable
-                    y_item.setBackground(QBrush(QColor(240, 240, 240)))
-                    self.ctx.table_widget.setItem(row + 1, 0, y_item)
+                    # Col 0: Y-axis label (gray)
+                    y_lbl_item = QTableWidgetItem(y_label)
+                    y_lbl_item.setFlags(y_lbl_item.flags() & ~Qt.ItemIsEditable)
+                    y_lbl_item.setBackground(label_bg)
+                    self.ctx.table_widget.setItem(row + 2, 0, y_lbl_item)
 
-            # Fill data values (starting at row 1, col 1)
+                    # Col 1: Row index (gray, no axis data)
+                    y_val_item = QTableWidgetItem(str(row))
+                    y_val_item.setFlags(y_val_item.flags() & ~Qt.ItemIsEditable)
+                    y_val_item.setBackground(label_bg)
+                    self.ctx.table_widget.setItem(row + 2, 1, y_val_item)
+
+            # === Data cells (rows 2+, cols 2+) ===
             for row in range(rows):
                 for col in range(cols):
                     value_item = QTableWidgetItem(self.format_value(display_values[row, col], value_fmt))
                     color = self.get_cell_color(display_values[row, col], values, row, col)
                     value_item.setBackground(QBrush(color))
-                    # Store the actual data indices (accounting for flip)
                     data_row = (rows - 1 - row) if flipy else row
                     data_col = (cols - 1 - col) if flipx else col
                     value_item.setData(Qt.UserRole, (data_row, data_col))
                     if self.ctx.read_only:
                         value_item.setFlags(value_item.flags() & ~Qt.ItemIsEditable)
-                    self.ctx.table_widget.setItem(row + 1, col + 1, value_item)
+                    self.ctx.table_widget.setItem(row + 2, col + 2, value_item)
         finally:
             self.ctx.editing_in_progress = False
 
-        # Apply uniform column width to data columns (excluding Y-axis column 0)
+        # Apply uniform column width to data columns
         self._apply_uniform_column_width_3d()
 
     def _apply_uniform_column_width_3d(self):
         """
-        Apply uniform width to DATA columns only (excluding Y-axis column 0).
-        For 3D tables, this ensures all data cells have the same width while
-        allowing the Y-axis column to size naturally based on its content.
+        Apply uniform width to DATA columns only (excluding Y-axis label col 0 and Y-axis values col 1).
+        For 3D tables with ECUFlash layout:
+        - Col 0: Y-axis label (resize to contents)
+        - Col 1: Y-axis values (resize to contents)
+        - Col 2+: Data columns (uniform width)
         """
         # First, let Qt calculate optimal widths for all columns
         self.ctx.table_widget.resizeColumnsToContents()
 
-        # Find the maximum width among DATA columns only (skip column 0 = Y-axis)
+        # Find the maximum width among DATA columns only (skip columns 0 and 1)
         max_width = 0
-        for col in range(1, self.ctx.table_widget.columnCount()):
+        for col in range(2, self.ctx.table_widget.columnCount()):
             width = self.ctx.table_widget.columnWidth(col)
             if width > max_width:
                 max_width = width
 
-        # Apply the maximum width to DATA columns only (not column 0)
+        # Apply the maximum width to DATA columns only
         if max_width > 0:
             header = self.ctx.table_widget.horizontalHeader()
-            # Set column 0 (Y-axis) to ResizeToContents
+            # Set column 0 (Y-axis label) to ResizeToContents
             header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-            # Set all other columns to Fixed with uniform width
-            for col in range(1, self.ctx.table_widget.columnCount()):
+            # Set column 1 (Y-axis values) to ResizeToContents
+            header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+            # Set data columns (2+) to Fixed with uniform width
+            for col in range(2, self.ctx.table_widget.columnCount()):
                 header.setSectionResizeMode(col, QHeaderView.Fixed)
                 self.ctx.table_widget.setColumnWidth(col, max_width)
 
-            logger.debug(f"Applied uniform width {max_width}px to {self.ctx.table_widget.columnCount() - 1} data columns")
+            logger.debug(f"Applied uniform width {max_width}px to {self.ctx.table_widget.columnCount() - 2} data columns")
 
     def _get_axis_label(self, table: Table, axis_type: AxisType) -> str:
         """
