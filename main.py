@@ -997,6 +997,20 @@ class MainWindow(QMainWindow):
         else:
             self.setWindowTitle(APP_NAME)
 
+        # Update table browser colors to show modified tables
+        self._update_modified_table_colors()
+
+    def _update_modified_table_colors(self):
+        """Update table browser to show modified tables in pink"""
+        # Get list of modified tables from change tracker
+        modified_tables = self.change_tracker.get_modified_tables()
+
+        # Update all open ROM documents' table browsers
+        for i in range(self.tab_widget.count()):
+            document = self.tab_widget.widget(i)
+            if hasattr(document, 'table_browser'):
+                document.table_browser.update_modified_tables(modified_tables)
+
     def _on_table_cell_changed(self, table, row: int, col: int,
                                old_value: float, new_value: float,
                                old_raw: float, new_raw: float):
