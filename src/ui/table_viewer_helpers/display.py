@@ -117,21 +117,19 @@ class TableDisplayHelper:
             self.ctx.editing_in_progress = False
 
     def _display_2d(self, values: np.ndarray, y_axis: np.ndarray):
-        """Display 2D table (1D array with Y axis)"""
-        # Hide axis labels (not used for 2D tables - Y axis is in the table)
-        self.ctx.viewer.x_axis_label.setVisible(False)
-        self.ctx.viewer.y_axis_label.setVisible(False)
-
+        """Display 2D table (1D array with Y axis) - ECUFlash style layout"""
         self.ctx.editing_in_progress = True
         try:
             num_values = len(values)
-            self.ctx.table_widget.horizontalHeader().setVisible(True)
+            self.ctx.table_widget.horizontalHeader().setVisible(False)
             self.ctx.table_widget.setRowCount(num_values)
             self.ctx.table_widget.setColumnCount(2)
 
-            # Get axis label with unit
+            # Get axis label with unit - display in separate rotated label (ECUFlash style)
             y_label = self._get_axis_label(self.ctx.current_table, AxisType.Y_AXIS)
-            self.ctx.table_widget.setHorizontalHeaderLabels([y_label, "Value"])
+            self.ctx.viewer.y_axis_label.setText(y_label)
+            self.ctx.viewer.y_axis_label.setVisible(True)
+            self.ctx.viewer.x_axis_label.setVisible(False)  # No X-axis for 2D tables
 
             # Get format specs
             y_fmt = self._get_axis_format(AxisType.Y_AXIS)
