@@ -87,6 +87,14 @@ class MainWindow(QMainWindow):
         # Get application settings
         self.settings = get_settings()
 
+        # Track modified cells across all ROMs (persists when tables are closed/reopened)
+        # Structure: {rom_path: {table_name: {(data_row, data_col), ...}, "table_name:x_axis": {idx, ...}}}
+        self.modified_cells = {}
+
+        # Store original table values when first loaded (for smart border removal on undo)
+        # Structure: {rom_path: {table_name: {"values": np.array, "x_axis": np.array, "y_axis": np.array}}}
+        self.original_table_values = {}
+
         # Project management
         self.project_manager = ProjectManager()
         self.change_tracker = ChangeTracker()
@@ -612,10 +620,28 @@ class MainWindow(QMainWindow):
             data = rom_reader.read_table_data(table)
 
             if data:
+                # Store original table values if this is the first time loading this table
+                if rom_path not in self.original_table_values:
+                    self.original_table_values[rom_path] = {}
+                if table.name not in self.original_table_values[rom_path]:
+                    import numpy as np
+                    # Deep copy the original values
+                    self.original_table_values[rom_path][table.name] = {
+                        "values": np.copy(data["values"]),
+                        "x_axis": np.copy(data["x_axis"]) if data.get("x_axis") is not None else None,
+                        "y_axis": np.copy(data["y_axis"]) if data.get("y_axis") is not None else None,
+                    }
+
+                # Initialize modified cells tracking for this ROM if needed
+                if rom_path not in self.modified_cells:
+                    self.modified_cells[rom_path] = {}
+
                 # Create and show new table viewer window
                 viewer_window = TableViewerWindow(
                     table, data, rom_reader.definition,
-                    rom_path=rom_path, parent=self
+                    rom_path=rom_path, parent=self,
+                    modified_cells_dict=self.modified_cells[rom_path],
+                    original_values_dict=self.original_table_values[rom_path]
                 )
 
                 # Connect cell_changed signal to change tracker

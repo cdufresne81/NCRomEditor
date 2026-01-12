@@ -47,7 +47,8 @@ class TableViewerWindow(QMainWindow):
     redo_requested = Signal()
 
     def __init__(self, table: Table, data: dict, rom_definition: RomDefinition,
-                 rom_path: str = None, parent=None):
+                 rom_path: str = None, parent=None,
+                 modified_cells_dict: dict = None, original_values_dict: dict = None):
         """
         Initialize table viewer window
 
@@ -57,6 +58,8 @@ class TableViewerWindow(QMainWindow):
             rom_definition: ROM definition containing scalings
             rom_path: Path to ROM file (for identifying duplicates)
             parent: Parent widget (optional)
+            modified_cells_dict: Shared dict for tracking modified cells (persists across window instances)
+            original_values_dict: Shared dict with original table values (for smart border removal)
         """
         super().__init__(parent)
 
@@ -77,8 +80,12 @@ class TableViewerWindow(QMainWindow):
         layout.setSpacing(0)
         central_widget.setLayout(layout)
 
-        # Create table viewer widget
-        self.viewer = TableViewer(rom_definition)
+        # Create table viewer widget with shared tracking dicts
+        self.viewer = TableViewer(
+            rom_definition,
+            modified_cells_dict=modified_cells_dict,
+            original_values_dict=original_values_dict
+        )
         layout.addWidget(self.viewer)
 
         # Connect cell_changed signal

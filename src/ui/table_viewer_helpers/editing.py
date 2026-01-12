@@ -193,6 +193,11 @@ class TableEditHelper:
         finally:
             self.ctx.editing_in_progress = False
 
+        # Check if value matches original and remove border if so (smart border removal on undo)
+        self.ctx.viewer._check_and_remove_border_if_original(
+            self.ctx.current_table.name, data_row, data_col, new_value
+        )
+
     def data_to_ui_coords(self, data_row: int, data_col: int) -> Tuple[Optional[int], Optional[int]]:
         """Convert data coordinates to UI table coordinates"""
         if not self.ctx.current_table:
@@ -369,6 +374,11 @@ class TableEditHelper:
                 item.setBackground(QBrush(color))
         finally:
             self.ctx.editing_in_progress = False
+
+        # Check if value matches original and remove border if so (smart border removal on undo)
+        self.ctx.viewer._check_and_remove_axis_border_if_original(
+            self.ctx.current_table.name, axis_type, data_idx, new_value
+        )
 
     def _axis_data_to_ui_coords(self, axis_type: str, data_idx: int) -> Tuple[Optional[int], Optional[int]]:
         """Convert axis data index to UI table coordinates"""

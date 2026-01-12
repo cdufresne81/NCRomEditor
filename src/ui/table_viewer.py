@@ -60,12 +60,16 @@ class TableViewer(QWidget):
     # Args: list of (axis_type, index, old_value, new_value, old_raw, new_raw) tuples
     axis_bulk_changes = Signal(list)
 
-    def __init__(self, rom_definition: RomDefinition = None, parent=None):
+    def __init__(self, rom_definition: RomDefinition = None, parent=None,
+                 modified_cells_dict: dict = None, original_values_dict: dict = None):
         super().__init__(parent)
         self.rom_definition = rom_definition
         self._editing_in_progress = False
         self._read_only = False
-        self._modified_cells = {}  # Dict[table_name, Set[(data_row, data_col)]]
+        # Use shared dict from main window (persists across window close/reopen)
+        # If not provided, create local dict (for testing/standalone usage)
+        self._modified_cells = modified_cells_dict if modified_cells_dict is not None else {}
+        self._original_values = original_values_dict if original_values_dict is not None else {}
         self.init_ui()
 
         # Create context and helpers
@@ -406,3 +410,71 @@ class TableViewer(QWidget):
 
         # Force repaint to show borders
         self.table_widget.viewport().update()
+
+    def _check_and_remove_border_if_original(self, table_name: str, data_row: int, data_col: int, current_value: float):
+        """
+        Check if cell value matches original and remove border if so
+
+        Args:
+            table_name: Name of the table
+            data_row: Data row index
+            data_col: Data column index
+            current_value: Current cell value
+        """
+        if table_name not in self._original_values:
+            return
+
+        import numpy as np
+        original_data = self._original_values[table_name]
+        original_values = original_data.get("values")
+        if original_values is None:
+            return
+
+        # Get original value for this cell
+        if original_values.ndim == 1:
+            if data_row < len(original_values):
+                original_value = original_values[data_row]
+            else:
+                return
+        else:
+            rows, cols = original_values.shape
+            if data_row < rows and data_col < cols:
+                original_value = original_values[data_row, data_col]
+            else:
+                return
+
+        # If current value matches original (within floating point tolerance), remove border
+        if abs(current_value - original_value) < 1e-10:
+            if table_name in self._modified_cells:
+                self._modified_cells[table_name].discard((data_row, data_col))
+                # Force repaint to remove border
+                self.table_widget.viewport().update()
+
+    def _check_and_remove_axis_border_if_original(self, table_name: str, axis_type: str, data_idx: int, current_value: float):
+        """
+        Check if axis cell value matches original and remove border if so
+
+        Args:
+            table_name: Name of the table
+            axis_type: 'x_axis' or 'y_axis'
+            data_idx: Index in the axis array
+            current_value: Current axis cell value
+        """
+        if table_name not in self._original_values:
+            return
+
+        import numpy as np
+        original_data = self._original_values[table_name]
+        original_axis = original_data.get(axis_type)
+        if original_axis is None or data_idx >= len(original_axis):
+            return
+
+        original_value = original_axis[data_idx]
+
+        # If current value matches original (within floating point tolerance), remove border
+        if abs(current_value - original_value) < 1e-10:
+            axis_key = f"{table_name}:{axis_type}"
+            if axis_key in self._modified_cells:
+                self._modified_cells[axis_key].discard(data_idx)
+                # Force repaint to remove border
+                self.table_widget.viewport().update()
