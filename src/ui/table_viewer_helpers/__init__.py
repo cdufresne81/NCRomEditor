@@ -16,6 +16,7 @@ from .editing import TableEditHelper
 from .operations import TableOperationsHelper
 from .interpolation import TableInterpolationHelper
 from .clipboard import TableClipboardHelper
+from .cell_delegate import ModifiedCellDelegate
 
 __all__ = [
     'TableViewerContext',
@@ -24,4 +25,5 @@ __all__ = [
     'TableOperationsHelper',
     'TableInterpolationHelper',
     'TableClipboardHelper',
+    'ModifiedCellDelegate',
 ]

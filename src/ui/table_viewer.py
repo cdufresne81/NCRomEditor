@@ -35,6 +35,7 @@ from .table_viewer_helpers import (
     TableOperationsHelper,
     TableInterpolationHelper,
     TableClipboardHelper,
+    ModifiedCellDelegate,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,7 @@ class TableViewer(QWidget):
         self.rom_definition = rom_definition
         self._editing_in_progress = False
         self._read_only = False
+        self._modified_cells = {}  # Dict[table_name, Set[(data_row, data_col)]]
         self.init_ui()
 
         # Create context and helpers
@@ -77,6 +79,16 @@ class TableViewer(QWidget):
         self._ops = TableOperationsHelper(self._ctx, self._display, self._edit)
         self._interp = TableInterpolationHelper(self._ctx, self._display)
         self._clipboard = TableClipboardHelper(self._ctx, self._display, self._edit)
+
+        # Set up delegate for modified cell borders
+        self._delegate = ModifiedCellDelegate(self)
+        self.table_widget.setItemDelegate(self._delegate)
+
+        # Connect signals to track modifications
+        self.cell_changed.connect(self._on_cell_changed_track_modifications)
+        self.bulk_changes.connect(self._on_bulk_changes_track_modifications)
+        self.axis_changed.connect(self._on_axis_changed_track_modifications)
+        self.axis_bulk_changes.connect(self._on_axis_bulk_changes_track_modifications)
 
     @property
     def current_table(self):
@@ -277,3 +289,120 @@ class TableViewer(QWidget):
     def interpolate_2d(self):
         """2D bilinear interpolation for 3D tables (B key)"""
         self._interp.interpolate_2d()
+
+    # Modified cell tracking methods
+
+    def is_cell_modified(self, ui_row: int, ui_col: int) -> bool:
+        """
+        Check if a cell is modified (for delegate painting)
+
+        Args:
+            ui_row: UI row coordinate
+            ui_col: UI column coordinate
+
+        Returns:
+            True if cell has been modified during this session
+        """
+        if not self.current_table:
+            return False
+
+        # Get the item at this position
+        item = self.table_widget.item(ui_row, ui_col)
+        if not item:
+            return False
+
+        # Get data coordinates from item
+        data_indices = item.data(Qt.UserRole)
+        if data_indices is None:
+            return False
+
+        # Check if this is an axis cell
+        if isinstance(data_indices[0], str):
+            # Axis cells: ('x_axis', index) or ('y_axis', index)
+            axis_type, data_idx = data_indices
+            axis_key = f"{self.current_table.name}:{axis_type}"
+            return axis_key in self._modified_cells and data_idx in self._modified_cells[axis_key]
+
+        # Data cell: (data_row, data_col)
+        data_row, data_col = data_indices
+        table_name = self.current_table.name
+
+        # Check if this cell is in the modified set
+        if table_name in self._modified_cells:
+            return (data_row, data_col) in self._modified_cells[table_name]
+
+        return False
+
+    def mark_cell_modified(self, table_name: str, data_row: int, data_col: int):
+        """
+        Mark a cell as modified
+
+        Args:
+            table_name: Name of the table
+            data_row: Data row index
+            data_col: Data column index
+        """
+        if table_name not in self._modified_cells:
+            self._modified_cells[table_name] = set()
+
+        self._modified_cells[table_name].add((data_row, data_col))
+
+    def mark_axis_cell_modified(self, table_name: str, axis_type: str, data_idx: int):
+        """
+        Mark an axis cell as modified
+
+        Args:
+            table_name: Name of the table
+            axis_type: 'x_axis' or 'y_axis'
+            data_idx: Index in the axis array
+        """
+        axis_key = f"{table_name}:{axis_type}"
+        if axis_key not in self._modified_cells:
+            self._modified_cells[axis_key] = set()
+
+        self._modified_cells[axis_key].add(data_idx)
+
+    def _on_cell_changed_track_modifications(self, table_name: str, data_row: int, data_col: int,
+                                             old_value: float, new_value: float,
+                                             old_raw: float, new_raw: float):
+        """Track cell modifications from cell_changed signal"""
+        self.mark_cell_modified(table_name, data_row, data_col)
+        # Force repaint to show border
+        self.table_widget.viewport().update()
+
+    def _on_bulk_changes_track_modifications(self, changes: list):
+        """Track cell modifications from bulk_changes signal"""
+        if not self.current_table:
+            return
+
+        for change in changes:
+            # Bulk changes can have different formats depending on the operation
+            # Most operations emit: (row, col, old_value, new_value, old_raw, new_raw)
+            if len(change) >= 2:
+                data_row, data_col = change[0], change[1]
+                self.mark_cell_modified(self.current_table.name, data_row, data_col)
+
+        # Force repaint to show borders
+        self.table_widget.viewport().update()
+
+    def _on_axis_changed_track_modifications(self, table_name: str, axis_type: str, data_idx: int,
+                                             old_value: float, new_value: float,
+                                             old_raw: float, new_raw: float):
+        """Track axis cell modifications from axis_changed signal"""
+        self.mark_axis_cell_modified(table_name, axis_type, data_idx)
+        # Force repaint to show border
+        self.table_widget.viewport().update()
+
+    def _on_axis_bulk_changes_track_modifications(self, changes: list):
+        """Track axis cell modifications from axis_bulk_changes signal"""
+        if not self.current_table:
+            return
+
+        for change in changes:
+            # Axis bulk changes: (axis_type, index, old_value, new_value, old_raw, new_raw)
+            if len(change) >= 2:
+                axis_type, data_idx = change[0], change[1]
+                self.mark_axis_cell_modified(self.current_table.name, axis_type, data_idx)
+
+        # Force repaint to show borders
+        self.table_widget.viewport().update()
