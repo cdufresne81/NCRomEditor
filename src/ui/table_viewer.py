@@ -18,6 +18,7 @@ import numpy as np
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
+    QHBoxLayout,
     QLabel,
     QTableWidget,
     QHeaderView,
@@ -39,6 +40,45 @@ from .table_viewer_helpers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class RotatedLabel(QLabel):
+    """QLabel with text rotated 90° counter-clockwise"""
+
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self.setAlignment(Qt.AlignCenter)
+
+    def paintEvent(self, event):
+        """Paint the label with rotated text"""
+        from PySide6.QtGui import QPainter, QFontMetrics
+        painter = QPainter(self)
+        painter.rotate(-90)
+
+        # Calculate position after rotation
+        # Text will be drawn from bottom-left going upward
+        fm = QFontMetrics(self.font())
+        text_width = fm.horizontalAdvance(self.text())
+        text_height = fm.height()
+
+        # Center the text
+        x = -(self.height() + text_width) // 2
+        y = (self.width() + text_height) // 2 - fm.descent()
+
+        painter.drawText(x, y, self.text())
+        painter.end()
+
+    def sizeHint(self):
+        """Return preferred size (width/height swapped for rotated text)"""
+        from PySide6.QtCore import QSize
+        from PySide6.QtGui import QFontMetrics
+        fm = QFontMetrics(self.font())
+        # Swap width and height since text is rotated
+        return QSize(fm.height() + 4, fm.horizontalAdvance(self.text()) + 10)
+
+    def minimumSizeHint(self):
+        """Return minimum size"""
+        return self.sizeHint()
 
 
 class TableViewer(QWidget):
@@ -118,16 +158,30 @@ class TableViewer(QWidget):
 
     def init_ui(self):
         """Initialize the user interface"""
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        self.setLayout(layout)
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        self.setLayout(main_layout)
 
         # Table info label - compact, allow truncation
         self.info_label = QLabel("Select a table to view")
         self.info_label.setStyleSheet("font-size: 9px; padding: 1px 2px; background: #f0f0f0;")
         self.info_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
-        layout.addWidget(self.info_label)
+        main_layout.addWidget(self.info_label)
+
+        # Horizontal layout for Y-axis label and table
+        table_layout = QHBoxLayout()
+        table_layout.setContentsMargins(0, 0, 0, 0)
+        table_layout.setSpacing(2)
+
+        # Y-axis label (rotated 90° counter-clockwise, initially hidden)
+        self.y_axis_label = RotatedLabel("")
+        font = self.y_axis_label.font()
+        font.setBold(True)
+        font.setPointSize(10)
+        self.y_axis_label.setFont(font)
+        self.y_axis_label.setVisible(False)  # Hidden by default, shown only for 3D tables
+        table_layout.addWidget(self.y_axis_label)
 
         # Table widget for displaying data
         self.table_widget = QTableWidget()
@@ -159,7 +213,8 @@ class TableViewer(QWidget):
         # Note: All data manipulation shortcuts (+, -, *, =, V, H, B) are defined
         # in TableViewerWindow menu to avoid duplicate shortcut conflicts
 
-        layout.addWidget(self.table_widget)
+        table_layout.addWidget(self.table_widget)
+        main_layout.addLayout(table_layout)
 
     def set_read_only(self, read_only: bool):
         """Set whether the table is read-only"""
