@@ -86,12 +86,14 @@ class TableDisplayHelper:
         self.ctx.info_label.setText("Select a table to view")
         self.ctx.table_widget.setRowCount(0)
         self.ctx.table_widget.setColumnCount(0)
-        # Hide Y-axis label
+        # Hide axis labels
+        self.ctx.viewer.x_axis_label.setVisible(False)
         self.ctx.viewer.y_axis_label.setVisible(False)
 
     def _display_1d(self, values: np.ndarray):
         """Display 1D table (single value)"""
-        # Hide Y-axis label (not used for 1D tables)
+        # Hide axis labels (not used for 1D tables)
+        self.ctx.viewer.x_axis_label.setVisible(False)
         self.ctx.viewer.y_axis_label.setVisible(False)
 
         self.ctx.editing_in_progress = True
@@ -116,7 +118,8 @@ class TableDisplayHelper:
 
     def _display_2d(self, values: np.ndarray, y_axis: np.ndarray):
         """Display 2D table (1D array with Y axis)"""
-        # Hide Y-axis label (not used for 2D tables - Y axis is in the table)
+        # Hide axis labels (not used for 2D tables - Y axis is in the table)
+        self.ctx.viewer.x_axis_label.setVisible(False)
         self.ctx.viewer.y_axis_label.setVisible(False)
 
         self.ctx.editing_in_progress = True
@@ -233,22 +236,24 @@ class TableDisplayHelper:
             # Gray background color for label cells
             label_bg = QBrush(QColor(220, 220, 220))
 
-            # Set Y-axis label in the separate rotated label widget (ECUFlash style)
+            # Set axis labels in separate label widgets (ECUFlash style)
+            self.ctx.viewer.x_axis_label.setText(x_label)
+            self.ctx.viewer.x_axis_label.setVisible(True)
             self.ctx.viewer.y_axis_label.setText(y_label)
             self.ctx.viewer.y_axis_label.setVisible(True)
 
-            # === Row 0: X-axis LABEL row (gray) - label appears ONCE ===
+            # === Row 0: Label row (gray) - both axis labels are now separate ===
             # Cell (0,0) - Empty (Y-axis label is now separate)
             empty_corner_item = QTableWidgetItem("")
             empty_corner_item.setFlags(empty_corner_item.flags() & ~Qt.ItemIsEditable)
             empty_corner_item.setBackground(label_bg)
             self.ctx.table_widget.setItem(0, 0, empty_corner_item)
 
-            # Cell (0,1) - X-axis label (gray) - appears once here
-            x_label_item = QTableWidgetItem(x_label)
-            x_label_item.setFlags(x_label_item.flags() & ~Qt.ItemIsEditable)
-            x_label_item.setBackground(label_bg)
-            self.ctx.table_widget.setItem(0, 1, x_label_item)
+            # Cell (0,1) - Empty (X-axis label is now separate above table)
+            empty_x_label_item = QTableWidgetItem("")
+            empty_x_label_item.setFlags(empty_x_label_item.flags() & ~Qt.ItemIsEditable)
+            empty_x_label_item.setBackground(label_bg)
+            self.ctx.table_widget.setItem(0, 1, empty_x_label_item)
 
             # === Row 1: X-axis VALUES row (colored) ===
             # Cell (1,0) - empty gray cell

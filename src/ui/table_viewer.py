@@ -169,6 +169,16 @@ class TableViewer(QWidget):
         self.info_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         main_layout.addWidget(self.info_label)
 
+        # X-axis label (horizontal, centered above table, initially hidden)
+        self.x_axis_label = QLabel("")
+        self.x_axis_label.setAlignment(Qt.AlignCenter)
+        font = self.x_axis_label.font()
+        font.setBold(True)
+        font.setPointSize(10)
+        self.x_axis_label.setFont(font)
+        self.x_axis_label.setVisible(False)  # Hidden by default, shown only for 3D tables
+        main_layout.addWidget(self.x_axis_label)
+
         # Horizontal layout for Y-axis label and table
         table_layout = QHBoxLayout()
         table_layout.setContentsMargins(0, 0, 0, 0)
