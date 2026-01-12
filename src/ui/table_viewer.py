@@ -413,7 +413,7 @@ class TableViewer(QWidget):
 
     def _check_and_remove_border_if_original(self, table_name: str, data_row: int, data_col: int, current_value: float):
         """
-        Check if cell value matches original and remove border if so
+        Sync border with original value: remove if matches, add if differs
 
         Args:
             table_name: Name of the table
@@ -443,16 +443,23 @@ class TableViewer(QWidget):
             else:
                 return
 
-        # If current value matches original (within floating point tolerance), remove border
-        if abs(current_value - original_value) < 1e-10:
+        # Sync border state with original value
+        is_modified = abs(current_value - original_value) >= 1e-10
+
+        if is_modified:
+            # Value differs from original - ensure border is present
+            self.mark_cell_modified(table_name, data_row, data_col)
+        else:
+            # Value matches original - ensure border is removed
             if table_name in self._modified_cells:
                 self._modified_cells[table_name].discard((data_row, data_col))
-                # Force repaint to remove border
-                self.table_widget.viewport().update()
+
+        # Force repaint to update border
+        self.table_widget.viewport().update()
 
     def _check_and_remove_axis_border_if_original(self, table_name: str, axis_type: str, data_idx: int, current_value: float):
         """
-        Check if axis cell value matches original and remove border if so
+        Sync axis border with original value: remove if matches, add if differs
 
         Args:
             table_name: Name of the table
@@ -471,10 +478,17 @@ class TableViewer(QWidget):
 
         original_value = original_axis[data_idx]
 
-        # If current value matches original (within floating point tolerance), remove border
-        if abs(current_value - original_value) < 1e-10:
+        # Sync border state with original value
+        is_modified = abs(current_value - original_value) >= 1e-10
+
+        if is_modified:
+            # Value differs from original - ensure border is present
+            self.mark_axis_cell_modified(table_name, axis_type, data_idx)
+        else:
+            # Value matches original - ensure border is removed
             axis_key = f"{table_name}:{axis_type}"
             if axis_key in self._modified_cells:
                 self._modified_cells[axis_key].discard(data_idx)
-                # Force repaint to remove border
-                self.table_widget.viewport().update()
+
+        # Force repaint to update border
+        self.table_widget.viewport().update()
