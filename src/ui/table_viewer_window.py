@@ -128,8 +128,15 @@ class TableViewerWindow(QMainWindow):
         self._auto_size_window()
 
     def _create_menu_bar(self):
-        """Create menu bar with Edit menu"""
+        """Create menu bar with View and Edit menus"""
         menubar = self.menuBar()
+
+        # View menu
+        view_menu = menubar.addMenu("View")
+
+        graph_action = view_menu.addAction("View Graph...")
+        graph_action.setShortcut("G")
+        graph_action.triggered.connect(self._open_graph_viewer)
 
         # Edit menu
         edit_menu = menubar.addMenu("Edit")
@@ -168,6 +175,28 @@ class TableViewerWindow(QMainWindow):
         interp_2d_action = edit_menu.addAction("Interpolate 2D")
         interp_2d_action.setShortcut("B")
         interp_2d_action.triggered.connect(self.viewer.interpolate_2d)
+
+    def _open_graph_viewer(self):
+        """Open graph viewer window with current table data and selection"""
+        from .graph_viewer import GraphViewer
+
+        # Get selected cells from table widget
+        selected_cells = []
+        selected_ranges = self.viewer.table_widget.selectedRanges()
+
+        for sel_range in selected_ranges:
+            for row in range(sel_range.topRow(), sel_range.bottomRow() + 1):
+                for col in range(sel_range.leftColumn(), sel_range.rightColumn() + 1):
+                    item = self.viewer.table_widget.item(row, col)
+                    if item and item.data(Qt.UserRole) is not None:
+                        coords = item.data(Qt.UserRole)
+                        # Only include data cells (not axis cells)
+                        if not isinstance(coords[0], str):
+                            selected_cells.append((coords[0], coords[1] if len(coords) > 1 else 0))
+
+        # Create and show graph viewer
+        self.graph_viewer = GraphViewer(self.table, self.data, selected_cells, self)
+        self.graph_viewer.show()
 
     def _on_cell_changed(self, table_name: str, row: int, col: int,
                          old_value: float, new_value: float,
