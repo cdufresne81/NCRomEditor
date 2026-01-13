@@ -67,6 +67,7 @@ class TableViewerWindow(QMainWindow):
         self.data = data
         self.rom_definition = rom_definition
         self.rom_path = rom_path
+        self.graph_viewer = None  # Reference to graph viewer window
 
         # Remove minimize/maximize buttons, keep only close button
         self.setWindowFlags(
@@ -176,11 +177,8 @@ class TableViewerWindow(QMainWindow):
         graph_action.setShortcut("G")
         graph_action.triggered.connect(self._open_graph_viewer)
 
-    def _open_graph_viewer(self):
-        """Open graph viewer window with current table data and selection"""
-        from .graph_viewer import GraphViewer
-
-        # Get selected cells from table widget
+    def _get_selected_data_cells(self):
+        """Get list of selected data cells as (row, col) tuples"""
         selected_cells = []
         selected_ranges = self.viewer.table_widget.selectedRanges()
 
@@ -197,14 +195,27 @@ class TableViewerWindow(QMainWindow):
                             data_col = coords[1] if len(coords) > 1 else 0
                             selected_cells.append((data_row, data_col))
 
-        # Debug: print selection info
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"Opening graph viewer with {len(selected_cells)} selected cells: {selected_cells[:10]}")
+        return selected_cells
+
+    def _on_table_selection_changed(self):
+        """Handle table selection changes - update graph if open"""
+        if self.graph_viewer and not self.graph_viewer.isHidden():
+            selected_cells = self._get_selected_data_cells()
+            self.graph_viewer.update_selection(selected_cells)
+
+    def _open_graph_viewer(self):
+        """Open graph viewer window with current table data and selection"""
+        from .graph_viewer import GraphViewer
+
+        # Get selected cells
+        selected_cells = self._get_selected_data_cells()
 
         # Create and show graph viewer
         self.graph_viewer = GraphViewer(self.table, self.data, selected_cells, self)
         self.graph_viewer.show()
+
+        # Connect selection changed signal to update graph
+        self.viewer.table_widget.itemSelectionChanged.connect(self._on_table_selection_changed)
 
     def _on_cell_changed(self, table_name: str, row: int, col: int,
                          old_value: float, new_value: float,

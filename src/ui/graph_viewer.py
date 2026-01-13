@@ -104,14 +104,17 @@ class GraphViewer(QMainWindow):
         # Calculate colors based on gradient (matching table viewer)
         colors = self._calculate_colors(Z)
 
+        # Override colors for selected cells with blue
+        if self.selected_cells:
+            blue_color = (0.0, 0.5, 1.0, 1.0)  # Bright blue RGBA
+            for row, col in self.selected_cells:
+                if row < colors.shape[0] and col < colors.shape[1]:
+                    colors[row, col] = blue_color
+
         # Plot surface
         surf = ax.plot_surface(X, Y, Z, facecolors=colors,
                                linewidth=0.5, edgecolor='gray',
                                antialiased=True, shade=False)
-
-        # Highlight selected cells
-        if self.selected_cells:
-            self._highlight_selected_3d(ax, X, Y, Z)
 
         # Labels
         ax.set_xlabel('X Axis' if x_axis is not None else 'Column')
@@ -126,8 +129,9 @@ class GraphViewer(QMainWindow):
         self.ax_3d = ax
 
     def keyPressEvent(self, event):
-        """Handle arrow key presses for graph rotation"""
+        """Handle key presses for graph rotation and zoom"""
         if self.ax_3d is None:
+            super().keyPressEvent(event)
             return
 
         # Get current view angles
@@ -135,25 +139,66 @@ class GraphViewer(QMainWindow):
         azim = self.ax_3d.azim
 
         # Rotation step size (degrees)
-        step = 10
+        rotation_step = 10
 
-        # Update angles based on arrow keys
+        # Handle arrow keys for rotation
         if event.key() == Qt.Key_Left:
-            azim -= step
+            azim -= rotation_step
+            self.ax_3d.view_init(elev=elev, azim=azim)
+            self.canvas.draw()
         elif event.key() == Qt.Key_Right:
-            azim += step
+            azim += rotation_step
+            self.ax_3d.view_init(elev=elev, azim=azim)
+            self.canvas.draw()
         elif event.key() == Qt.Key_Up:
-            elev += step
+            elev += rotation_step
+            self.ax_3d.view_init(elev=elev, azim=azim)
+            self.canvas.draw()
         elif event.key() == Qt.Key_Down:
-            elev -= step
+            elev -= rotation_step
+            self.ax_3d.view_init(elev=elev, azim=azim)
+            self.canvas.draw()
+        # Handle +/= for zoom in
+        elif event.key() in (Qt.Key_Plus, Qt.Key_Equal):
+            self._zoom(1.1)
+        # Handle - for zoom out
+        elif event.key() == Qt.Key_Minus:
+            self._zoom(0.9)
         else:
-            # Not an arrow key, pass to parent
+            # Not a handled key, pass to parent
             super().keyPressEvent(event)
+
+    def _zoom(self, factor):
+        """Zoom in or out by adjusting axis limits"""
+        if self.ax_3d is None:
             return
 
-        # Apply new view angles
-        self.ax_3d.view_init(elev=elev, azim=azim)
+        # Get current limits
+        xlim = self.ax_3d.get_xlim()
+        ylim = self.ax_3d.get_ylim()
+        zlim = self.ax_3d.get_zlim()
+
+        # Calculate centers
+        x_center = (xlim[0] + xlim[1]) / 2
+        y_center = (ylim[0] + ylim[1]) / 2
+        z_center = (zlim[0] + zlim[1]) / 2
+
+        # Calculate new ranges
+        x_range = (xlim[1] - xlim[0]) / factor
+        y_range = (ylim[1] - ylim[0]) / factor
+        z_range = (zlim[1] - zlim[0]) / factor
+
+        # Set new limits
+        self.ax_3d.set_xlim(x_center - x_range/2, x_center + x_range/2)
+        self.ax_3d.set_ylim(y_center - y_range/2, y_center + y_range/2)
+        self.ax_3d.set_zlim(z_center - z_range/2, z_center + z_range/2)
+
         self.canvas.draw()
+
+    def update_selection(self, selected_cells: list):
+        """Update the selected cells and redraw the graph"""
+        self.selected_cells = selected_cells
+        self._plot_data()
 
     def _plot_2d(self):
         """Plot 2D table as line/surface"""
@@ -173,9 +218,16 @@ class GraphViewer(QMainWindow):
         for i in range(len(x) - 1):
             ax.plot(x[i:i+2], values[i:i+2], color=colors[i], linewidth=2)
 
-        # Highlight selected cells
+        # Highlight selected cells with blue markers
         if self.selected_cells:
-            self._highlight_selected_2d(ax, x, values)
+            selected_x = []
+            selected_y = []
+            for row, col in self.selected_cells:
+                if row < len(values):
+                    selected_x.append(x[row])
+                    selected_y.append(values[row])
+            if selected_x:
+                ax.scatter(selected_x, selected_y, color='blue', s=100, zorder=10, alpha=0.8)
 
         ax.set_xlabel('Y Axis' if y_axis is not None else 'Index')
         ax.set_ylabel('Value')
@@ -251,39 +303,3 @@ class GraphViewer(QMainWindow):
         """Convert ratio to matplotlib color (RGB tuple)"""
         rgba = self._ratio_to_rgba(ratio)
         return (rgba[0], rgba[1], rgba[2])
-
-    def _highlight_selected_3d(self, ax, X, Y, Z):
-        """Highlight selected cells in 3D plot"""
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"Highlighting {len(self.selected_cells)} cells in 3D plot")
-        logger.info(f"Z shape: {Z.shape}, X shape: {X.shape}, Y shape: {Y.shape}")
-
-        for row, col in self.selected_cells:
-            logger.info(f"  Trying to highlight cell ({row}, {col})")
-            if row < Z.shape[0] and col < Z.shape[1]:
-                # Draw a marker at the selected position
-                x_val = X[row, col]
-                y_val = Y[row, col]
-                z_val = Z[row, col]
-                logger.info(f"    Drawing marker at ({x_val}, {y_val}, {z_val})")
-                ax.scatter([x_val], [y_val], [z_val],
-                          color='black', s=200, marker='o', edgecolor='yellow', linewidth=3, zorder=10)
-            else:
-                logger.warning(f"    Cell ({row}, {col}) out of bounds for Z shape {Z.shape}")
-
-    def _highlight_selected_2d(self, ax, x, values):
-        """Highlight selected cells in 2D plot"""
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"Highlighting {len(self.selected_cells)} cells in 2D plot")
-        logger.info(f"Values length: {len(values)}, x length: {len(x)}")
-
-        for row, col in self.selected_cells:
-            logger.info(f"  Trying to highlight cell ({row}, {col})")
-            if row < len(values):
-                logger.info(f"    Drawing marker at ({x[row]}, {values[row]})")
-                ax.scatter([x[row]], [values[row]],
-                          color='black', s=200, marker='o', edgecolor='yellow', linewidth=3, zorder=10)
-            else:
-                logger.warning(f"    Cell row {row} out of bounds for values length {len(values)}")
