@@ -118,13 +118,13 @@ class TableDisplayHelper:
             self.ctx.editing_in_progress = False
 
     def _display_2d(self, values: np.ndarray, y_axis: np.ndarray):
-        """Display 2D table (1D array with Y axis) - ECUFlash style layout with spacer"""
+        """Display 2D table (1D array with Y axis) - ECUFlash style layout with CSS border"""
         self.ctx.editing_in_progress = True
         try:
             num_values = len(values)
             self.ctx.table_widget.horizontalHeader().setVisible(False)
             self.ctx.table_widget.setRowCount(num_values)
-            self.ctx.table_widget.setColumnCount(3)  # Y-axis, spacer, data
+            self.ctx.table_widget.setColumnCount(2)  # Y-axis, data (no spacer)
 
             # Get axis label with unit - display in separate rotated label (ECUFlash style)
             y_label = self._get_axis_label(self.ctx.current_table, AxisType.Y_AXIS)
@@ -147,11 +147,11 @@ class TableDisplayHelper:
             else:
                 y_min, y_max = 0, num_values - 1
 
-            # Spacer column background
-            spacer_bg = QBrush(QColor(245, 245, 245))
+            # For 2D tables, no special column sizing needed - just resize to contents
+            self.ctx.table_widget.resizeColumnsToContents()
 
             for i in range(num_values):
-                # Col 0: Y axis value with gradient
+                # Col 0: Y axis value with gradient and right border
                 if display_y_axis is not None and i < len(display_y_axis):
                     y_item = QTableWidgetItem(self.format_value(display_y_axis[i], y_fmt))
                     # Apply gradient based on Y axis values
@@ -164,21 +164,17 @@ class TableDisplayHelper:
                     # Account for flip when storing the actual data index
                     data_idx = (num_values - 1 - i) if flipy else i
                     y_item.setData(Qt.UserRole, ('y_axis', data_idx))
+                    y_item.setData(Qt.UserRole + 2, 'axis_separator')  # Mark for border styling
                     if self.ctx.read_only:
                         y_item.setFlags(y_item.flags() & ~Qt.ItemIsEditable)
                 else:
                     y_item = QTableWidgetItem(str(i))
                     y_item.setBackground(QBrush(QColor(240, 240, 240)))
                     y_item.setFlags(y_item.flags() & ~Qt.ItemIsEditable)  # No axis data, not editable
+                    y_item.setData(Qt.UserRole + 2, 'axis_separator')  # Mark for border styling
                 self.ctx.table_widget.setItem(i, 0, y_item)
 
-                # Col 1: Spacer column
-                spacer_item = QTableWidgetItem("")
-                spacer_item.setFlags(spacer_item.flags() & ~Qt.ItemIsEditable)
-                spacer_item.setBackground(spacer_bg)
-                self.ctx.table_widget.setItem(i, 1, spacer_item)
-
-                # Col 2: Data value with gradient color
+                # Col 1: Data value with gradient color
                 value_item = QTableWidgetItem(self.format_value(display_values[i], value_fmt))
                 color = self.get_cell_color(display_values[i], values, i, 0)
                 value_item.setBackground(QBrush(color))
@@ -187,14 +183,7 @@ class TableDisplayHelper:
                 value_item.setData(Qt.UserRole, (data_row, 0))
                 if self.ctx.read_only:
                     value_item.setFlags(value_item.flags() & ~Qt.ItemIsEditable)
-                self.ctx.table_widget.setItem(i, 2, value_item)
-
-            # Set spacer column 1 to very thin width (barely visible line)
-            header = self.ctx.table_widget.horizontalHeader()
-            header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(1, QHeaderView.Fixed)
-            self.ctx.table_widget.setColumnWidth(1, 1)
-            header.setSectionResizeMode(2, QHeaderView.Stretch)
+                self.ctx.table_widget.setItem(i, 1, value_item)
         finally:
             self.ctx.editing_in_progress = False
 
@@ -217,12 +206,12 @@ class TableDisplayHelper:
         try:
             rows, cols = values.shape
 
-            # Set up table dimensions with spacers (ECUFlash style):
-            # Rows: +2 (row 0 for X-axis values, row 1 for spacer, rows 2+ for data)
-            # Cols: +2 (col 0 for Y-axis values, col 1 for spacer, cols 2+ for data)
-            # Note: Axis labels are now separate widgets, not in the grid
-            self.ctx.table_widget.setRowCount(rows + 2)
-            self.ctx.table_widget.setColumnCount(cols + 2)
+            # Set up table dimensions (ECUFlash style with CSS borders for separation):
+            # Rows: +1 (row 0 for X-axis values, rows 1+ for data)
+            # Cols: +1 (col 0 for Y-axis values, cols 1+ for data)
+            # Note: Axis labels are separate widgets, visual separation via CSS borders
+            self.ctx.table_widget.setRowCount(rows + 1)
+            self.ctx.table_widget.setColumnCount(cols + 1)
 
             # Hide Qt headers since we use cells for axes
             self.ctx.table_widget.horizontalHeader().setVisible(False)
@@ -258,20 +247,15 @@ class TableDisplayHelper:
             self.ctx.viewer.y_axis_label.setText(y_label)
             self.ctx.viewer.y_axis_label.setVisible(True)
 
-            # === Row 0: X-axis VALUES row (colored) ===
-            # Cell (0,0) - empty gray cell (corner)
+            # === Row 0: X-axis VALUES row (colored) with bottom border for separation ===
+            # Cell (0,0) - empty gray cell (corner) with bottom border
             empty_item = QTableWidgetItem("")
             empty_item.setFlags(empty_item.flags() & ~Qt.ItemIsEditable)
             empty_item.setBackground(label_bg)
+            empty_item.setData(Qt.UserRole + 2, 'axis_separator')  # Mark for border styling
             self.ctx.table_widget.setItem(0, 0, empty_item)
 
-            # Cell (0,1) - spacer corner
-            spacer_item = QTableWidgetItem("")
-            spacer_item.setFlags(spacer_item.flags() & ~Qt.ItemIsEditable)
-            spacer_item.setBackground(QBrush(QColor(245, 245, 245)))
-            self.ctx.table_widget.setItem(0, 1, spacer_item)
-
-            # X-axis values in row 0 (columns 2+) with gradient
+            # X-axis values in row 0 (columns 1+) with gradient and bottom border
             if display_x_axis is not None and len(display_x_axis) == cols:
                 x_min, x_max = np.min(display_x_axis), np.max(display_x_axis)
                 for col in range(cols):
@@ -283,29 +267,23 @@ class TableDisplayHelper:
                     x_item.setBackground(QBrush(self.ratio_to_color(ratio)))
                     data_idx = (cols - 1 - col) if flipx else col
                     x_item.setData(Qt.UserRole, ('x_axis', data_idx))
+                    x_item.setData(Qt.UserRole + 2, 'axis_separator')  # Mark for border styling
                     if self.ctx.read_only:
                         x_item.setFlags(x_item.flags() & ~Qt.ItemIsEditable)
-                    self.ctx.table_widget.setItem(0, col + 2, x_item)
+                    self.ctx.table_widget.setItem(0, col + 1, x_item)
             else:
                 for col in range(cols):
                     x_item = QTableWidgetItem(str(col))
                     x_item.setFlags(x_item.flags() & ~Qt.ItemIsEditable)
                     x_item.setBackground(label_bg)
-                    self.ctx.table_widget.setItem(0, col + 2, x_item)
+                    x_item.setData(Qt.UserRole + 2, 'axis_separator')  # Mark for border styling
+                    self.ctx.table_widget.setItem(0, col + 1, x_item)
 
-            # === Row 1: SPACER ROW (all columns) ===
-            spacer_bg = QBrush(QColor(245, 245, 245))
-            for col in range(cols + 2):
-                spacer_row_item = QTableWidgetItem("")
-                spacer_row_item.setFlags(spacer_row_item.flags() & ~Qt.ItemIsEditable)
-                spacer_row_item.setBackground(spacer_bg)
-                self.ctx.table_widget.setItem(1, col, spacer_row_item)
-
-            # === Column 0: Y-axis VALUES (rows 2+) ===
+            # === Column 0: Y-axis VALUES (rows 1+) with right border for separation ===
             if display_y_axis is not None and len(display_y_axis) == rows:
                 y_min, y_max = np.min(display_y_axis), np.max(display_y_axis)
                 for row in range(rows):
-                    # Col 0: Y-axis value (colored)
+                    # Col 0: Y-axis value (colored) with right border
                     y_val_item = QTableWidgetItem(self.format_value(display_y_axis[row], y_fmt))
                     if y_max != y_min:
                         ratio = (display_y_axis[row] - y_min) / (y_max - y_min)
@@ -314,25 +292,20 @@ class TableDisplayHelper:
                     y_val_item.setBackground(QBrush(self.ratio_to_color(ratio)))
                     data_idx = (rows - 1 - row) if flipy else row
                     y_val_item.setData(Qt.UserRole, ('y_axis', data_idx))
+                    y_val_item.setData(Qt.UserRole + 2, 'axis_separator')  # Mark for border styling
                     if self.ctx.read_only:
                         y_val_item.setFlags(y_val_item.flags() & ~Qt.ItemIsEditable)
-                    self.ctx.table_widget.setItem(row + 2, 0, y_val_item)
+                    self.ctx.table_widget.setItem(row + 1, 0, y_val_item)
             else:
                 for row in range(rows):
-                    # Col 0: Row index (gray, no axis data)
+                    # Col 0: Row index (gray, no axis data) with right border
                     y_val_item = QTableWidgetItem(str(row))
                     y_val_item.setFlags(y_val_item.flags() & ~Qt.ItemIsEditable)
                     y_val_item.setBackground(label_bg)
-                    self.ctx.table_widget.setItem(row + 2, 0, y_val_item)
+                    y_val_item.setData(Qt.UserRole + 2, 'axis_separator')  # Mark for border styling
+                    self.ctx.table_widget.setItem(row + 1, 0, y_val_item)
 
-            # === Column 1: SPACER COLUMN (rows 2+) ===
-            for row in range(rows):
-                spacer_col_item = QTableWidgetItem("")
-                spacer_col_item.setFlags(spacer_col_item.flags() & ~Qt.ItemIsEditable)
-                spacer_col_item.setBackground(spacer_bg)
-                self.ctx.table_widget.setItem(row + 2, 1, spacer_col_item)
-
-            # === Data cells (rows 2+, cols 2+) ===
+            # === Data cells (rows 1+, cols 1+) ===
             for row in range(rows):
                 for col in range(cols):
                     value_item = QTableWidgetItem(self.format_value(display_values[row, col], value_fmt))
@@ -343,7 +316,7 @@ class TableDisplayHelper:
                     value_item.setData(Qt.UserRole, (data_row, data_col))
                     if self.ctx.read_only:
                         value_item.setFlags(value_item.flags() & ~Qt.ItemIsEditable)
-                    self.ctx.table_widget.setItem(row + 2, col + 2, value_item)
+                    self.ctx.table_widget.setItem(row + 1, col + 1, value_item)
         finally:
             self.ctx.editing_in_progress = False
 
@@ -352,41 +325,28 @@ class TableDisplayHelper:
 
     def _apply_uniform_column_width_3d(self):
         """
-        Apply uniform width to DATA columns only (excluding Y-axis and spacer).
+        Apply uniform width to DATA columns only (excluding Y-axis).
         For 3D tables with ECUFlash layout:
         - Col 0: Y-axis values (resize to contents)
-        - Col 1: Spacer (1px - barely visible line)
-        - Col 2+: Data columns (uniform width)
+        - Col 1+: Data columns (uniform width)
         """
-        header = self.ctx.table_widget.horizontalHeader()
-        v_header = self.ctx.table_widget.verticalHeader()
+        # First, let Qt calculate optimal widths for all columns
+        self.ctx.table_widget.resizeColumnsToContents()
 
-        # CRITICAL: Set spacer column and row to Fixed with 1px FIRST
-        # This MUST happen before any other resize operations
-        header.setSectionResizeMode(1, QHeaderView.Fixed)
-        self.ctx.table_widget.setColumnWidth(1, 1)
-        v_header.setSectionResizeMode(1, QHeaderView.Fixed)
-        self.ctx.table_widget.setRowHeight(1, 1)
-
-        # Manually resize columns (avoiding resizeColumnsToContents which affects ALL columns)
-        # Resize column 0 (Y-axis) to fit contents
-        self.ctx.table_widget.resizeColumnToContents(0)
-
-        # Resize data columns (2+) individually to get their optimal widths
+        # Find the maximum width among DATA columns only (skip column 0)
         max_width = 0
-        for col in range(2, self.ctx.table_widget.columnCount()):
-            self.ctx.table_widget.resizeColumnToContents(col)
+        for col in range(1, self.ctx.table_widget.columnCount()):
             width = self.ctx.table_widget.columnWidth(col)
             if width > max_width:
                 max_width = width
 
-        # Apply uniform width to all data columns
+        # Apply the maximum width to DATA columns only
         if max_width > 0:
+            header = self.ctx.table_widget.horizontalHeader()
             # Set column 0 (Y-axis values) to ResizeToContents
             header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-            # Column 1 spacer already set to Fixed above - DO NOT CHANGE
-            # Set data columns (2+) to Fixed with uniform width
-            for col in range(2, self.ctx.table_widget.columnCount()):
+            # Set data columns (1+) to Fixed with uniform width
+            for col in range(1, self.ctx.table_widget.columnCount()):
                 header.setSectionResizeMode(col, QHeaderView.Fixed)
                 self.ctx.table_widget.setColumnWidth(col, max_width)
 
