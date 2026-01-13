@@ -355,10 +355,17 @@ class TableDisplayHelper:
         Apply uniform width to DATA columns only (excluding Y-axis and spacer).
         For 3D tables with ECUFlash layout:
         - Col 0: Y-axis values (resize to contents)
-        - Col 1: Spacer (thin, 10px)
+        - Col 1: Spacer (1px - barely visible line)
         - Col 2+: Data columns (uniform width)
         """
-        # First, let Qt calculate optimal widths for all columns
+        header = self.ctx.table_widget.horizontalHeader()
+
+        # FIRST: Set spacer column 1 to Fixed with 1px BEFORE resizing
+        # This prevents resizeColumnsToContents() from making it larger
+        header.setSectionResizeMode(1, QHeaderView.Fixed)
+        self.ctx.table_widget.setColumnWidth(1, 1)
+
+        # Now let Qt calculate optimal widths for remaining columns
         self.ctx.table_widget.resizeColumnsToContents()
 
         # Find the maximum width among DATA columns only (skip columns 0 and 1)
@@ -370,12 +377,9 @@ class TableDisplayHelper:
 
         # Apply the widths
         if max_width > 0:
-            header = self.ctx.table_widget.horizontalHeader()
             # Set column 0 (Y-axis values) to ResizeToContents
             header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-            # Set column 1 (spacer) to Fixed with very thin width (barely visible line)
-            header.setSectionResizeMode(1, QHeaderView.Fixed)
-            self.ctx.table_widget.setColumnWidth(1, 1)
+            # Column 1 spacer already set above
             # Set data columns (2+) to Fixed with uniform width
             for col in range(2, self.ctx.table_widget.columnCount()):
                 header.setSectionResizeMode(col, QHeaderView.Fixed)
