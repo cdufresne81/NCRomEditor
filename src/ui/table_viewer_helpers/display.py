@@ -359,37 +359,36 @@ class TableDisplayHelper:
         - Col 2+: Data columns (uniform width)
         """
         header = self.ctx.table_widget.horizontalHeader()
+        v_header = self.ctx.table_widget.verticalHeader()
 
-        # FIRST: Set spacer column 1 to Fixed with 1px BEFORE resizing
-        # This prevents resizeColumnsToContents() from making it larger
+        # CRITICAL: Set spacer column and row to Fixed with 1px FIRST
+        # This MUST happen before any other resize operations
         header.setSectionResizeMode(1, QHeaderView.Fixed)
         self.ctx.table_widget.setColumnWidth(1, 1)
+        v_header.setSectionResizeMode(1, QHeaderView.Fixed)
+        self.ctx.table_widget.setRowHeight(1, 1)
 
-        # Now let Qt calculate optimal widths for remaining columns
-        self.ctx.table_widget.resizeColumnsToContents()
+        # Manually resize columns (avoiding resizeColumnsToContents which affects ALL columns)
+        # Resize column 0 (Y-axis) to fit contents
+        self.ctx.table_widget.resizeColumnToContents(0)
 
-        # Find the maximum width among DATA columns only (skip columns 0 and 1)
+        # Resize data columns (2+) individually to get their optimal widths
         max_width = 0
         for col in range(2, self.ctx.table_widget.columnCount()):
+            self.ctx.table_widget.resizeColumnToContents(col)
             width = self.ctx.table_widget.columnWidth(col)
             if width > max_width:
                 max_width = width
 
-        # Apply the widths
+        # Apply uniform width to all data columns
         if max_width > 0:
             # Set column 0 (Y-axis values) to ResizeToContents
             header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-            # Column 1 spacer already set above
+            # Column 1 spacer already set to Fixed above - DO NOT CHANGE
             # Set data columns (2+) to Fixed with uniform width
             for col in range(2, self.ctx.table_widget.columnCount()):
                 header.setSectionResizeMode(col, QHeaderView.Fixed)
                 self.ctx.table_widget.setColumnWidth(col, max_width)
-
-        # Set spacer row 1 to very thin height (barely visible line)
-        # Use vertical header to set fixed size
-        v_header = self.ctx.table_widget.verticalHeader()
-        v_header.setSectionResizeMode(1, QHeaderView.Fixed)
-        self.ctx.table_widget.setRowHeight(1, 1)
 
     def _get_axis_label(self, table: Table, axis_type: AxisType) -> str:
         """
