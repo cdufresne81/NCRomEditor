@@ -386,6 +386,9 @@ class TableDisplayHelper:
                 self.ctx.table_widget.setColumnWidth(col, max_width)
 
         # Set spacer row 1 to very thin height (barely visible line)
+        # Use vertical header to set fixed size
+        v_header = self.ctx.table_widget.verticalHeader()
+        v_header.setSectionResizeMode(1, QHeaderView.Fixed)
         self.ctx.table_widget.setRowHeight(1, 1)
 
     def _get_axis_label(self, table: Table, axis_type: AxisType) -> str:
