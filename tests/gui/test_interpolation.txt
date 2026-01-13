@@ -1,0 +1,73 @@
+# Test Script: Interpolation Features
+# This script tests vertical, horizontal, and 2D interpolation
+# Run with: python tools/test_runner.py --script tests/gui/test_interpolation.txt
+
+# Load the sample ROM
+load_rom examples/lf9veb.bin
+
+# Open a 3D table for testing interpolation
+open_table "APP to TP Desired"
+
+# Wait for table to fully load
+wait 500
+
+# Take initial screenshot
+screenshot 01_initial_table table
+
+# Test 1: Vertical Interpolation
+# Select a column (rows 0-9, column 5)
+select 0 5 9 5
+
+# Take screenshot of selection
+screenshot 02_vertical_selection table
+
+# Apply vertical interpolation
+interpolate_v
+
+# Take screenshot of result
+screenshot 03_vertical_result table
+
+# Undo the interpolation
+undo
+wait 200
+
+# Test 2: Horizontal Interpolation
+# Select a row (row 5, columns 0-9)
+select 5 0 5 9
+
+# Take screenshot of selection
+screenshot 04_horizontal_selection table
+
+# Apply horizontal interpolation
+interpolate_h
+
+# Take screenshot of result
+screenshot 05_horizontal_result table
+
+# Undo
+undo
+wait 200
+
+# Test 3: 2D Interpolation
+# Select a rectangular region
+select 2 2 7 7
+
+# Take screenshot
+screenshot 06_2d_selection table
+
+# Apply 2D interpolation
+interpolate_2d
+
+# Take screenshot of result
+screenshot 07_2d_result table
+
+# Test 4: Open graph viewer
+open_graph
+wait 500
+screenshot 08_graph_view graph
+
+# Close graph
+close_graph
+
+# Done
+close_table

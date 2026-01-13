@@ -1,0 +1,50 @@
+# Test Script: Data Manipulation Features
+# Tests increment, decrement, multiply, add, and set value operations
+# Run with: python tools/test_runner.py --script tests/gui/test_data_manipulation.txt
+
+# Load the sample ROM
+load_rom examples/lf9veb.bin
+
+# Open a 3D table
+open_table "APP to TP Desired"
+wait 500
+
+# Take initial screenshot
+screenshot dm_01_initial table
+
+# Test 1: Increment
+select 3 3 5 5
+screenshot dm_02_selection table
+increment
+screenshot dm_03_after_increment table
+
+# Test 2: Decrement (undo first, then decrement)
+undo
+decrement
+screenshot dm_04_after_decrement table
+
+# Test 3: Multiply by 1.1 (10% increase)
+undo
+multiply 1.1
+screenshot dm_05_after_multiply table
+
+# Test 4: Add 5.0
+undo
+add 5.0
+screenshot dm_06_after_add table
+
+# Test 5: Set to 50.0
+undo
+set 50.0
+screenshot dm_07_after_set table
+
+# Test 6: Select all and increment
+undo
+select_all
+screenshot dm_08_select_all table
+increment
+screenshot dm_09_increment_all table
+
+# Cleanup
+undo
+close_table
