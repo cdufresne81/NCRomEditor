@@ -198,8 +198,12 @@ class TableViewerWindow(QMainWindow):
         if table_widget.verticalHeader().isVisible():
             content_width += table_widget.verticalHeader().width()
 
-        # Minimal margin for scrollbar/border
-        content_width += 4
+        # Add Y-axis label width if visible
+        if self.viewer.y_axis_label.isVisible():
+            content_width += self.viewer.y_axis_label.sizeHint().width()
+
+        # Margin for scrollbar/border/spacing
+        content_width += 10
 
         # Calculate content height
         content_height = 0
@@ -210,6 +214,10 @@ class TableViewerWindow(QMainWindow):
         if table_widget.horizontalHeader().isVisible():
             content_height += table_widget.horizontalHeader().height()
 
+        # Add X-axis label height if visible
+        if self.viewer.x_axis_label.isVisible():
+            content_height += self.viewer.x_axis_label.sizeHint().height()
+
         # Add info label height (TEMPORARILY HIDDEN - not adding height)
         # content_height += self.viewer.info_label.sizeHint().height()
 
@@ -217,8 +225,8 @@ class TableViewerWindow(QMainWindow):
         if self.menuBar():
             content_height += self.menuBar().height()
 
-        # Add window title bar (approximately)
-        content_height += 30
+        # Add window title bar and frame (approximate)
+        content_height += 40
 
         # Get screen size to limit window size
         screen = QApplication.primaryScreen()
