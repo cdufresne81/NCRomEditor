@@ -1,0 +1,39 @@
+# Test: 2D table graph artifact when reopening
+# This test captures what happens when opening/closing/reopening graph on a 2D table
+
+load_rom examples/lf9veb.bin
+
+# Find a 2D table - Coolant Temp Scaling is typically 2D
+open_table "Coolant Temp Scaling"
+wait 300
+
+# Screenshot table without graph
+screenshot 2d_artifact_01_initial table
+
+# Open graph first time
+open_graph
+wait 500
+screenshot 2d_artifact_02_graph_open_1 table
+screenshot 2d_artifact_02b_graph_only_1 graph
+
+# Close graph
+close_graph
+wait 300
+screenshot 2d_artifact_03_graph_closed table
+
+# Reopen graph (this is where artifact might appear)
+open_graph
+wait 500
+screenshot 2d_artifact_04_graph_open_2 table
+screenshot 2d_artifact_04b_graph_only_2 graph
+
+# Close and reopen one more time
+close_graph
+wait 300
+open_graph
+wait 500
+screenshot 2d_artifact_05_graph_open_3 table
+screenshot 2d_artifact_05b_graph_only_3 graph
+
+close_graph
+close_table

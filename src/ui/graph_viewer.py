@@ -43,7 +43,6 @@ class GraphWidget(QWidget):
         # Create matplotlib figure and canvas
         self.figure = Figure(figsize=(8, 6))
         self.canvas = FigureCanvas(self.figure)
-        self.canvas.setFocusPolicy(Qt.StrongFocus)
 
         # Set up layout
         layout = QVBoxLayout()
@@ -54,6 +53,12 @@ class GraphWidget(QWidget):
         # Set size policy to expand
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setMinimumWidth(300)
+
+        # Enable focus for keyboard handling
+        self.setFocusPolicy(Qt.StrongFocus)
+
+        # Connect canvas mouse press to grab focus
+        self.canvas.mpl_connect('button_press_event', self._on_canvas_click)
 
     def set_data(self, table: Table, data: dict, rom_definition: RomDefinition = None,
                  selected_cells: list = None):
@@ -78,6 +83,10 @@ class GraphWidget(QWidget):
         if self.table is not None:
             self._plot_data()
 
+    def _on_canvas_click(self, event):
+        """Handle canvas click - grab focus for keyboard events"""
+        self.setFocus()
+
     def update_data(self, data: dict):
         """Update just the data values (e.g., after cell edit)"""
         self.data = data
@@ -98,6 +107,9 @@ class GraphWidget(QWidget):
 
         self.figure.clear()
 
+        # Reset ax_3d for non-3D plots
+        self.ax_3d = None
+
         if self.table.type == TableType.THREE_D:
             self._plot_3d()
             # Restore view angles if we had them
@@ -107,6 +119,12 @@ class GraphWidget(QWidget):
             self._plot_2d()
         else:
             self._plot_1d()
+
+        # Ensure proper layout after plotting
+        try:
+            self.figure.tight_layout()
+        except Exception:
+            pass  # tight_layout can fail in some edge cases
 
         self.canvas.draw()
 

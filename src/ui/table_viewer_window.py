@@ -281,7 +281,7 @@ class TableViewerWindow(QMainWindow):
 
             # Expand window to accommodate graph
             current_width = self.width()
-            graph_width = 400  # Default graph panel width
+            graph_width = 550  # Default graph panel width
             new_width = current_width + graph_width
 
             # Limit to screen size
@@ -292,8 +292,8 @@ class TableViewerWindow(QMainWindow):
 
             self.resize(new_width, self.height())
 
-            # Set splitter proportions (table takes ~60%, graph takes ~40%)
-            self.splitter.setSizes([int(new_width * 0.6), int(new_width * 0.4)])
+            # Set splitter proportions (table takes ~50%, graph takes ~50%)
+            self.splitter.setSizes([int(new_width * 0.5), int(new_width * 0.5)])
 
     def _on_cell_changed(self, table_name: str, row: int, col: int,
                          old_value: float, new_value: float,
