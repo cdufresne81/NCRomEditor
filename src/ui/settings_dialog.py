@@ -75,6 +75,23 @@ class SettingsDialog(QDialog):
         paths_layout = QFormLayout()
         paths_group.setLayout(paths_layout)
 
+        # Projects directory setting
+        projects_layout = QHBoxLayout()
+        self.projects_path_edit = QLineEdit()
+        self.projects_path_edit.setPlaceholderText("Path to store ROM projects")
+        projects_layout.addWidget(self.projects_path_edit)
+
+        browse_projects_button = QPushButton("Browse...")
+        browse_projects_button.clicked.connect(self.browse_projects_directory)
+        projects_layout.addWidget(browse_projects_button)
+
+        paths_layout.addRow("Projects Directory:", projects_layout)
+
+        # Add help text for projects
+        projects_help = QLabel("Location where ROM tuning projects are stored")
+        projects_help.setStyleSheet("color: gray; font-size: 10px;")
+        paths_layout.addRow("", projects_help)
+
         # Metadata directory setting
         metadata_layout = QHBoxLayout()
         self.metadata_path_edit = QLineEdit()
@@ -172,6 +189,10 @@ class SettingsDialog(QDialog):
 
     def load_settings(self):
         """Load current settings into the UI"""
+        # Load projects directory
+        projects_dir = self.settings.get_projects_directory()
+        self.projects_path_edit.setText(projects_dir)
+
         # Load metadata directory
         metadata_dir = self.settings.get_metadata_directory()
         self.metadata_path_edit.setText(metadata_dir)
@@ -189,6 +210,22 @@ class SettingsDialog(QDialog):
         # Load colormap path
         colormap_path = self.settings.get_colormap_path()
         self.colormap_path_edit.setText(colormap_path)
+
+    def browse_projects_directory(self):
+        """Open directory browser for projects directory"""
+        current_path = self.projects_path_edit.text()
+        if not current_path:
+            current_path = str(Path.cwd())
+
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Select Projects Directory",
+            current_path,
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+        )
+
+        if directory:
+            self.projects_path_edit.setText(directory)
 
     def browse_metadata_directory(self):
         """Open directory browser for metadata directory"""
@@ -225,6 +262,11 @@ class SettingsDialog(QDialog):
 
     def apply_settings(self):
         """Apply settings without closing the dialog"""
+        # Save projects directory
+        projects_dir = self.projects_path_edit.text().strip()
+        if projects_dir:
+            self.settings.set_projects_directory(projects_dir)
+
         # Save metadata directory
         metadata_dir = self.metadata_path_edit.text().strip()
         if metadata_dir:

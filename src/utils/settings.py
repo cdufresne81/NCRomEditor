@@ -202,6 +202,26 @@ class AppSettings:
         self.settings.setValue("paths/colormap_directory", path)
         self.settings.sync()
 
+    def get_projects_directory(self) -> str:
+        """
+        Get the configured projects directory path
+
+        Returns:
+            str: Path to directory where projects are stored
+        """
+        default_path = str(Path(__file__).parent.parent.parent / "projects")
+        return self.settings.value("paths/projects_directory", default_path)
+
+    def set_projects_directory(self, path: str):
+        """
+        Set the projects directory path
+
+        Args:
+            path: Path to directory where projects are stored
+        """
+        self.settings.setValue("paths/projects_directory", path)
+        self.settings.sync()
+
 
 # Global settings instance
 _settings = None
