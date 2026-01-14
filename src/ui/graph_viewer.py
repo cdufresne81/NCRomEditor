@@ -76,10 +76,20 @@ class GraphViewer(QMainWindow):
 
     def _plot_data(self):
         """Plot the table data based on table type"""
+        # Save current view angles before clearing (for 3D plots)
+        saved_elev = None
+        saved_azim = None
+        if self.ax_3d is not None:
+            saved_elev = self.ax_3d.elev
+            saved_azim = self.ax_3d.azim
+
         self.figure.clear()
 
         if self.table.type == TableType.THREE_D:
             self._plot_3d()
+            # Restore view angles if we had them
+            if saved_elev is not None and saved_azim is not None and self.ax_3d is not None:
+                self.ax_3d.view_init(elev=saved_elev, azim=saved_azim)
         elif self.table.type == TableType.TWO_D:
             self._plot_2d()
         else:

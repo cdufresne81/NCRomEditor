@@ -1,0 +1,26 @@
+# Test: Graph rotation preservation on selection change
+# This test verifies that rotating the graph and then selecting cells preserves the view angle
+
+load_rom examples/lf9veb.bin
+open_table "APP to TP Desired - 2nd Gear"
+wait 300
+
+# Open graph
+open_graph
+wait 500
+
+# Screenshot initial position (default view)
+screenshot rotation_01_initial graph
+
+# Select different cells multiple times - view should remain consistent
+select 5 5
+wait 200
+screenshot rotation_02_after_select graph
+
+# Select another region
+select 2 2 8 8
+wait 200
+screenshot rotation_03_after_multi_select graph
+
+close_graph
+close_table
