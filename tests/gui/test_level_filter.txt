@@ -1,0 +1,28 @@
+# Test: User level filter in table browser
+# Verifies that the level filter dropdown filters tables by complexity
+
+load_rom examples/lf9veb.bin
+wait 500
+
+# Screenshot with all levels showing
+screenshot level_filter_01_all_levels main
+
+# Set level filter to 1 (Basic)
+set_level 1
+wait 300
+screenshot level_filter_02_level_1 main
+
+# Set level filter to 2 (Intermediate)
+set_level 2
+wait 300
+screenshot level_filter_03_level_2 main
+
+# Set level filter to 3 (Advanced)
+set_level 3
+wait 300
+screenshot level_filter_04_level_3 main
+
+# Reset to all levels
+set_level 0
+wait 300
+screenshot level_filter_05_back_to_all main

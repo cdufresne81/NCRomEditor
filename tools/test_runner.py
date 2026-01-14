@@ -547,13 +547,45 @@ class TestRunner:
             self._log(f"ERROR: {e}")
             return False
 
+    def set_level_filter(self, level: int) -> bool:
+        """
+        Set the user level filter in the table browser
+
+        Args:
+            level: Level to filter by (0=all, 1-5 for specific levels)
+
+        Returns:
+            True if successful
+        """
+        if self.main_window is None:
+            self._log("ERROR: Application not started")
+            return False
+
+        try:
+            # Access the table browser's level combo
+            table_browser = self.main_window.table_browser
+
+            # Find the index for this level value
+            index = table_browser.level_combo.findData(level)
+            if index >= 0:
+                table_browser.level_combo.setCurrentIndex(index)
+                self._process_events()
+                self._log(f"Level filter set to: {level}")
+                return True
+            else:
+                self._log(f"ERROR: Invalid level: {level}")
+                return False
+        except Exception as e:
+            self._log(f"ERROR: {e}")
+            return False
+
     def screenshot(self, name: str = None, target: str = "table") -> str:
         """
         Take a screenshot
 
         Args:
             name: Optional name for the screenshot (defaults to timestamp)
-            target: What to capture: "table", "graph", "main", or "all"
+            target: What to capture: "table", "graph", "main", "table_browser", or "all"
 
         Returns:
             Path to saved screenshot, or empty string on failure
@@ -571,6 +603,8 @@ class TestRunner:
                 widget = self.current_table_window.graph_viewer
             elif target == "main" and self.main_window:
                 widget = self.main_window
+            elif target == "table_browser" and self.main_window:
+                widget = self.main_window.table_browser
             else:
                 self._log(f"ERROR: Invalid target or widget not available: {target}")
                 return ""
@@ -853,6 +887,9 @@ class TestRunner:
             elif cmd == "list_screenshots":
                 self.list_screenshots()
                 return True
+
+            elif cmd == "set_level" and len(args) >= 1:
+                return self.set_level_filter(int(args[0]))
 
             else:
                 self._log(f"Unknown command: {cmd}")

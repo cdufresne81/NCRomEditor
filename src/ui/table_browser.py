@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QStyledItemDelegate,
     QStyle,
+    QComboBox,
 )
 from PySide6.QtCore import Signal, Qt, QRect
 from PySide6.QtGui import QShortcut, QKeySequence, QColor, QPainter, QBrush, QPen
@@ -135,6 +136,7 @@ class TableBrowser(QWidget):
         super().__init__(parent)
         self.definition = None
         self.modified_tables = set()  # Track modified table addresses
+        self.current_level_filter = 0  # 0 = show all levels
         self.init_ui()
 
     def init_ui(self):
@@ -159,6 +161,25 @@ class TableBrowser(QWidget):
         search_layout.addWidget(clear_button)
 
         layout.addLayout(search_layout)
+
+        # Level filter
+        level_layout = QHBoxLayout()
+        level_label = QLabel("User Level:")
+        level_layout.addWidget(level_label)
+
+        self.level_combo = QComboBox()
+        self.level_combo.addItem("All Levels", 0)
+        self.level_combo.addItem("1 - Basic", 1)
+        self.level_combo.addItem("2 - Intermediate", 2)
+        self.level_combo.addItem("3 - Advanced", 3)
+        self.level_combo.addItem("4 - Expert", 4)
+        self.level_combo.addItem("5 - Developer", 5)
+        self.level_combo.currentIndexChanged.connect(self._on_level_changed)
+        self.level_combo.setToolTip("Filter tables by complexity level")
+        level_layout.addWidget(self.level_combo)
+        level_layout.addStretch()
+
+        layout.addLayout(level_layout)
 
         # Tree widget for categories and tables
         self.tree = QTreeWidget()
@@ -229,21 +250,31 @@ class TableBrowser(QWidget):
         self.search_box.setFocus()
         self.search_box.selectAll()
 
+    def _on_level_changed(self, index: int):
+        """Handle level filter change"""
+        self.current_level_filter = self.level_combo.currentData()
+        self._apply_filters()
+
+    def _apply_filters(self):
+        """Apply both search and level filters"""
+        self._filter_tables(self.search_box.text())
+
     def _filter_tables(self, search_text: str):
         """
-        Filter the table tree based on search text
+        Filter the table tree based on search text and level
 
         Args:
             search_text: Text to search for in table names and categories
         """
         search_text = search_text.lower().strip()
+        level_filter = self.current_level_filter
 
         # Update delegate with search text for highlighting
         self.delegate.set_search_text(search_text)
         self.tree.viewport().update()  # Force repaint
 
-        # If search is empty, show all items
-        if not search_text:
+        # If no filters active, show all items
+        if not search_text and level_filter == 0:
             self._show_all_items()
             return
 
@@ -251,47 +282,72 @@ class TableBrowser(QWidget):
         for i in range(self.tree.topLevelItemCount()):
             category_item = self.tree.topLevelItem(i)
             category_name = category_item.text(0)
-            category_has_match = False
+            category_has_visible = False
 
-            # Check if category name matches
-            category_matches = search_text in category_name.lower()
+            # Check if category name matches search
+            category_matches_search = not search_text or search_text in category_name.lower()
 
             # Check all table children
             for j in range(category_item.childCount()):
                 table_item = category_item.child(j)
-                name = table_item.text(0)
-                type_text = table_item.text(1)
-                address = table_item.text(2)
+                table = table_item.data(0, 100)
 
-                # Match against table name, type, or address
-                matches = (
-                    search_text in name.lower() or
-                    search_text in type_text.lower() or
-                    search_text in address.lower()
-                )
+                # Check level filter
+                level_ok = level_filter == 0 or (table and table.level <= level_filter)
 
-                # Show/hide table item
-                table_item.setHidden(not matches and not category_matches)
+                # Check search filter
+                if search_text:
+                    name = table_item.text(0)
+                    type_text = table_item.text(1)
+                    address = table_item.text(2)
+                    search_ok = (
+                        search_text in name.lower() or
+                        search_text in type_text.lower() or
+                        search_text in address.lower() or
+                        category_matches_search
+                    )
+                else:
+                    search_ok = True
 
-                if matches:
-                    category_has_match = True
+                # Item is visible if it passes both filters
+                is_visible = level_ok and search_ok
+                table_item.setHidden(not is_visible)
 
-            # Show category if it matches or has matching children
-            category_item.setHidden(not (category_matches or category_has_match))
+                if is_visible:
+                    category_has_visible = True
 
-            # Expand categories that have matches
-            if category_has_match or category_matches:
+            # Show category if it has visible children
+            category_item.setHidden(not category_has_visible)
+
+            # Expand categories that have visible items when filtering
+            if category_has_visible and (search_text or level_filter > 0):
                 category_item.setExpanded(True)
+            elif not search_text and level_filter == 0:
+                category_item.setExpanded(False)
 
     def _show_all_items(self):
-        """Show all items in the tree and collapse categories"""
+        """Show all items in the tree (respecting level filter) and collapse categories"""
+        level_filter = self.current_level_filter
+
         for i in range(self.tree.topLevelItemCount()):
             category_item = self.tree.topLevelItem(i)
-            category_item.setHidden(False)
+            category_has_visible = False
 
             for j in range(category_item.childCount()):
                 table_item = category_item.child(j)
-                table_item.setHidden(False)
+                table = table_item.data(0, 100)
+
+                # Check level filter
+                if level_filter == 0:
+                    is_visible = True
+                else:
+                    is_visible = table and table.level <= level_filter
+
+                table_item.setHidden(not is_visible)
+                if is_visible:
+                    category_has_visible = True
+
+            category_item.setHidden(not category_has_visible)
 
             # Collapse categories when search is cleared
             category_item.setExpanded(False)
