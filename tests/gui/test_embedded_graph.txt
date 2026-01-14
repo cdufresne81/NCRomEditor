@@ -1,0 +1,31 @@
+# Test: Embedded graph panel in table viewer window
+# This test verifies that the graph appears to the right of the table
+
+load_rom examples/lf9veb.bin
+open_table "APP to TP Desired - 2nd Gear"
+wait 300
+
+# Screenshot table without graph
+screenshot embedded_01_table_only table
+
+# Toggle graph on with G key
+open_graph
+wait 500
+
+# Screenshot table with embedded graph (full window)
+screenshot embedded_02_with_graph table
+
+# Select some cells to see highlighting in graph
+select 3 3 6 6
+wait 300
+screenshot embedded_03_with_selection table
+
+# Screenshot just the graph widget
+screenshot embedded_04_graph_only graph
+
+# Toggle graph off
+close_graph
+wait 300
+screenshot embedded_05_graph_hidden table
+
+close_table

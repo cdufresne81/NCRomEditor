@@ -3,14 +3,19 @@ Table Viewer Window
 
 Displays table data in a separate, independent window.
 Allows opening multiple tables simultaneously for comparison.
+Features an embedded graph panel that can be toggled with G key.
 """
 
-from PySide6.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QApplication
+from PySide6.QtWidgets import (
+    QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QApplication,
+    QSplitter, QFrame
+)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 
 from ..utils.constants import APP_NAME
 from .table_viewer import TableViewer
+from .graph_viewer import GraphWidget
 from ..core.rom_definition import Table, RomDefinition
 
 
@@ -70,8 +75,9 @@ class TableViewerWindow(QMainWindow):
         self.data = data
         self.rom_definition = rom_definition
         self.rom_path = rom_path
-        self.graph_viewer = None  # Reference to graph viewer window
         self._diff_mode = diff_mode
+        self._graph_visible = False
+        self._table_only_size = None  # Store size when graph is hidden
 
         # Remove minimize/maximize buttons, keep only close button
         self.setWindowFlags(
@@ -91,10 +97,15 @@ class TableViewerWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        layout = QVBoxLayout()
+        layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         central_widget.setLayout(layout)
+
+        # Create splitter for table and graph
+        self.splitter = QSplitter(Qt.Horizontal)
+        self.splitter.setHandleWidth(3)
+        layout.addWidget(self.splitter)
 
         # Create table viewer widget with shared tracking dicts
         self.viewer = TableViewer(
@@ -109,7 +120,12 @@ class TableViewerWindow(QMainWindow):
         if diff_mode:
             self.viewer.set_read_only(True)
 
-        layout.addWidget(self.viewer)
+        self.splitter.addWidget(self.viewer)
+
+        # Create graph widget (initially hidden)
+        self.graph_widget = GraphWidget()
+        self.splitter.addWidget(self.graph_widget)
+        self.graph_widget.hide()
 
         # Connect cell_changed signal
         self.viewer.cell_changed.connect(self._on_cell_changed)
@@ -122,6 +138,9 @@ class TableViewerWindow(QMainWindow):
 
         # Connect axis_bulk_changes signal
         self.viewer.axis_bulk_changes.connect(self._on_axis_bulk_changes)
+
+        # Connect selection changed to update graph
+        self.viewer.table_widget.itemSelectionChanged.connect(self._on_table_selection_changed)
 
         # Set up undo/redo shortcuts for this window
         undo_shortcut = QShortcut(QKeySequence.Undo, self)
@@ -187,9 +206,11 @@ class TableViewerWindow(QMainWindow):
         # View menu (after Edit menu)
         view_menu = menubar.addMenu("View")
 
-        graph_action = view_menu.addAction("View Graph...")
-        graph_action.setShortcut("G")
-        graph_action.triggered.connect(self._open_graph_viewer)
+        self.graph_action = view_menu.addAction("Show Graph")
+        self.graph_action.setShortcut("G")
+        self.graph_action.setCheckable(True)
+        self.graph_action.setChecked(False)
+        self.graph_action.triggered.connect(self._toggle_graph)
 
         # Add diff toggle when in diff mode
         if self._diff_mode:
@@ -227,25 +248,52 @@ class TableViewerWindow(QMainWindow):
         return selected_cells
 
     def _on_table_selection_changed(self):
-        """Handle table selection changes - update graph if open"""
-        if self.graph_viewer and not self.graph_viewer.isHidden():
+        """Handle table selection changes - update graph if visible"""
+        if self._graph_visible:
             selected_cells = self._get_selected_data_cells()
-            self.graph_viewer.update_selection(selected_cells)
+            self.graph_widget.update_selection(selected_cells)
 
-    def _open_graph_viewer(self):
-        """Open graph viewer window with current table data and selection"""
-        from .graph_viewer import GraphViewer
+    def _toggle_graph(self):
+        """Toggle graph panel visibility"""
+        if self._graph_visible:
+            # Hide graph
+            self._graph_visible = False
+            self.graph_widget.hide()
+            self.graph_action.setChecked(False)
 
-        # Get selected cells
-        selected_cells = self._get_selected_data_cells()
+            # Restore window to table-only size
+            if self._table_only_size:
+                self.resize(self._table_only_size)
+        else:
+            # Save current size before showing graph
+            self._table_only_size = self.size()
 
-        # Create and show graph viewer
-        self.graph_viewer = GraphViewer(self.table, self.data, self.rom_definition,
-                                        selected_cells, self)
-        self.graph_viewer.show()
+            # Show graph
+            self._graph_visible = True
+            self.graph_widget.show()
+            self.graph_action.setChecked(True)
 
-        # Connect selection changed signal to update graph
-        self.viewer.table_widget.itemSelectionChanged.connect(self._on_table_selection_changed)
+            # Initialize graph with current data and selection
+            selected_cells = self._get_selected_data_cells()
+            self.graph_widget.set_data(
+                self.table, self.data, self.rom_definition, selected_cells
+            )
+
+            # Expand window to accommodate graph
+            current_width = self.width()
+            graph_width = 400  # Default graph panel width
+            new_width = current_width + graph_width
+
+            # Limit to screen size
+            screen = QApplication.primaryScreen()
+            if screen:
+                max_width = int(screen.availableGeometry().width() * 0.95)
+                new_width = min(new_width, max_width)
+
+            self.resize(new_width, self.height())
+
+            # Set splitter proportions (table takes ~60%, graph takes ~40%)
+            self.splitter.setSizes([int(new_width * 0.6), int(new_width * 0.4)])
 
     def _on_cell_changed(self, table_name: str, row: int, col: int,
                          old_value: float, new_value: float,
@@ -334,9 +382,5 @@ class TableViewerWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Handle window close event"""
-        # Close associated graph viewer if open
-        if self.graph_viewer and not self.graph_viewer.isHidden():
-            self.graph_viewer.close()
-
         # Clean up if needed
         event.accept()

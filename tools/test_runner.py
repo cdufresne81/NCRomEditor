@@ -487,7 +487,7 @@ class TestRunner:
 
     def open_graph(self) -> bool:
         """
-        Open graph viewer for current table
+        Show graph panel for current table (embedded in table viewer window)
 
         Returns:
             True if successful
@@ -497,9 +497,10 @@ class TestRunner:
             return False
 
         try:
-            self.current_table_window._open_graph_viewer()
+            if not self.current_table_window._graph_visible:
+                self.current_table_window._toggle_graph()
             self._process_events()
-            self._log("Graph viewer opened")
+            self._log("Graph panel shown")
             return True
         except Exception as e:
             self._log(f"ERROR: {e}")
@@ -507,7 +508,7 @@ class TestRunner:
 
     def close_graph(self) -> bool:
         """
-        Close graph viewer if open
+        Hide graph panel if visible
 
         Returns:
             True if successful
@@ -517,10 +518,10 @@ class TestRunner:
             return False
 
         try:
-            if self.current_table_window.graph_viewer:
-                self.current_table_window.graph_viewer.close()
-                self._process_events()
-            self._log("Graph viewer closed")
+            if self.current_table_window._graph_visible:
+                self.current_table_window._toggle_graph()
+            self._process_events()
+            self._log("Graph panel hidden")
             return True
         except Exception as e:
             self._log(f"ERROR: {e}")
@@ -599,8 +600,8 @@ class TestRunner:
 
             if target == "table" and self.current_table_window:
                 widget = self.current_table_window
-            elif target == "graph" and self.current_table_window and self.current_table_window.graph_viewer:
-                widget = self.current_table_window.graph_viewer
+            elif target == "graph" and self.current_table_window and self.current_table_window._graph_visible:
+                widget = self.current_table_window.graph_widget
             elif target == "main" and self.main_window:
                 widget = self.main_window
             elif target == "table_browser" and self.main_window:
