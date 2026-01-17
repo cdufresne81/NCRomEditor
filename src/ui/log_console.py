@@ -24,20 +24,25 @@ from PySide6.QtGui import QTextCursor, QFont
 from PySide6.QtCore import Signal, QObject
 
 
-class QtLogHandler(logging.Handler, QObject):
+class LogSignalEmitter(QObject):
+    """Separate QObject to hold signals, avoiding MRO conflicts"""
+    log_message = Signal(str, int)  # message, level
+
+
+class QtLogHandler(logging.Handler):
     """
     Custom logging handler that emits Qt signals for thread-safe log display
     """
-    log_message = Signal(str, int)  # message, level
 
     def __init__(self):
-        logging.Handler.__init__(self)
-        QObject.__init__(self)
+        super().__init__()
+        self.signal_emitter = LogSignalEmitter()
+        self.log_message = self.signal_emitter.log_message
 
     def emit(self, record):
         """Emit log record as Qt signal"""
         msg = self.format(record)
-        self.log_message.emit(msg, record.levelno)
+        self.signal_emitter.log_message.emit(msg, record.levelno)
 
 
 class LogConsole(QWidget):
