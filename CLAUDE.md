@@ -1,5 +1,13 @@
 # Claude Code Instructions
 
+## Session Notes
+
+Check `.claude/notes.md` at the start of each session for:
+- Pending tasks from previous sessions
+- Important context and decisions
+
+Update this file when ending a session with any important notes for next time.
+
 ## Landing the Plane (Session Completion)
 
 When ending a work session, complete ALL steps below. Work is NOT complete until `git push` succeeds.
@@ -22,7 +30,9 @@ When ending a work session, complete ALL steps below. Work is NOT complete until
 
 3. **Verify** - All changes committed AND pushed
 
-4. **Hand off** - Provide context summary for next session
+4. **Update notes** - Add any pending tasks or context to `.claude/notes.md`
+
+5. **Hand off** - Provide context summary for next session
 
 **Rules:**
 - Work is NOT complete until `git push` succeeds
