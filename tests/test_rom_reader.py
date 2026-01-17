@@ -136,6 +136,52 @@ class TestScalingConverter:
         assert converter.to_display(value) == value
         assert converter.from_display(value) == value
 
+    def test_caret_exponentiation_conversion(self):
+        """Test that ^ is converted to ** for exponentiation (calculator-style expressions)"""
+        # This expression uses ^ for power, common in ROM definition XML files
+        scaling = Scaling(
+            name="temp_conversion",
+            units="°F",
+            toexpr="(180-(1.42*x)+(0.00765*x^2)-(0.0000163*x^3))",
+            frexpr="x",  # Simplified for test
+            format="%0.1f",
+            min=-40.0,
+            max=300.0,
+            inc=1.0,
+            storagetype="uint8",
+            endian="big"
+        )
+        converter = ScalingConverter(scaling)
+
+        # Test that it doesn't raise bitwise_xor error
+        # With x=100: 180 - 142 + 76.5 - 16.3 = 98.2
+        result = converter.to_display(100.0)
+        expected = 180 - (1.42 * 100) + (0.00765 * 100**2) - (0.0000163 * 100**3)
+        assert abs(result - expected) < 0.01
+
+    def test_caret_in_array_conversion(self):
+        """Test ^ conversion works with numpy arrays"""
+        scaling = Scaling(
+            name="polynomial",
+            units="",
+            toexpr="x^2 + 2*x + 1",
+            frexpr="x",
+            format="%0.2f",
+            min=0.0,
+            max=100.0,
+            inc=1.0,
+            storagetype="float",
+            endian="big"
+        )
+        converter = ScalingConverter(scaling)
+
+        raw_values = np.array([0.0, 1.0, 2.0, 3.0])
+        result = converter.to_display(raw_values)
+
+        # (x^2 + 2x + 1) = (x+1)^2
+        expected = np.array([1.0, 4.0, 9.0, 16.0])
+        np.testing.assert_array_almost_equal(result, expected)
+
 
 class TestRomReaderInitialization:
     """Test RomReader initialization"""

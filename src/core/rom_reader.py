@@ -25,6 +25,19 @@ from .exceptions import (
 logger = logging.getLogger(__name__)
 
 
+def _convert_expr_to_python(expr: str) -> str:
+    """
+    Convert expression from calculator notation to Python notation.
+
+    Replaces ^ with ** for exponentiation since many ROM definition
+    files use ^ (calculator-style) but Python uses ** for power.
+    """
+    import re
+    # Replace ^ with ** for exponentiation
+    # This handles patterns like x^2, x^3, (expr)^2, etc.
+    return re.sub(r'\^', '**', expr)
+
+
 class ScalingConverter:
     """
     Converts values between raw binary and display using scaling expressions
@@ -38,6 +51,9 @@ class ScalingConverter:
             scaling: Scaling definition with conversion expressions
         """
         self.scaling = scaling
+        # Pre-convert expressions to Python syntax
+        self._toexpr = _convert_expr_to_python(scaling.toexpr) if scaling.toexpr else scaling.toexpr
+        self._frexpr = _convert_expr_to_python(scaling.frexpr) if scaling.frexpr else scaling.frexpr
 
     def to_display(self, raw_value: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
         """
@@ -55,13 +71,13 @@ class ScalingConverter:
         try:
             # Use simpleeval for safe expression evaluation
             if isinstance(raw_value, np.ndarray):
-                return np.array([simple_eval(self.scaling.toexpr, names={'x': v}) for v in raw_value])
+                return np.array([simple_eval(self._toexpr, names={'x': v}) for v in raw_value])
             else:
-                return simple_eval(self.scaling.toexpr, names={'x': raw_value})
+                return simple_eval(self._toexpr, names={'x': raw_value})
         except Exception as e:
-            logger.error(f"Error converting to display with expr '{self.scaling.toexpr}': {e}")
+            logger.error(f"Error converting to display with expr '{self._toexpr}': {e}")
             raise ScalingConversionError(
-                f"Failed to convert raw value to display using expression '{self.scaling.toexpr}': {e}"
+                f"Failed to convert raw value to display using expression '{self._toexpr}': {e}"
             )
 
     def from_display(self, display_value: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
@@ -79,13 +95,13 @@ class ScalingConverter:
         """
         try:
             if isinstance(display_value, np.ndarray):
-                return np.array([simple_eval(self.scaling.frexpr, names={'x': v}) for v in display_value])
+                return np.array([simple_eval(self._frexpr, names={'x': v}) for v in display_value])
             else:
-                return simple_eval(self.scaling.frexpr, names={'x': display_value})
+                return simple_eval(self._frexpr, names={'x': display_value})
         except Exception as e:
-            logger.error(f"Error converting from display with expr '{self.scaling.frexpr}': {e}")
+            logger.error(f"Error converting from display with expr '{self._frexpr}': {e}")
             raise ScalingConversionError(
-                f"Failed to convert display value to raw using expression '{self.scaling.frexpr}': {e}"
+                f"Failed to convert display value to raw using expression '{self._frexpr}': {e}"
             )
 
 
