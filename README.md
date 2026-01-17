@@ -37,51 +37,128 @@ python main.py
 
 ## Features
 
-### ✅ Working Now
-- ✓ Automatic ROM ID detection and XML definition matching
-- ✓ Read NC Miata ECU ROM binary files
-- ✓ Browse 511 calibration tables organized by category
-- ✓ View 1D, 2D, and 3D tables with proper axis labels
-- ✓ Save modified ROM files
-- ✓ ROM ID verification
+### Core Features
+- Automatic ROM ID detection and XML definition matching
+- Read NC Miata ECU ROM binary files
+- Browse 511 calibration tables organized by category
+- View 1D, 2D, and 3D tables with proper axis labels
+- Save modified ROM files
+- ROM ID verification
+
+### Table Editing
+- Direct cell value editing with validation
+- Add/Subtract values to selected cells
+- Multiply selected cells by a factor
+- Set all selected cells to a specific value
+- Increment/Decrement values (`+`/`-` keys)
+- Smoothing filter for selected cells (`S` key)
+
+### Interpolation
+- Vertical interpolation (`V` key)
+- Horizontal interpolation (`H` key)
+- 2D bilinear interpolation for 3D tables (`B` key)
+
+### Clipboard & Export
+- Copy/paste cells (`Ctrl+C`/`Ctrl+V`)
+- Copy entire table to clipboard for Excel (`Ctrl+Shift+C`)
+- Export table to CSV (`Ctrl+E`)
+
+### Undo/Redo
+- Full undo/redo support (`Ctrl+Z`/`Ctrl+Y`)
+- Individual cell and bulk operation tracking
+- Up to 100 undo levels
+
+### Visualization
+- Interactive 3D surface plot for 3D tables
+- 2D line graph for 2D tables
+- Toggle graph panel (`G` key)
+- Cell selection highlighting on graph
+- Configurable color maps
+
+### Project Management
+- Create and load projects with version history
+- Git-like commit system with messages
+- Snapshot creation with version numbering
+- Table diff viewer to compare changes between versions
+- Modified cell tracking with visual indicators
+
+### User Interface
+- Multi-ROM support with tabs
+- Multi-window table viewers
+- Recent files list
+- Session restoration
+- Configurable settings (font size, color maps)
+- Activity log console
+- Keyboard shortcuts for all major operations
 
 ### 🚧 In Development
-- Table editing operations (add/subtract, interpolate)
-- Import/export individual tables
-- ROM comparison tool
-- Automatic checksum calculation
-- Copy/paste table data
+- ROM comparison tool (compare two different ROMs)
+- Automatic ECU checksum calculation
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Z` | Undo |
+| `Ctrl+Y` | Redo |
+| `Ctrl+C` | Copy selected cells |
+| `Ctrl+V` | Paste |
+| `Ctrl+Shift+C` | Copy table to clipboard |
+| `Ctrl+E` | Export to CSV |
+| `+` | Increment selected cells |
+| `-` | Decrement selected cells |
+| `V` | Vertical interpolation |
+| `H` | Horizontal interpolation |
+| `B` | Bilinear interpolation |
+| `S` | Smooth selection |
+| `G` | Toggle graph panel |
 
 ## Tech Stack
 
 - **Python 3.10+**
 - **PySide6** - Qt6 bindings for Python (GUI framework)
 - **NumPy** - Numerical operations on table data
-- **Matplotlib** - 3D visualization of maps
+- **Matplotlib** - 3D/2D visualization of maps
 
 ## Project Structure
 
 ```
 nc-rom-editor/
 ├── src/
-│   ├── core/              # ROM parsing & binary reading
-│   │   ├── rom_definition.py      # Data structures
-│   │   ├── definition_parser.py   # XML parser
-│   │   ├── rom_reader.py          # Binary ROM reader
-│   │   └── rom_detector.py        # Automatic ROM ID detection
-│   ├── ui/                # Qt GUI widgets
-│   │   ├── table_browser.py       # Category tree browser
-│   │   └── table_viewer.py        # Table data viewer
-│   └── utils/             # Helper functions
-├── metadata/              # ROM definition XML files
-│   └── lf9veb.xml        # NC Miata ROM definition
-├── examples/              # Example ROM binary files
-│   └── lf9veb.bin        # Stock NC Miata ROM
-├── docs/                  # Documentation
+│   ├── core/                          # ROM parsing & binary reading
+│   │   ├── rom_definition.py          # Data structures for tables
+│   │   ├── definition_parser.py       # XML parser for ROM definitions
+│   │   ├── rom_reader.py              # Binary ROM reader/writer
+│   │   ├── rom_detector.py            # Automatic ROM ID detection
+│   │   ├── change_tracker.py          # Undo/redo system
+│   │   ├── project_manager.py         # Project creation/loading
+│   │   └── version_models.py          # Commit and version data structures
+│   ├── ui/                            # Qt GUI widgets
+│   │   ├── table_viewer_window.py     # Main table viewer window
+│   │   ├── table_viewer.py            # Table grid widget
+│   │   ├── table_viewer_helpers/      # Modular helper classes
+│   │   │   ├── display.py             # Rendering and formatting
+│   │   │   ├── editing.py             # Cell editing logic
+│   │   │   ├── operations.py          # Bulk operations
+│   │   │   ├── interpolation.py       # Interpolation algorithms
+│   │   │   └── clipboard.py           # Copy/paste and export
+│   │   ├── graph_viewer.py            # 3D/2D graph visualization
+│   │   ├── table_browser.py           # Category tree browser
+│   │   ├── history_viewer.py          # Version history viewer
+│   │   ├── project_wizard.py          # Project creation dialog
+│   │   └── settings_dialog.py         # Settings/preferences
+│   └── utils/                         # Helper functions
+│       ├── settings.py                # Settings manager
+│       └── colormap.py                # Color scheme utilities
+├── metadata/                          # ROM definition XML files
+│   └── lf9veb.xml                     # NC Miata ROM definition (511 tables)
+├── examples/                          # Example ROM binary files
+│   └── lf9veb.bin                     # Stock NC Miata ROM
+├── docs/                              # Documentation
 │   └── ROM_DEFINITION_FORMAT.md
-├── main.py                # Application entry point
-├── run.bat                # Windows launcher
-└── WINDOWS_SETUP.md       # Windows setup guide
+├── main.py                            # Application entry point
+├── run.bat                            # Windows launcher
+└── WINDOWS_SETUP.md                   # Windows setup guide
 ```
 
 ## Usage
@@ -89,8 +166,20 @@ nc-rom-editor/
 1. **Load ROM:** File → Open ROM → Select `examples/lf9veb.bin`
 2. **Browse Tables:** Expand categories in the left panel (e.g., "Spark Target - Base")
 3. **View Table:** Click any table to see its data with axis values
-4. **Save ROM:** File → Save ROM or Save ROM As...
-5. **Flash to ECU:** Use RomDrop to flash the modified ROM
+4. **Edit Values:** Click cells to edit, use shortcuts for bulk operations
+5. **Visualize:** Press `G` to toggle 3D/2D graph view
+6. **Save ROM:** File → Save ROM or Save ROM As...
+7. **Flash to ECU:** Use RomDrop to flash the modified ROM
+
+### Using Projects
+
+Projects provide version control for your tuning work:
+
+1. **Create Project:** File → New Project → Select a ROM file
+2. **Make Changes:** Edit tables as needed
+3. **Commit:** File → Commit Changes → Enter a description
+4. **View History:** View → History to see all commits
+5. **Compare Versions:** Click any commit to see what changed
 
 ## Development
 
@@ -144,21 +233,13 @@ Tests run automatically on GitHub Actions for:
 
 ## Development Status
 
-**Current Version:** v0.1.0 - Alpha
+**Current Version:** v0.2.0 - Beta
 
-**Completed:**
-- ✅ Automatic ROM ID detection and XML matching
-- ✅ ROM definition XML parser (511 tables loaded)
-- ✅ Binary ROM reader with scaling conversions
-- ✅ Table browser UI with category organization
-- ✅ Table viewer for 1D, 2D, and 3D data
-- ✅ ROM ID verification
+This version includes full table editing capabilities, project management with version history, and interactive graph visualization.
 
 **Next Priorities:**
-- Table editing (modify cell values, add/subtract, interpolate)
-- Checksum calculation and validation
 - ROM comparison tool
-- Import/export individual tables
+- Automatic ECU checksum calculation
 
 ## Contributing
 
