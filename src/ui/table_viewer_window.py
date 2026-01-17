@@ -151,6 +151,9 @@ class TableViewerWindow(QMainWindow):
         # Connect selection changed to update graph
         self.viewer.table_widget.itemSelectionChanged.connect(self._on_table_selection_changed)
 
+        # Connect data_updated signal to refresh graph (for undo/redo)
+        self.viewer.data_updated.connect(self._refresh_graph)
+
         # Set up undo/redo shortcuts for this window
         undo_shortcut = QShortcut(QKeySequence.Undo, self)
         undo_shortcut.activated.connect(self.undo_requested.emit)

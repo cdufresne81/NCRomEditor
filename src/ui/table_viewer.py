@@ -100,6 +100,10 @@ class TableViewer(QWidget):
     # Args: list of (axis_type, index, old_value, new_value, old_raw, new_raw) tuples
     axis_bulk_changes = Signal(list)
 
+    # Signal emitted when cell is updated programmatically (e.g., undo/redo)
+    # Used to notify parent that data has changed and graph should refresh
+    data_updated = Signal()
+
     def __init__(self, rom_definition: RomDefinition = None, parent=None,
                  modified_cells_dict: dict = None, original_values_dict: dict = None,
                  diff_mode: bool = False, diff_base_data: dict = None):
@@ -413,10 +417,12 @@ class TableViewer(QWidget):
     def update_cell_value(self, data_row: int, data_col: int, new_value: float):
         """Update a cell's value programmatically (for undo/redo)"""
         self._edit.update_cell_value(data_row, data_col, new_value)
+        self.data_updated.emit()
 
     def update_axis_cell_value(self, axis_type: str, data_idx: int, new_value: float):
         """Update an axis cell's value programmatically (for undo/redo)"""
         self._edit.update_axis_cell_value(axis_type, data_idx, new_value)
+        self.data_updated.emit()
 
     def _data_to_ui_coords(self, data_row: int, data_col: int) -> tuple:
         """Convert data coordinates to UI table coordinates"""
