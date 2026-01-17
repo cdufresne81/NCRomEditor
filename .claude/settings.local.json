@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "Skill(mind:mind)",
+      "WebSearch"
+    ],
+    "ask": [
+      "Bash(rm -rf*)",
+      "Bash(*rm -rf*)",
+      "Bash(rm -r *)",
+      "Bash(*rm -r *)",
+      "Bash(dd *)",
+      "Bash(mkfs*)",
+      "Bash(chmod -R 777*)",
+      "Bash(chown -R*)",
+      "Bash(curl*|*sh)",
+      "Bash(wget*|*sh)",
+      "Bash(*--force*)",
+      "Bash(git push*--force*)",
+      "Bash(git reset --hard*)"
+    ]
+  }
+}
