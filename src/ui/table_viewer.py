@@ -430,6 +430,14 @@ class TableViewer(QWidget):
         """Paste clipboard content into selected cells"""
         self._clipboard.paste_selection()
 
+    def copy_table_to_clipboard(self):
+        """Copy entire table to clipboard as tab-separated values (for Excel)"""
+        self._clipboard.copy_table_to_clipboard()
+
+    def export_to_csv(self, rom_path: str = None):
+        """Export table to CSV file and open with default application"""
+        self._clipboard.export_to_csv(rom_path)
+
     def _apply_bulk_operation(self, operation_fn, operation_name: str):
         """Apply an operation to all selected data cells"""
         return self._ops.apply_bulk_operation(operation_fn, operation_name)
@@ -453,6 +461,10 @@ class TableViewer(QWidget):
     def set_value_selection(self):
         """Set all selected cells to value (dialog)"""
         self._ops.set_value_selection()
+
+    def smooth_selection(self):
+        """Apply light smoothing to selected data cells"""
+        self._ops.smooth_selection()
 
     def select_all_data(self):
         """Select all data cells (excluding axes)"""

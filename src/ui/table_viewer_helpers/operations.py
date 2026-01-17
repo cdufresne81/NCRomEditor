@@ -379,3 +379,145 @@ class TableOperationsHelper:
                 selection = QTableWidgetSelectionRange(2, 1, num_rows - 1, num_cols - 1)
                 self.ctx.table_widget.setRangeSelected(selection, True)
                 self.ctx.table_widget.setCurrentCell(2, 1)
+
+    def smooth_selection(self):
+        """
+        Apply light smoothing to selected data cells.
+
+        Uses weighted neighbor averaging to reduce jagged transitions.
+        Only affects data cells (not axis cells).
+        Works best on 3D tables but also works on 2D tables.
+        """
+        if self.ctx.read_only or not self.ctx.current_table or not self.ctx.current_data:
+            return
+
+        # Only 2D and 3D tables benefit from smoothing
+        table_type = self.ctx.current_table.type
+        if table_type == TableType.ONE_D:
+            logger.debug("Smoothing not applicable to 1D tables")
+            return
+
+        # Get selected ranges
+        selected = self.ctx.table_widget.selectedRanges()
+        if not selected:
+            logger.debug("Smooth: No selection")
+            return
+
+        # Collect selected data cells with their coordinates
+        values = self.ctx.current_data['values']
+        selected_cells = []
+
+        for sel_range in selected:
+            for row in range(sel_range.topRow(), sel_range.bottomRow() + 1):
+                for col in range(sel_range.leftColumn(), sel_range.rightColumn() + 1):
+                    item = self.ctx.table_widget.item(row, col)
+                    if not item:
+                        continue
+
+                    data_indices = item.data(Qt.UserRole)
+                    if data_indices is None:
+                        continue
+
+                    # Only process data cells (not axis cells)
+                    if isinstance(data_indices[0], str):
+                        continue  # Skip axis cells
+
+                    data_row, data_col = data_indices
+                    selected_cells.append((row, col, data_row, data_col))
+
+        if not selected_cells:
+            logger.debug("Smooth: No data cells in selection")
+            return
+
+        # Light smoothing factor (0.15 = 15% blend toward neighbor average)
+        # This is intentionally light - user can apply multiple times
+        blend_factor = 0.15
+
+        # Calculate smoothed values first (don't modify while iterating)
+        smoothed_values = {}
+
+        for ui_row, ui_col, data_row, data_col in selected_cells:
+            if values.ndim == 1:
+                # 2D table (1D array) - average with adjacent values
+                neighbors = []
+                if data_row > 0:
+                    neighbors.append(float(values[data_row - 1]))
+                if data_row < len(values) - 1:
+                    neighbors.append(float(values[data_row + 1]))
+
+                if neighbors:
+                    current = float(values[data_row])
+                    neighbor_avg = sum(neighbors) / len(neighbors)
+                    smoothed = current + blend_factor * (neighbor_avg - current)
+                    smoothed_values[(data_row, data_col)] = smoothed
+            else:
+                # 3D table (2D array) - average with all 8 neighbors
+                neighbors = []
+                rows, cols = values.shape
+
+                for dr in [-1, 0, 1]:
+                    for dc in [-1, 0, 1]:
+                        if dr == 0 and dc == 0:
+                            continue  # Skip self
+                        nr, nc = data_row + dr, data_col + dc
+                        if 0 <= nr < rows and 0 <= nc < cols:
+                            neighbors.append(float(values[nr, nc]))
+
+                if neighbors:
+                    current = float(values[data_row, data_col])
+                    neighbor_avg = sum(neighbors) / len(neighbors)
+                    smoothed = current + blend_factor * (neighbor_avg - current)
+                    smoothed_values[(data_row, data_col)] = smoothed
+
+        if not smoothed_values:
+            return
+
+        # Apply smoothed values and track changes
+        data_changes = []
+
+        for ui_row, ui_col, data_row, data_col in selected_cells:
+            if (data_row, data_col) not in smoothed_values:
+                continue
+
+            new_value = smoothed_values[(data_row, data_col)]
+
+            if values.ndim == 1:
+                old_value = float(values[data_row])
+            else:
+                old_value = float(values[data_row, data_col])
+
+            # Skip if no significant change
+            if abs(new_value - old_value) < 1e-10:
+                continue
+
+            # Convert to raw values
+            old_raw = self.edit.display_to_raw(old_value)
+            new_raw = self.edit.display_to_raw(new_value)
+            if old_raw is None or new_raw is None:
+                continue
+
+            # Update internal data
+            if values.ndim == 1:
+                self.ctx.current_data['values'][data_row] = new_value
+            else:
+                self.ctx.current_data['values'][data_row, data_col] = new_value
+
+            # Update cell display
+            item = self.ctx.table_widget.item(ui_row, ui_col)
+            if item:
+                self.ctx.editing_in_progress = True
+                try:
+                    value_fmt = self.display.get_value_format()
+                    item.setText(self.display.format_value(new_value, value_fmt))
+                    color = self.display.get_cell_color(new_value, self.ctx.current_data['values'], data_row, data_col)
+                    item.setBackground(QBrush(color))
+                finally:
+                    self.ctx.editing_in_progress = False
+
+            # Record change
+            data_changes.append((data_row, data_col, old_value, new_value, old_raw, new_raw))
+
+        # Emit signal for all changes
+        if data_changes:
+            self.ctx.viewer.bulk_changes.emit(data_changes)
+            logger.debug(f"Smoothed {len(data_changes)} cell(s)")

@@ -5,10 +5,13 @@ Handles copy/paste operations for TableViewer.
 """
 
 import logging
+import os
+import csv
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QBrush
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QBrush, QDesktopServices
 from PySide6.QtWidgets import QApplication
 
 from .context import TableViewerContext
@@ -169,3 +172,89 @@ class TableClipboardHelper:
 
         if changes_made:
             logger.debug(f"Pasted {len(changes_made)} cell(s)")
+
+    def copy_table_to_clipboard(self):
+        """Copy entire table to clipboard as tab-separated values (for Excel)"""
+        if not self.ctx.table_widget:
+            return
+
+        row_count = self.ctx.table_widget.rowCount()
+        col_count = self.ctx.table_widget.columnCount()
+
+        if row_count == 0 or col_count == 0:
+            return
+
+        # Build tab-separated string for entire table
+        rows_text = []
+        for row in range(row_count):
+            row_values = []
+            for col in range(col_count):
+                item = self.ctx.table_widget.item(row, col)
+                if item:
+                    row_values.append(item.text())
+                else:
+                    row_values.append("")
+            rows_text.append("\t".join(row_values))
+
+        clipboard_text = "\n".join(rows_text)
+        QApplication.clipboard().setText(clipboard_text)
+
+        table_name = self.ctx.current_table.name if self.ctx.current_table else "table"
+        logger.info(f"Copied entire table '{table_name}' ({row_count}x{col_count}) to clipboard")
+
+    def export_to_csv(self, rom_path: str = None):
+        """
+        Export table to CSV file and open with default application
+
+        Args:
+            rom_path: Path to ROM file (used to determine export directory)
+        """
+        if not self.ctx.table_widget or not self.ctx.current_table:
+            return
+
+        # Determine export directory (next to ROM file, or current directory)
+        if rom_path:
+            export_dir = Path(rom_path).parent / "export"
+        else:
+            export_dir = Path.cwd() / "export"
+
+        # Create export directory if it doesn't exist
+        export_dir.mkdir(parents=True, exist_ok=True)
+
+        # Build filename: romid_tablename.csv
+        rom_id = "unknown"
+        if self.ctx.rom_definition and self.ctx.rom_definition.romid:
+            rom_id = self.ctx.rom_definition.romid.xmlid or "unknown"
+
+        # Sanitize table name for filename
+        table_name = self.ctx.current_table.name
+        safe_table_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in table_name)
+        safe_table_name = safe_table_name.replace(' ', '_')
+
+        filename = f"{rom_id}_{safe_table_name}.csv"
+        filepath = export_dir / filename
+
+        # Write CSV file
+        row_count = self.ctx.table_widget.rowCount()
+        col_count = self.ctx.table_widget.columnCount()
+
+        try:
+            with open(filepath, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                for row in range(row_count):
+                    row_values = []
+                    for col in range(col_count):
+                        item = self.ctx.table_widget.item(row, col)
+                        if item:
+                            row_values.append(item.text())
+                        else:
+                            row_values.append("")
+                    writer.writerow(row_values)
+
+            logger.info(f"Exported table to: {filepath}")
+
+            # Open with default application
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(filepath)))
+
+        except Exception as e:
+            logger.error(f"Failed to export table to CSV: {e}")

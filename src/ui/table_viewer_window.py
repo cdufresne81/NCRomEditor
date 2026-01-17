@@ -127,10 +127,14 @@ class TableViewerWindow(QMainWindow):
 
         self.splitter.addWidget(self.viewer)
 
-        # Create graph widget (initially hidden)
-        self.graph_widget = GraphWidget()
-        self.splitter.addWidget(self.graph_widget)
-        self.graph_widget.hide()
+        # Create graph widget only for 2D and 3D tables (initially hidden)
+        from ..core.rom_definition import TableType
+        if table.type != TableType.ONE_D:
+            self.graph_widget = GraphWidget()
+            self.splitter.addWidget(self.graph_widget)
+            self.graph_widget.hide()
+        else:
+            self.graph_widget = None
 
         # Connect cell_changed signal
         self.viewer.cell_changed.connect(self._on_cell_changed)
@@ -167,8 +171,19 @@ class TableViewerWindow(QMainWindow):
         self._auto_size_window()
 
     def _create_menu_bar(self):
-        """Create menu bar with Edit and View menus"""
+        """Create menu bar with File, Edit, and View menus"""
         menubar = self.menuBar()
+
+        # File menu (Alt+F)
+        file_menu = menubar.addMenu("&File")
+
+        copy_table_action = file_menu.addAction("Copy Table to Clipboard")
+        copy_table_action.setShortcut("Ctrl+Shift+C")
+        copy_table_action.triggered.connect(self.viewer.copy_table_to_clipboard)
+
+        export_csv_action = file_menu.addAction("Export to CSV...")
+        export_csv_action.setShortcut("Ctrl+E")
+        export_csv_action.triggered.connect(self._export_to_csv)
 
         # Edit menu (Alt+E)
         edit_menu = menubar.addMenu("&Edit")
@@ -208,6 +223,10 @@ class TableViewerWindow(QMainWindow):
         interp_2d_action.setShortcut("B")
         interp_2d_action.triggered.connect(self.viewer.interpolate_2d)
 
+        smooth_action = edit_menu.addAction("Smooth Selection")
+        smooth_action.setShortcut("S")
+        smooth_action.triggered.connect(self.viewer.smooth_selection)
+
         edit_menu.addSeparator()
 
         edit_scaling_action = edit_menu.addAction("Edit Scaling...")
@@ -216,11 +235,16 @@ class TableViewerWindow(QMainWindow):
         # View menu (Alt+V)
         view_menu = menubar.addMenu("&View")
 
-        self.graph_action = view_menu.addAction("Show Graph")
-        self.graph_action.setShortcut("G")
-        self.graph_action.setCheckable(True)
-        self.graph_action.setChecked(False)
-        self.graph_action.triggered.connect(self._toggle_graph)
+        # Only show graph option for 2D and 3D tables
+        from ..core.rom_definition import TableType
+        if self.table.type != TableType.ONE_D:
+            self.graph_action = view_menu.addAction("Show Graph")
+            self.graph_action.setShortcut("G")
+            self.graph_action.setCheckable(True)
+            self.graph_action.setChecked(False)
+            self.graph_action.triggered.connect(self._toggle_graph)
+        else:
+            self.graph_action = None
 
         # Add diff toggle when in diff mode
         if self._diff_mode:
@@ -259,12 +283,20 @@ class TableViewerWindow(QMainWindow):
 
     def _on_table_selection_changed(self):
         """Handle table selection changes - update graph if visible"""
-        if self._graph_visible:
+        if self._graph_visible and self.graph_widget:
             selected_cells = self._get_selected_data_cells()
             self.graph_widget.update_selection(selected_cells)
 
+    def _export_to_csv(self):
+        """Export table to CSV and open with default application"""
+        self.viewer.export_to_csv(self.rom_path)
+
     def _toggle_graph(self):
         """Toggle graph panel visibility"""
+        # No graph for 1D tables
+        if not self.graph_widget:
+            return
+
         if self._graph_visible:
             # Hide graph
             self._graph_visible = False
