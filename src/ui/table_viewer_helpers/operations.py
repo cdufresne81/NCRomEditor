@@ -30,13 +30,16 @@ class TableOperationsHelper:
         self.edit = edit
 
     def apply_bulk_operation(self, operation_fn: Callable[[float], float],
-                             operation_name: str) -> Tuple[List[Tuple], List[Tuple]]:
+                             operation_name: str,
+                             axis_operation_fn: Callable[[float, str], float] = None) -> Tuple[List[Tuple], List[Tuple]]:
         """
         Apply an operation to all selected cells (data and axis)
 
         Args:
-            operation_fn: Function(old_value) -> new_value
+            operation_fn: Function(old_value) -> new_value for data cells
             operation_name: Description for logging
+            axis_operation_fn: Optional function(old_value, axis_type) -> new_value for axis cells.
+                              If None, operation_fn is used for axis cells too.
 
         Returns:
             Tuple of (data_changes, axis_changes) where:
@@ -92,9 +95,12 @@ class TableOperationsHelper:
 
                     old_value = float(axis_data[data_idx])
 
-                    # Apply operation
+                    # Apply operation - use axis_operation_fn if provided, otherwise fall back to operation_fn
                     try:
-                        new_value = float(operation_fn(old_value))
+                        if axis_operation_fn:
+                            new_value = float(axis_operation_fn(old_value, axis_type_str))
+                        else:
+                            new_value = float(operation_fn(old_value))
                     except Exception as e:
                         logger.warning(f"Operation failed for axis cell [{axis_type_str}][{data_idx}]: {e}")
                         continue
@@ -175,22 +181,41 @@ class TableOperationsHelper:
         logger.debug(f"{operation_name}: Modified {len(data_changes)} data cell(s), {len(axis_changes)} axis cell(s)")
         return data_changes, axis_changes
 
+    def _get_axis_increment(self, axis_type_str: str) -> float:
+        """Get the increment value for an axis from its scaling metadata"""
+        if not self.ctx.rom_definition or not self.ctx.current_table:
+            return 1.0
+
+        axis_type = AxisType.X_AXIS if axis_type_str == 'x_axis' else AxisType.Y_AXIS
+        axis_table = self.ctx.current_table.get_axis(axis_type)
+        if axis_table and axis_table.scaling:
+            scaling = self.ctx.rom_definition.get_scaling(axis_table.scaling)
+            if scaling and scaling.inc:
+                return scaling.inc
+        return 1.0
+
     def increment_selection(self):
-        """Increment selected cells by fixed amount"""
+        """Increment selected cells by fixed amount (using appropriate increment per cell type)"""
         if not self.ctx.current_table:
             return
 
-        # Get increment from scaling metadata if available
-        increment = 1.0
+        # Get data increment from scaling metadata if available
+        data_increment = 1.0
         if self.ctx.rom_definition and self.ctx.current_table.scaling:
             scaling = self.ctx.rom_definition.get_scaling(self.ctx.current_table.scaling)
             if scaling and scaling.inc:
-                increment = scaling.inc
+                data_increment = scaling.inc
+
+        # Create axis operation that uses axis-specific increment
+        def axis_increment_op(value: float, axis_type_str: str) -> float:
+            axis_inc = self._get_axis_increment(axis_type_str)
+            return value + axis_inc
 
         # Apply operation
         data_changes, axis_changes = self.apply_bulk_operation(
-            lambda v: v + increment,
-            f"Increment by {increment}"
+            lambda v: v + data_increment,
+            f"Increment",
+            axis_operation_fn=axis_increment_op
         )
 
         # Emit signals
@@ -200,21 +225,27 @@ class TableOperationsHelper:
             self.ctx.viewer.axis_bulk_changes.emit(axis_changes)
 
     def decrement_selection(self):
-        """Decrement selected cells by fixed amount"""
+        """Decrement selected cells by fixed amount (using appropriate increment per cell type)"""
         if not self.ctx.current_table:
             return
 
-        # Get decrement from scaling metadata if available
-        decrement = 1.0
+        # Get data decrement from scaling metadata if available
+        data_decrement = 1.0
         if self.ctx.rom_definition and self.ctx.current_table.scaling:
             scaling = self.ctx.rom_definition.get_scaling(self.ctx.current_table.scaling)
             if scaling and scaling.inc:
-                decrement = scaling.inc
+                data_decrement = scaling.inc
+
+        # Create axis operation that uses axis-specific increment
+        def axis_decrement_op(value: float, axis_type_str: str) -> float:
+            axis_inc = self._get_axis_increment(axis_type_str)
+            return value - axis_inc
 
         # Apply operation
         data_changes, axis_changes = self.apply_bulk_operation(
-            lambda v: v - decrement,
-            f"Decrement by {decrement}"
+            lambda v: v - data_decrement,
+            f"Decrement",
+            axis_operation_fn=axis_decrement_op
         )
 
         # Emit signals
