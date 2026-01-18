@@ -3,10 +3,6 @@
 ## Next Tasks
 
 ### Performance & UI
-- **Replace matplotlib with PyQtGraph** in `graph_viewer.py` for better 3D performance
-  - PyQtGraph uses OpenGL for hardware acceleration
-  - Supports in-place data updates without recreating plots
-  - Key issues to solve: full figure recreation, nested Python loops for colors, matplotlib 3D limitations
 - **Focus/highlight selected table** - When clicking a table viewer (e.g., "Load Scaling"), highlight and focus that table in the tree (gray background like manual selection)
 
 ### Housekeeping
@@ -27,6 +23,8 @@
 - Use `python3` not `python` (WSL2 environment lacks symlink)
 
 ## Recent Completed Work (Jan 17, 2026)
+- Fixed logging handler MRO conflict in `log_console.py` (QObject.emit vs logging.Handler.emit)
+- Attempted PyQtGraph migration but reverted - OpenGL requires desktop environment, creating two implementations wasn't worth the maintenance burden
 - Documented UI testing tools in `docs/UI_TESTING.md`
 - Added UI Testing section to `CLAUDE.md` with rules for screenshot/testing scenarios
 - Added `rotate_graph <elev> <azim>` command to test_runner.py
