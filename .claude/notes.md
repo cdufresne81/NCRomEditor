@@ -2,9 +2,6 @@
 
 ## Next Tasks
 
-### Housekeeping
-- Directory naming standardized to plural convention (see Recent Completed Work)
-
 ### ROM Tools
 - **ROM comparison tool** - Compare two ROM files (stock vs modified), highlight differences in tables and raw data
 - **ROM modification tracking** - Git-like tracking for ROM edits, project organization with ROM aliases, change history viewer, export modification logs
