@@ -100,25 +100,25 @@ class MainWindow(QMainWindow):
         self.change_tracker = ChangeTracker()
         self.change_tracker.add_change_callback(self._on_changes_updated)
 
-        # Check if metadata directory is configured and valid
-        if not self.check_metadata_directory():
-            # Show setup wizard on first run or if metadata directory is invalid
+        # Check if definitions directory is configured and valid
+        if not self.check_definitions_directory():
+            # Show setup wizard on first run or if definitions directory is invalid
             if not self.show_setup_wizard():
                 # User cancelled setup, exit application
                 logger.warning("Setup cancelled by user, exiting application")
                 QMessageBox.critical(
                     self,
                     "Setup Required",
-                    f"{APP_NAME} requires a metadata directory to function.\n"
+                    f"{APP_NAME} requires a definitions directory to function.\n"
                     "Application will now exit."
                 )
                 sys.exit(1)
 
         # ROM detector for automatic XML matching
         try:
-            metadata_dir = self.settings.get_metadata_directory()
-            self.rom_detector = RomDetector(metadata_dir)
-            logger.info(f"ROM detector initialized successfully (metadata: {metadata_dir})")
+            definitions_dir = self.settings.get_definitions_directory()
+            self.rom_detector = RomDetector(definitions_dir)
+            logger.info(f"ROM detector initialized successfully (definitions: {definitions_dir})")
         except DetectionError as e:
             logger.error(f"Failed to initialize ROM detector: {e}")
             QMessageBox.critical(
@@ -146,25 +146,25 @@ class MainWindow(QMainWindow):
         # Restore previous session
         self._restore_session()
 
-    def check_metadata_directory(self) -> bool:
+    def check_definitions_directory(self) -> bool:
         """
-        Check if metadata directory is configured and valid
+        Check if definitions directory is configured and valid
 
         Returns:
             bool: True if valid, False if needs configuration
         """
-        metadata_dir = self.settings.get_metadata_directory()
+        definitions_dir = self.settings.get_definitions_directory()
 
         # Check if path exists
-        metadata_path = Path(metadata_dir)
-        if not metadata_path.exists() or not metadata_path.is_dir():
-            logger.warning(f"Metadata directory does not exist: {metadata_dir}")
+        definitions_path = Path(definitions_dir)
+        if not definitions_path.exists() or not definitions_path.is_dir():
+            logger.warning(f"Definitions directory does not exist: {definitions_dir}")
             return False
 
         # Check if directory contains at least one XML file
-        xml_files = list(metadata_path.glob("*.xml"))
+        xml_files = list(definitions_path.glob("*.xml"))
         if not xml_files:
-            logger.warning(f"No XML files found in metadata directory: {metadata_dir}")
+            logger.warning(f"No XML files found in definitions directory: {definitions_dir}")
             return False
 
         return True
@@ -660,6 +660,9 @@ class MainWindow(QMainWindow):
                 viewer_window.undo_requested.connect(self.undo)
                 viewer_window.redo_requested.connect(self.redo)
 
+                # Connect window focus signal to highlight table in tree
+                viewer_window.window_focused.connect(self._on_table_window_focused)
+
                 viewer_window.show()
 
                 # Track the window
@@ -711,19 +714,19 @@ class MainWindow(QMainWindow):
 
     def on_settings_changed(self):
         """Handle settings changes"""
-        # Reinitialize ROM detector with new metadata path
+        # Reinitialize ROM detector with new definitions path
         try:
-            metadata_dir = self.settings.get_metadata_directory()
-            self.rom_detector = RomDetector(metadata_dir)
-            logger.info(f"ROM detector reinitialized with metadata directory: {metadata_dir}")
-            self.statusBar().showMessage(f"Settings updated. Metadata directory: {metadata_dir}")
+            definitions_dir = self.settings.get_definitions_directory()
+            self.rom_detector = RomDetector(definitions_dir)
+            logger.info(f"ROM detector reinitialized with definitions directory: {definitions_dir}")
+            self.statusBar().showMessage(f"Settings updated. Definitions directory: {definitions_dir}")
         except DetectionError as e:
             logger.error(f"Failed to reinitialize ROM detector: {e}")
             QMessageBox.warning(
                 self,
                 "Settings Error",
-                f"Failed to load metadata from new directory:\n{str(e)}\n\n"
-                "Please check the metadata directory path in settings."
+                f"Failed to load definitions from new directory:\n{str(e)}\n\n"
+                "Please check the definitions directory path in settings."
             )
 
     def show_about(self):
@@ -1229,6 +1232,18 @@ class MainWindow(QMainWindow):
                 logger.debug(f"Applied axis bulk changes: {len(changes)} cells in {table.name}")
             except Exception as e:
                 logger.error(f"Failed to write axis bulk changes: {e}")
+
+    def _on_table_window_focused(self, table_address: str):
+        """
+        Handle table viewer window gaining focus - highlight corresponding tree item
+
+        Args:
+            table_address: Address of the table that was focused
+        """
+        # Find the document containing this table and select it in the tree
+        document = self.get_current_document()
+        if document and hasattr(document, 'table_browser'):
+            document.table_browser.select_table_by_address(table_address)
 
     def _update_tab_title(self, document):
         """Update tab title to show modified state"""

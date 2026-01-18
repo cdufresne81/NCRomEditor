@@ -46,39 +46,39 @@ class RomDetector:
     Detects ROM ID from binary files and matches to XML definitions
     """
 
-    def __init__(self, metadata_dir: str = "metadata"):
+    def __init__(self, definitions_dir: str = "definitions"):
         """
         Initialize ROM detector
 
         Args:
-            metadata_dir: Directory containing XML definition files
+            definitions_dir: Directory containing XML definition files
 
         Raises:
-            MetadataDirectoryError: If metadata directory doesn't exist or is invalid
+            MetadataDirectoryError: If definitions directory doesn't exist or is invalid
         """
-        self.metadata_dir = Path(metadata_dir)
+        self.definitions_dir = Path(definitions_dir)
 
-        if not self.metadata_dir.exists():
+        if not self.definitions_dir.exists():
             raise MetadataDirectoryError(
-                f"Metadata directory not found: {metadata_dir}"
+                f"Definitions directory not found: {definitions_dir}"
             )
 
-        if not self.metadata_dir.is_dir():
+        if not self.definitions_dir.is_dir():
             raise MetadataDirectoryError(
-                f"Path is not a directory: {metadata_dir}"
+                f"Path is not a directory: {definitions_dir}"
             )
 
-        logger.info(f"Initializing ROM detector with metadata dir: {metadata_dir}")
+        logger.info(f"Initializing ROM detector with definitions dir: {definitions_dir}")
         self.rom_definitions: List[RomIdInfo] = []
         self._scan_definitions()
         logger.info(f"Found {len(self.rom_definitions)} ROM definition(s)")
 
     def _scan_definitions(self):
-        """Scan all XML files in metadata directory and extract ROM ID info"""
+        """Scan all XML files in definitions directory and extract ROM ID info"""
         self.rom_definitions = []
 
-        xml_files = list(self.metadata_dir.glob("*.xml"))
-        logger.debug(f"Scanning {len(xml_files)} XML file(s) in {self.metadata_dir}")
+        xml_files = list(self.definitions_dir.glob("*.xml"))
+        logger.debug(f"Scanning {len(xml_files)} XML file(s) in {self.definitions_dir}")
 
         for xml_file in xml_files:
             try:

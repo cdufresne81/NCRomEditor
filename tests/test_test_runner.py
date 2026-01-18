@@ -255,15 +255,15 @@ class TestListScreenshots:
 class TestInitialization:
     """Tests for TestRunner initialization"""
 
-    def test_default_metadata_dir(self):
-        """Default metadata directory should be project's metadata/"""
+    def test_default_definitions_dir(self):
+        """Default definitions directory should be project's definitions/"""
         runner = TestRunner(quiet=True)
-        assert runner.metadata_dir.name == "metadata"
+        assert runner.definitions_dir.name == "definitions"
 
-    def test_custom_metadata_dir(self):
-        """Custom metadata directory should be used"""
-        runner = TestRunner(metadata_dir="/custom/path", quiet=True)
-        assert str(runner.metadata_dir) == "/custom/path"
+    def test_custom_definitions_dir(self):
+        """Custom definitions directory should be used"""
+        runner = TestRunner(definitions_dir="/custom/path", quiet=True)
+        assert str(runner.definitions_dir) == "/custom/path"
 
     def test_quiet_mode(self):
         """Quiet mode should suppress logging"""

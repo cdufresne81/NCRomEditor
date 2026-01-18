@@ -92,17 +92,17 @@ class SettingsDialog(QDialog):
         projects_help.setStyleSheet("color: gray; font-size: 10px;")
         paths_layout.addRow("", projects_help)
 
-        # Metadata directory setting
-        metadata_layout = QHBoxLayout()
-        self.metadata_path_edit = QLineEdit()
-        self.metadata_path_edit.setPlaceholderText("Path to ROM definition XML files")
-        metadata_layout.addWidget(self.metadata_path_edit)
+        # Definitions directory setting
+        definitions_layout = QHBoxLayout()
+        self.definitions_path_edit = QLineEdit()
+        self.definitions_path_edit.setPlaceholderText("Path to ROM definition XML files")
+        definitions_layout.addWidget(self.definitions_path_edit)
 
         browse_button = QPushButton("Browse...")
-        browse_button.clicked.connect(self.browse_metadata_directory)
-        metadata_layout.addWidget(browse_button)
+        browse_button.clicked.connect(self.browse_definitions_directory)
+        definitions_layout.addWidget(browse_button)
 
-        paths_layout.addRow("Metadata Directory:", metadata_layout)
+        paths_layout.addRow("Definitions Directory:", definitions_layout)
 
         # Add help text
         help_label = QLabel("Location of ROM definition XML files (e.g., lf9veb.xml)")
@@ -193,9 +193,9 @@ class SettingsDialog(QDialog):
         projects_dir = self.settings.get_projects_directory()
         self.projects_path_edit.setText(projects_dir)
 
-        # Load metadata directory
-        metadata_dir = self.settings.get_metadata_directory()
-        self.metadata_path_edit.setText(metadata_dir)
+        # Load definitions directory
+        definitions_dir = self.settings.get_definitions_directory()
+        self.definitions_path_edit.setText(definitions_dir)
 
         # Load gradient mode
         gradient_mode = self.settings.get_gradient_mode()
@@ -227,28 +227,28 @@ class SettingsDialog(QDialog):
         if directory:
             self.projects_path_edit.setText(directory)
 
-    def browse_metadata_directory(self):
-        """Open directory browser for metadata directory"""
-        current_path = self.metadata_path_edit.text()
+    def browse_definitions_directory(self):
+        """Open directory browser for definitions directory"""
+        current_path = self.definitions_path_edit.text()
         if not current_path:
             current_path = str(Path.cwd())
 
         directory = QFileDialog.getExistingDirectory(
             self,
-            "Select Metadata Directory",
+            "Select Definitions Directory",
             current_path,
             QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
         )
 
         if directory:
-            self.metadata_path_edit.setText(directory)
+            self.definitions_path_edit.setText(directory)
 
     def browse_colormap_file(self):
         """Open file browser for color map file"""
         current_path = self.colormap_path_edit.text()
         if not current_path:
-            # Default to colormap directory in project
-            current_path = str(Path(__file__).parent.parent.parent / "colormap")
+            # Default to colormaps directory in project
+            current_path = str(Path(__file__).parent.parent.parent / "colormaps")
 
         file_path, _ = QFileDialog.getOpenFileName(
             self,
@@ -267,10 +267,10 @@ class SettingsDialog(QDialog):
         if projects_dir:
             self.settings.set_projects_directory(projects_dir)
 
-        # Save metadata directory
-        metadata_dir = self.metadata_path_edit.text().strip()
-        if metadata_dir:
-            self.settings.set_metadata_directory(metadata_dir)
+        # Save definitions directory
+        definitions_dir = self.definitions_path_edit.text().strip()
+        if definitions_dir:
+            self.settings.set_definitions_directory(definitions_dir)
 
         # Save gradient mode
         gradient_mode = self.gradient_mode_combo.currentData()

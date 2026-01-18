@@ -400,3 +400,36 @@ class TableBrowser(QWidget):
 
         # Force repaint
         self.tree.viewport().update()
+
+    def select_table_by_address(self, address: str):
+        """
+        Select and scroll to a table in the tree by its address
+
+        Args:
+            address: Table address (e.g., "1000" or "0x1000")
+        """
+        # Normalize address (remove 0x prefix if present for comparison)
+        target_address = address.lower().lstrip('0x')
+
+        # Search through all category items
+        for i in range(self.tree.topLevelItemCount()):
+            category_item = self.tree.topLevelItem(i)
+
+            for j in range(category_item.childCount()):
+                table_item = category_item.child(j)
+                table = table_item.data(0, 100)
+
+                if table:
+                    # Normalize stored address for comparison
+                    item_address = table.address.lower().lstrip('0x')
+
+                    if item_address == target_address:
+                        # Expand the category if not already expanded
+                        category_item.setExpanded(True)
+
+                        # Select and scroll to the item
+                        self.tree.setCurrentItem(table_item)
+                        self.tree.scrollToItem(table_item)
+                        return True
+
+        return False

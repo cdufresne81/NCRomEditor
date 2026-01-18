@@ -150,7 +150,7 @@ nc-rom-editor/
 │   └── utils/                         # Helper functions
 │       ├── settings.py                # Settings manager
 │       └── colormap.py                # Color scheme utilities
-├── metadata/                          # ROM definition XML files
+├── definitions/                       # ROM definition XML files
 │   └── lf9veb.xml                     # NC Miata ROM definition (511 tables)
 ├── examples/                          # Example ROM binary files
 │   └── lf9veb.bin                     # Stock NC Miata ROM

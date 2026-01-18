@@ -6,9 +6,7 @@
 - **Focus/highlight selected table** - When clicking a table viewer (e.g., "Load Scaling"), highlight and focus that table in the tree (gray background like manual selection)
 
 ### Housekeeping
-- **Standardize directory naming** - Choose singular or plural convention and apply consistently. Current state:
-  - Plural: `docs/`, `examples/`, `projects/`, `tests/`, `tools/`
-  - Singular: `colormap/`, `metadata/`, `src/`
+- Directory naming standardized to plural convention (see Recent Completed Work)
 
 ### ROM Tools
 - **ROM comparison tool** - Compare two ROM files (stock vs modified), highlight differences in tables and raw data
@@ -23,6 +21,7 @@
 - Use `python3` not `python` (WSL2 environment lacks symlink)
 
 ## Recent Completed Work (Jan 17, 2026)
+- Standardized directory naming to plural convention: `colormap/` -> `colormaps/`, `metadata/` -> `definitions/` (kept `src/` as-is per Python convention)
 - Fixed logging handler MRO conflict in `log_console.py` (QObject.emit vs logging.Handler.emit)
 - Attempted PyQtGraph migration but reverted - OpenGL requires desktop environment, creating two implementations wasn't worth the maintenance burden
 - Documented UI testing tools in `docs/UI_TESTING.md`

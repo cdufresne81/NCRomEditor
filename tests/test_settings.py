@@ -39,24 +39,24 @@ def app_settings(mock_qsettings):
     return AppSettings()
 
 
-class TestMetadataDirectory:
-    """Tests for metadata directory settings"""
+class TestDefinitionsDirectory:
+    """Tests for definitions directory settings"""
 
-    def test_get_metadata_directory_default(self, app_settings):
-        """Test getting default metadata directory"""
-        result = app_settings.get_metadata_directory()
-        assert "metadata" in result
-        assert Path(result).name == "metadata"
+    def test_get_definitions_directory_default(self, app_settings):
+        """Test getting default definitions directory"""
+        result = app_settings.get_definitions_directory()
+        assert "definitions" in result
+        assert Path(result).name == "definitions"
 
-    def test_set_and_get_metadata_directory(self, mock_qsettings):
-        """Test setting and getting metadata directory"""
+    def test_set_and_get_definitions_directory(self, mock_qsettings):
+        """Test setting and getting definitions directory"""
         mock_instance, settings_store = mock_qsettings
         app_settings = AppSettings()
 
-        app_settings.set_metadata_directory("/custom/path/metadata")
+        app_settings.set_definitions_directory("/custom/path/definitions")
 
-        assert settings_store.get("paths/metadata_directory") == "/custom/path/metadata"
-        assert app_settings.get_metadata_directory() == "/custom/path/metadata"
+        assert settings_store.get("paths/definitions_directory") == "/custom/path/definitions"
+        assert app_settings.get_definitions_directory() == "/custom/path/definitions"
 
 
 class TestRecentFiles:
@@ -223,7 +223,7 @@ class TestColormapSettings:
         """Test default colormap path"""
         result = app_settings.get_colormap_path()
         assert "default.map" in result
-        assert "colormap" in result
+        assert "colormaps" in result
 
     def test_set_and_get_colormap_path(self, mock_qsettings):
         """Test setting and getting colormap path"""
@@ -238,7 +238,7 @@ class TestColormapSettings:
     def test_get_colormap_directory_default(self, app_settings):
         """Test default colormap directory"""
         result = app_settings.get_colormap_directory()
-        assert "colormap" in result
+        assert "colormaps" in result
 
     def test_set_and_get_colormap_directory(self, mock_qsettings):
         """Test setting and getting colormap directory"""

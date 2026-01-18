@@ -39,12 +39,12 @@ class TestRunner:
     Provides programmatic control over the application for testing purposes.
     """
 
-    def __init__(self, metadata_dir: str = None, quiet: bool = False):
+    def __init__(self, definitions_dir: str = None, quiet: bool = False):
         """
         Initialize the test runner
 
         Args:
-            metadata_dir: Path to metadata directory (defaults to project's metadata/)
+            definitions_dir: Path to definitions directory (defaults to project's definitions/)
             quiet: If True, suppress non-essential output
         """
         self.quiet = quiet
@@ -54,18 +54,18 @@ class TestRunner:
         self.rom_reader = None
         self.rom_definition = None
 
-        # Default metadata directory
-        if metadata_dir is None:
-            self.metadata_dir = project_root / "metadata"
+        # Default definitions directory
+        if definitions_dir is None:
+            self.definitions_dir = project_root / "definitions"
         else:
-            self.metadata_dir = Path(metadata_dir)
+            self.definitions_dir = Path(definitions_dir)
 
         # Screenshots directory
         self.screenshots_dir = project_root / "docs" / "screenshots"
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
 
         self._log(f"Test Runner initialized")
-        self._log(f"  Metadata: {self.metadata_dir}")
+        self._log(f"  Definitions: {self.definitions_dir}")
         self._log(f"  Screenshots: {self.screenshots_dir}")
 
     def _log(self, message: str):
@@ -96,9 +96,9 @@ class TestRunner:
             from main import MainWindow
             from src.utils.settings import get_settings
 
-            # Configure settings to use our metadata directory
+            # Configure settings to use our definitions directory
             settings = get_settings()
-            settings.settings.setValue("metadata_directory", str(self.metadata_dir))
+            settings.settings.setValue("definitions_directory", str(self.definitions_dir))
             settings.settings.sync()
 
             # Create main window
@@ -1201,8 +1201,8 @@ Examples:
                         help='Path to test script file')
     parser.add_argument('--interactive', '-i', action='store_true',
                         help='Start in interactive mode')
-    parser.add_argument('--metadata', '-m',
-                        help='Path to metadata directory')
+    parser.add_argument('--definitions', '-d',
+                        help='Path to definitions directory')
     parser.add_argument('--quiet', '-q', action='store_true',
                         help='Suppress non-essential output')
     parser.add_argument('--screenshot',
@@ -1219,7 +1219,7 @@ Examples:
     args = parser.parse_args()
 
     # Create test runner
-    runner = TestRunner(metadata_dir=args.metadata, quiet=args.quiet)
+    runner = TestRunner(definitions_dir=args.definitions, quiet=args.quiet)
 
     # Handle cleanup/list screenshots (no app needed)
     if args.list_screenshots:

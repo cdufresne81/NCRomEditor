@@ -55,6 +55,10 @@ class TableViewerWindow(QMainWindow):
     undo_requested = Signal()
     redo_requested = Signal()
 
+    # Signal emitted when this window receives focus
+    # Args: table_address (str)
+    window_focused = Signal(str)
+
     def __init__(self, table: Table, data: dict, rom_definition: RomDefinition,
                  rom_path: str = None, parent=None,
                  modified_cells_dict: dict = None, original_values_dict: dict = None,
@@ -532,3 +536,11 @@ class TableViewerWindow(QMainWindow):
     def closeEvent(self, event):
         """Handle window close event"""
         event.accept()
+
+    def event(self, event):
+        """Handle window events to detect activation/focus"""
+        from PySide6.QtCore import QEvent
+        # WindowActivate is fired when the window gains focus (clicked, alt-tabbed to, etc.)
+        if event.type() == QEvent.WindowActivate:
+            self.window_focused.emit(self.table.address)
+        return super().event(event)

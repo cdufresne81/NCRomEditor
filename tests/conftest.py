@@ -13,9 +13,9 @@ def project_root():
 
 
 @pytest.fixture
-def metadata_dir(project_root):
-    """Return the metadata directory path"""
-    return project_root / "metadata"
+def definitions_dir(project_root):
+    """Return the definitions directory path"""
+    return project_root / "definitions"
 
 
 @pytest.fixture
@@ -31,6 +31,6 @@ def sample_rom_path(examples_dir):
 
 
 @pytest.fixture
-def sample_xml_path(metadata_dir):
+def sample_xml_path(definitions_dir):
     """Return path to sample XML definition"""
-    return metadata_dir / "lf9veb.xml"
+    return definitions_dir / "lf9veb.xml"

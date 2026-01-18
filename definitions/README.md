@@ -31,6 +31,6 @@ Each table definition includes:
 
 ## Usage
 
-These definition files are automatically loaded by the application. The current hardcoded definition is `metadata/lf9veb.xml`.
+These definition files are automatically loaded by the application. The current hardcoded definition is `definitions/lf9veb.xml`.
 
 For more details on the format, see `docs/ROM_DEFINITION_FORMAT.md`.

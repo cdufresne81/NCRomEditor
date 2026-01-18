@@ -1,0 +1,25 @@
+# Test: Window Focus -> Tree Selection
+#
+# This test verifies that clicking a table viewer window
+# highlights the corresponding table in the tree view.
+
+# Start the application
+start
+
+# Load the ROM
+load_rom examples/lf9veb.bin
+
+# Take initial screenshot (no table selected)
+wait 500
+screenshot window_no_click main
+
+# Open a table
+open_table "Load Scaling"
+wait 500
+
+# Take screenshot after table is opened and focused
+# The tree should now have "Load Scaling" highlighted
+screenshot window_with_click main
+
+# Close table
+close_table

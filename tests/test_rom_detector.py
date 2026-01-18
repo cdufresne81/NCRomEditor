@@ -14,11 +14,11 @@ from src.core.exceptions import (
 class TestRomDetectorInitialization:
     """Test RomDetector initialization"""
 
-    def test_init_with_valid_directory(self, metadata_dir):
-        """Test initialization with valid metadata directory"""
-        detector = RomDetector(str(metadata_dir))
+    def test_init_with_valid_directory(self, definitions_dir):
+        """Test initialization with valid definitions directory"""
+        detector = RomDetector(str(definitions_dir))
         assert detector is not None
-        assert detector.metadata_dir == metadata_dir
+        assert detector.definitions_dir == definitions_dir
         assert len(detector.rom_definitions) > 0
 
     def test_init_with_invalid_directory(self):
@@ -26,9 +26,9 @@ class TestRomDetectorInitialization:
         with pytest.raises(MetadataDirectoryError):
             RomDetector("nonexistent_directory")
 
-    def test_scans_xml_files_on_init(self, metadata_dir):
+    def test_scans_xml_files_on_init(self, definitions_dir):
         """Test that XML files are scanned during initialization"""
-        detector = RomDetector(str(metadata_dir))
+        detector = RomDetector(str(definitions_dir))
         # Should find at least the lf9veb.xml
         assert len(detector.rom_definitions) >= 1
 
@@ -66,9 +66,9 @@ class TestRomIdExtraction:
 class TestRomIdDetection:
     """Test ROM ID detection from binary files"""
 
-    def test_detect_rom_id_from_valid_rom(self, metadata_dir, sample_rom_path):
+    def test_detect_rom_id_from_valid_rom(self, definitions_dir, sample_rom_path):
         """Test detecting ROM ID from valid binary file"""
-        detector = RomDetector(str(metadata_dir))
+        detector = RomDetector(str(definitions_dir))
         rom_id, xml_path = detector.detect_rom_id(str(sample_rom_path))
 
         assert rom_id is not None
@@ -77,16 +77,16 @@ class TestRomIdDetection:
         assert Path(xml_path).exists()
         assert "lf9veb.xml" in xml_path.lower()
 
-    def test_detect_rom_id_from_nonexistent_file(self, metadata_dir):
+    def test_detect_rom_id_from_nonexistent_file(self, definitions_dir):
         """Test detecting ROM ID from non-existent file"""
-        detector = RomDetector(str(metadata_dir))
+        detector = RomDetector(str(definitions_dir))
 
         with pytest.raises(RomFileNotFoundError):
             detector.detect_rom_id("nonexistent.bin")
 
-    def test_detect_rom_id_returns_none_for_unknown_rom(self, metadata_dir, tmp_path):
+    def test_detect_rom_id_returns_none_for_unknown_rom(self, definitions_dir, tmp_path):
         """Test that unknown ROM returns None"""
-        detector = RomDetector(str(metadata_dir))
+        detector = RomDetector(str(definitions_dir))
 
         # Create a fake ROM file with random data
         fake_rom = tmp_path / "fake.bin"
@@ -101,25 +101,25 @@ class TestRomIdDetection:
 class TestDefinitionLookup:
     """Test finding definitions by ID"""
 
-    def test_find_definition_by_xmlid(self, metadata_dir):
+    def test_find_definition_by_xmlid(self, definitions_dir):
         """Test finding definition by XML ID"""
-        detector = RomDetector(str(metadata_dir))
+        detector = RomDetector(str(definitions_dir))
         xml_path = detector.find_definition_by_id("LF9VEB")
 
         assert xml_path is not None
         assert Path(xml_path).exists()
         assert "lf9veb.xml" in xml_path.lower()
 
-    def test_find_definition_by_internal_id(self, metadata_dir):
+    def test_find_definition_by_internal_id(self, definitions_dir):
         """Test finding definition by internal ID string"""
-        detector = RomDetector(str(metadata_dir))
+        detector = RomDetector(str(definitions_dir))
         xml_path = detector.find_definition_by_id("LF9VEB")
 
         assert xml_path is not None
 
-    def test_find_definition_returns_none_for_unknown_id(self, metadata_dir):
+    def test_find_definition_returns_none_for_unknown_id(self, definitions_dir):
         """Test that unknown ID returns None"""
-        detector = RomDetector(str(metadata_dir))
+        detector = RomDetector(str(definitions_dir))
         xml_path = detector.find_definition_by_id("UNKNOWN_ID")
 
         assert xml_path is None
@@ -128,17 +128,17 @@ class TestDefinitionLookup:
 class TestDefinitionSummary:
     """Test getting definition summaries"""
 
-    def test_get_all_definitions(self, metadata_dir):
+    def test_get_all_definitions(self, definitions_dir):
         """Test getting all ROM definitions"""
-        detector = RomDetector(str(metadata_dir))
+        detector = RomDetector(str(definitions_dir))
         definitions = detector.get_all_definitions()
 
         assert len(definitions) > 0
         assert all(isinstance(d, RomIdInfo) for d in definitions)
 
-    def test_get_definitions_summary(self, metadata_dir):
+    def test_get_definitions_summary(self, definitions_dir):
         """Test getting summary of all definitions"""
-        detector = RomDetector(str(metadata_dir))
+        detector = RomDetector(str(definitions_dir))
         summary = detector.get_definitions_summary()
 
         assert len(summary) > 0
@@ -152,9 +152,9 @@ class TestDefinitionSummary:
         assert 'internalid' in first_summary
         assert 'xml_file' in first_summary
 
-    def test_summary_contains_correct_data(self, metadata_dir):
+    def test_summary_contains_correct_data(self, definitions_dir):
         """Test that summary contains correct data for known ROM"""
-        detector = RomDetector(str(metadata_dir))
+        detector = RomDetector(str(definitions_dir))
         summary = detector.get_definitions_summary()
 
         # Find LF9VEB in summary

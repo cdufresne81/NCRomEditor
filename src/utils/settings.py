@@ -17,25 +17,25 @@ class AppSettings:
         """Initialize settings manager"""
         self.settings = QSettings("NCRomEditor", "NCRomEditor")
 
-    def get_metadata_directory(self) -> str:
+    def get_definitions_directory(self) -> str:
         """
-        Get the configured metadata directory path
+        Get the configured ROM definitions directory path
 
         Returns:
-            str: Path to metadata directory (defaults to ./metadata relative to app)
+            str: Path to definitions directory (defaults to ./definitions relative to app)
         """
-        # Default to 'metadata' directory in the application root
-        default_path = str(Path.cwd() / "metadata")
-        return self.settings.value("paths/metadata_directory", default_path)
+        # Default to 'definitions' directory in the application root
+        default_path = str(Path.cwd() / "definitions")
+        return self.settings.value("paths/definitions_directory", default_path)
 
-    def set_metadata_directory(self, path: str):
+    def set_definitions_directory(self, path: str):
         """
-        Set the metadata directory path
+        Set the ROM definitions directory path
 
         Args:
-            path: Path to metadata directory
+            path: Path to definitions directory
         """
-        self.settings.setValue("paths/metadata_directory", path)
+        self.settings.setValue("paths/definitions_directory", path)
         self.settings.sync()
 
     def get_window_geometry(self):
@@ -168,8 +168,8 @@ class AppSettings:
         Returns:
             str: Path to .map file, or empty string for built-in gradient
         """
-        # Default to the built-in default.map in the colormap directory
-        default_path = str(Path(__file__).parent.parent.parent / "colormap" / "default.map")
+        # Default to the built-in default.map in the colormaps directory
+        default_path = str(Path(__file__).parent.parent.parent / "colormaps" / "default.map")
         return self.settings.value("display/colormap_path", default_path)
 
     def set_colormap_path(self, path: str):
@@ -189,7 +189,7 @@ class AppSettings:
         Returns:
             str: Path to directory containing .map files
         """
-        default_path = str(Path(__file__).parent.parent.parent / "colormap")
+        default_path = str(Path(__file__).parent.parent.parent / "colormaps")
         return self.settings.value("paths/colormap_directory", default_path)
 
     def set_colormap_directory(self, path: str):
