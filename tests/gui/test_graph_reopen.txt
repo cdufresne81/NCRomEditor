@@ -1,0 +1,7 @@
+load_rom examples/lf9veb.bin
+open_table "CC Correction Sensitivity - 1st Gear"
+open_graph
+screenshot cc_correction_graph_first
+close_graph
+open_graph
+screenshot cc_correction_graph_second

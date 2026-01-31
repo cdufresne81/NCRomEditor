@@ -346,12 +346,6 @@ class TableViewerWindow(QMainWindow):
             self.graph_widget.show()
             self.graph_action.setChecked(True)
 
-            # Initialize graph with current data and selection
-            selected_cells = self._get_selected_data_cells()
-            self.graph_widget.set_data(
-                self.table, self.data, self.rom_definition, selected_cells
-            )
-
             # Calculate new width based on saved table-only size
             table_width = self._table_only_size.width()
             graph_width = 550  # Default graph panel width
@@ -367,6 +361,16 @@ class TableViewerWindow(QMainWindow):
 
             # Set splitter proportions - table keeps its size, graph gets the rest
             self.splitter.setSizes([table_width, graph_width])
+
+            # Process events to ensure layout is complete before drawing
+            # This prevents matplotlib's constrained_layout from failing with zero width
+            QApplication.processEvents()
+
+            # Initialize graph with current data and selection AFTER resize is complete
+            selected_cells = self._get_selected_data_cells()
+            self.graph_widget.set_data(
+                self.table, self.data, self.rom_definition, selected_cells
+            )
 
             # Set focus on graph so arrow keys work immediately
             self.graph_widget.setFocus()
