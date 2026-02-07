@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Optional, Tuple
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush
+from simpleeval import simple_eval
 
 from ...core.rom_definition import TableType, AxisType
 from .context import TableViewerContext
@@ -137,7 +138,6 @@ class TableEditHelper:
             return display_value
 
         try:
-            from simpleeval import simple_eval
             return simple_eval(scaling.frexpr, names={'x': display_value})
         except Exception as e:
             logger.error(f"Error converting to raw: {e}")
@@ -311,7 +311,6 @@ class TableEditHelper:
             return display_value
 
         try:
-            from simpleeval import simple_eval
             return simple_eval(scaling.frexpr, names={'x': display_value})
         except Exception as e:
             logger.error(f"Error converting axis to raw: {e}")

@@ -6,6 +6,7 @@ Provides both a standalone window (GraphViewer) and embeddable widget (GraphWidg
 """
 
 import numpy as np
+import matplotlib.pyplot as plt
 from PySide6.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QSizePolicy
 from PySide6.QtCore import Qt, QTimer
 
@@ -501,7 +502,6 @@ class GraphViewer(_GraphPlotMixin, QMainWindow):
 
     def closeEvent(self, event):
         """Clean up matplotlib figure to prevent leak in global registry"""
-        import matplotlib.pyplot as plt
         plt.close(self.figure)
         event.accept()
 

@@ -15,7 +15,10 @@ from PySide6.QtGui import QColor, QBrush
 from ...core.rom_definition import Table, TableType, AxisType
 from ...utils.settings import get_settings
 from ...utils.colormap import get_colormap
-from .context import TableViewerContext
+from .context import (
+    TableViewerContext, save_header_resize_modes, set_headers_fixed,
+    restore_header_resize_modes,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,24 +52,16 @@ class TableDisplayHelper:
         This optimization prevents expensive per-cell recalculations during bulk
         operations like undo/redo of multi-cell changes.
         """
-        h_header = self.ctx.table_widget.horizontalHeader()
-        v_header = self.ctx.table_widget.verticalHeader()
+        h_header, v_header, h_modes, v_modes = save_header_resize_modes(
+            self.ctx.table_widget
+        )
+        self._saved_h_header = h_header
+        self._saved_v_header = v_header
+        self._saved_h_resize_modes = h_modes
+        self._saved_v_resize_modes = v_modes
+        set_headers_fixed(h_header, v_header)
 
-        # Save current header resize modes
-        self._saved_h_resize_modes = [
-            h_header.sectionResizeMode(i) for i in range(h_header.count())
-        ]
-        self._saved_v_resize_modes = [
-            v_header.sectionResizeMode(i) for i in range(v_header.count())
-        ]
-
-        # Set all to Fixed to prevent resize calculations on each setText
-        for i in range(h_header.count()):
-            h_header.setSectionResizeMode(i, QHeaderView.Fixed)
-        for i in range(v_header.count()):
-            v_header.setSectionResizeMode(i, QHeaderView.Fixed)
-
-        # Cache min/max values for color calculations (avoids O(n²) complexity)
+        # Cache min/max values for color calculations (avoids O(n^2) complexity)
         if self.ctx.current_data and 'values' in self.ctx.current_data:
             self.cache_value_range(self.ctx.current_data['values'])
 
@@ -79,17 +74,13 @@ class TableDisplayHelper:
 
         # Restore header resize modes
         if hasattr(self, '_saved_h_resize_modes'):
-            h_header = self.ctx.table_widget.horizontalHeader()
-            for i, mode in enumerate(self._saved_h_resize_modes):
-                if i < h_header.count():
-                    h_header.setSectionResizeMode(i, mode)
+            restore_header_resize_modes(
+                self._saved_h_header, self._saved_v_header,
+                self._saved_h_resize_modes, self._saved_v_resize_modes,
+            )
+            del self._saved_h_header
+            del self._saved_v_header
             del self._saved_h_resize_modes
-
-        if hasattr(self, '_saved_v_resize_modes'):
-            v_header = self.ctx.table_widget.verticalHeader()
-            for i, mode in enumerate(self._saved_v_resize_modes):
-                if i < v_header.count():
-                    v_header.setSectionResizeMode(i, mode)
             del self._saved_v_resize_modes
 
     def apply_table_style(self):
@@ -307,6 +298,9 @@ class TableDisplayHelper:
             return
 
         self.ctx.editing_in_progress = True
+        # Block signals and disable updates to prevent per-cell repaints (audit #22)
+        self.ctx.table_widget.blockSignals(True)
+        self.ctx.table_widget.setUpdatesEnabled(False)
         try:
             rows, cols = values.shape
 
@@ -441,6 +435,10 @@ class TableDisplayHelper:
                     self.ctx.table_widget.setItem(row + 1, col + 1, value_item)
         finally:
             self.ctx.editing_in_progress = False
+            # Re-enable signals and updates, trigger a single repaint (audit #22)
+            self.ctx.table_widget.blockSignals(False)
+            self.ctx.table_widget.setUpdatesEnabled(True)
+            self.ctx.table_widget.viewport().update()
 
         # Apply uniform column width to data columns
         self._apply_uniform_column_width_3d()

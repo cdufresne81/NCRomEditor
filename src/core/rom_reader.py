@@ -5,6 +5,8 @@ Reads binary ROM files using ROM definition metadata.
 Extracts and scales table data based on definitions.
 """
 
+import ast
+import re
 import struct
 import os
 import numpy as np
@@ -33,10 +35,71 @@ def _convert_expr_to_python(expr: str) -> str:
     Replaces ^ with ** for exponentiation since many ROM definition
     files use ^ (calculator-style) but Python uses ** for power.
     """
-    import re
     # Replace ^ with ** for exponentiation
     # This handles patterns like x^2, x^3, (expr)^2, etc.
     return re.sub(r'\^', '**', expr)
+
+
+def _is_safe_numpy_expr(expr: str) -> bool:
+    """
+    Validate that an expression is safe to evaluate with numpy arrays.
+
+    Only allows arithmetic on 'x' with numeric constants. Rejects
+    anything that could be dangerous (function calls, attribute access,
+    imports, etc.).
+
+    Returns True if the expression uses only safe AST nodes.
+    """
+    try:
+        tree = ast.parse(expr, mode='eval')
+    except SyntaxError:
+        return False
+
+    _SAFE_NODES = (
+        ast.Expression,
+        ast.BinOp,
+        ast.UnaryOp,
+        # Binary operators
+        ast.Add, ast.Sub, ast.Mult, ast.Div,
+        ast.Pow, ast.FloorDiv, ast.Mod,
+        # Unary operators
+        ast.UAdd, ast.USub,
+        # Literals and names
+        ast.Constant, ast.Name,
+        # Parenthesised sub-expressions (implicit in BinOp nesting)
+    )
+
+    for node in ast.walk(tree):
+        if not isinstance(node, _SAFE_NODES):
+            return False
+        # Only allow 'x' as a variable name
+        if isinstance(node, ast.Name) and node.id != 'x':
+            return False
+
+    return True
+
+
+def _compile_numpy_expr(expr: str):
+    """
+    Compile a scaling expression into a code object for vectorized numpy evaluation.
+
+    The expression must pass _is_safe_numpy_expr validation. If it does, it is
+    compiled once and can be evaluated many times with different numpy arrays
+    bound to 'x'.
+
+    Returns:
+        A compiled code object, or None if the expression cannot be vectorized.
+    """
+    if not expr:
+        return None
+    if not _is_safe_numpy_expr(expr):
+        logger.debug(f"Expression not safe for numpy vectorization: {expr}")
+        return None
+    try:
+        return compile(expr, '<scaling>', 'eval')
+    except SyntaxError:
+        logger.debug(f"Failed to compile expression for numpy: {expr}")
+        return None
 
 
 class ScalingConverter:
@@ -55,10 +118,17 @@ class ScalingConverter:
         # Pre-convert expressions to Python syntax
         self._toexpr = _convert_expr_to_python(scaling.toexpr) if scaling.toexpr else scaling.toexpr
         self._frexpr = _convert_expr_to_python(scaling.frexpr) if scaling.frexpr else scaling.frexpr
+        # Pre-compile numpy-vectorizable code objects (None if not vectorizable)
+        self._toexpr_compiled = _compile_numpy_expr(self._toexpr)
+        self._frexpr_compiled = _compile_numpy_expr(self._frexpr)
 
     def to_display(self, raw_value: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
         """
         Convert raw binary value(s) to display value(s)
+
+        Uses vectorized numpy evaluation when possible (compiled expression
+        applied to the whole array at once). Falls back to per-element
+        simpleeval for expressions that can't be safely vectorized.
 
         Args:
             raw_value: Raw value or array of values
@@ -69,21 +139,16 @@ class ScalingConverter:
         Raises:
             ScalingConversionError: If conversion fails
         """
-        try:
-            # Use simpleeval for safe expression evaluation
-            if isinstance(raw_value, np.ndarray):
-                return np.array([simple_eval(self._toexpr, names={'x': v}) for v in raw_value])
-            else:
-                return simple_eval(self._toexpr, names={'x': raw_value})
-        except Exception as e:
-            logger.error(f"Error converting to display with expr '{self._toexpr}': {e}")
-            raise ScalingConversionError(
-                f"Failed to convert raw value to display using expression '{self._toexpr}': {e}"
-            )
+        return self._eval_expr(
+            self._toexpr, self._toexpr_compiled, raw_value, "to display"
+        )
 
     def from_display(self, display_value: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
         """
         Convert display value(s) back to raw binary value(s)
+
+        Uses vectorized numpy evaluation when possible. Falls back to
+        per-element simpleeval for non-vectorizable expressions.
 
         Args:
             display_value: Display value or array of values
@@ -94,15 +159,64 @@ class ScalingConverter:
         Raises:
             ScalingConversionError: If conversion fails
         """
+        return self._eval_expr(
+            self._frexpr, self._frexpr_compiled, display_value, "from display"
+        )
+
+    def _eval_expr(
+        self,
+        expr: str,
+        compiled_expr,
+        value: Union[float, np.ndarray],
+        direction: str,
+    ) -> Union[float, np.ndarray]:
+        """
+        Evaluate a scaling expression on a value or array.
+
+        Tries vectorized numpy evaluation first (single pass over the whole
+        array). Falls back to per-element simpleeval if the expression was
+        not compiled or if the vectorized path raises an error.
+
+        Args:
+            expr: The expression string (for error messages and fallback)
+            compiled_expr: Pre-compiled code object, or None
+            value: Scalar or numpy array to transform
+            direction: "to display" or "from display" (for error messages)
+
+        Returns:
+            Transformed value or array
+
+        Raises:
+            ScalingConversionError: If both vectorized and fallback paths fail
+        """
+        # --- Fast path: vectorised numpy evaluation ---
+        if compiled_expr is not None:
+            try:
+                # eval with x bound to the value/array; only numpy is in scope
+                result = eval(compiled_expr, {"__builtins__": {}}, {"x": value})  # noqa: S307
+                # Ensure the result is a numpy array when the input was one
+                if isinstance(value, np.ndarray) and not isinstance(result, np.ndarray):
+                    result = np.full_like(value, result, dtype=float)
+                return result
+            except Exception:
+                # Vectorised eval failed (e.g. division by zero on some element).
+                # Fall through to the per-element path below.
+                logger.debug(
+                    f"Vectorized eval failed for '{expr}', falling back to per-element"
+                )
+
+        # --- Fallback: per-element simpleeval ---
         try:
-            if isinstance(display_value, np.ndarray):
-                return np.array([simple_eval(self._frexpr, names={'x': v}) for v in display_value])
+            if isinstance(value, np.ndarray):
+                return np.array(
+                    [simple_eval(expr, names={'x': v}) for v in value]
+                )
             else:
-                return simple_eval(self._frexpr, names={'x': display_value})
+                return simple_eval(expr, names={'x': value})
         except Exception as e:
-            logger.error(f"Error converting from display with expr '{self._frexpr}': {e}")
+            logger.error(f"Error converting {direction} with expr '{expr}': {e}")
             raise ScalingConversionError(
-                f"Failed to convert display value to raw using expression '{self._frexpr}': {e}"
+                f"Failed to convert value {direction} using expression '{expr}': {e}"
             )
 
 

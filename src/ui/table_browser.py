@@ -420,7 +420,7 @@ class TableBrowser(QWidget):
             address: Table address (e.g., "1000" or "0x1000")
         """
         # Normalize address (remove 0x prefix if present for comparison)
-        target_address = address.lower().lstrip('0x')
+        target_address = address.lower().removeprefix('0x')
 
         # Search through all category items
         for i in range(self.tree.topLevelItemCount()):
@@ -432,7 +432,7 @@ class TableBrowser(QWidget):
 
                 if table:
                     # Normalize stored address for comparison
-                    item_address = table.address.lower().lstrip('0x')
+                    item_address = table.address.lower().removeprefix('0x')
 
                     if item_address == target_address:
                         # Expand the category if not already expanded

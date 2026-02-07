@@ -369,9 +369,11 @@ class TableUndoManager:
         return self._undo_group.redoText()
 
     def clear_all(self):
-        """Clear all undo stacks"""
+        """Clear and delete all undo stacks."""
+        self._undo_group.setActiveStack(None)
         for stack in self._stacks.values():
             stack.clear()
+            stack.deleteLater()
         self._stacks.clear()
         logger.debug("Cleared all undo stacks")
 

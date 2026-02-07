@@ -12,9 +12,9 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QBrush, QDesktopServices
-from PySide6.QtWidgets import QApplication, QHeaderView
+from PySide6.QtWidgets import QApplication
 
-from .context import TableViewerContext
+from .context import TableViewerContext, frozen_table_updates
 
 if TYPE_CHECKING:
     from .display import TableDisplayHelper
@@ -89,21 +89,7 @@ class TableClipboardHelper:
         # Paste values
         changes_made = []
 
-        # Disable widget updates during bulk paste to prevent repaints on every cell
-        self.ctx.table_widget.setUpdatesEnabled(False)
-        self.ctx.table_widget.blockSignals(True)
-
-        # Save and disable ResizeToContents header modes
-        h_header = self.ctx.table_widget.horizontalHeader()
-        v_header = self.ctx.table_widget.verticalHeader()
-        h_resize_modes = [h_header.sectionResizeMode(i) for i in range(h_header.count())]
-        v_resize_modes = [v_header.sectionResizeMode(i) for i in range(v_header.count())]
-        for i in range(h_header.count()):
-            h_header.setSectionResizeMode(i, QHeaderView.Fixed)
-        for i in range(v_header.count()):
-            v_header.setSectionResizeMode(i, QHeaderView.Fixed)
-
-        try:
+        with frozen_table_updates(self.ctx.table_widget):
             for row_offset, row_values in enumerate(rows_data):
                 for col_offset, value_text in enumerate(row_values):
                     target_row = start_row + row_offset
@@ -181,19 +167,6 @@ class TableClipboardHelper:
             if changes_made:
                 self.ctx.viewer.bulk_changes.emit(changes_made)
                 logger.debug(f"Pasted {len(changes_made)} cell(s)")
-        finally:
-            # Restore header resize modes
-            for i, mode in enumerate(h_resize_modes):
-                if i < h_header.count():
-                    h_header.setSectionResizeMode(i, mode)
-            for i, mode in enumerate(v_resize_modes):
-                if i < v_header.count():
-                    v_header.setSectionResizeMode(i, mode)
-
-            # Re-enable signals and updates, trigger a single repaint
-            self.ctx.table_widget.blockSignals(False)
-            self.ctx.table_widget.setUpdatesEnabled(True)
-            self.ctx.table_widget.viewport().update()
 
     def copy_table_to_clipboard(self):
         """Copy entire table to clipboard as tab-separated values (for Excel)"""

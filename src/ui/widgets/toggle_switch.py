@@ -5,7 +5,7 @@ A custom ON/OFF toggle switch styled like modern mobile toggles.
 Used for binary table values (e.g., DTC Activation Flags).
 """
 
-from PySide6.QtCore import Property, QPropertyAnimation, QEasingCurve, Qt, QRect
+from PySide6.QtCore import Property, QPropertyAnimation, QEasingCurve, Qt, QRect, QSize
 from PySide6.QtGui import QPainter, QColor, QPen
 from PySide6.QtWidgets import QAbstractButton, QSizePolicy
 
@@ -33,7 +33,6 @@ class ToggleSwitch(QAbstractButton):
         self._animation.setEasingCurve(QEasingCurve.InOutCubic)
 
     def sizeHint(self):
-        from PySide6.QtCore import QSize
         return QSize(self._TRACK_WIDTH, self._TRACK_HEIGHT)
 
     def minimumSizeHint(self):

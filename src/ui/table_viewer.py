@@ -25,11 +25,12 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QFrame,
 )
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QKeySequence, QShortcut
+from PySide6.QtCore import Qt, Signal, QSize
+from PySide6.QtGui import QColor, QKeySequence, QShortcut, QPainter, QFontMetrics
 
 from ..core.rom_definition import Table, TableType, RomDefinition
 from ..utils.settings import get_settings
+from .widgets.toggle_switch import ToggleSwitch
 from .table_viewer_helpers import (
     TableViewerContext,
     TableDisplayHelper,
@@ -52,7 +53,6 @@ class RotatedLabel(QLabel):
 
     def paintEvent(self, event):
         """Paint the label with rotated text"""
-        from PySide6.QtGui import QPainter, QFontMetrics
         painter = QPainter(self)
         painter.rotate(-90)
 
@@ -71,8 +71,6 @@ class RotatedLabel(QLabel):
 
     def sizeHint(self):
         """Return preferred size (width/height swapped for rotated text)"""
-        from PySide6.QtCore import QSize
-        from PySide6.QtGui import QFontMetrics
         fm = QFontMetrics(self.font())
         # Swap width and height since text is rotated
         return QSize(fm.height() + 4, fm.horizontalAdvance(self.text()) + 10)
@@ -243,8 +241,6 @@ class TableViewer(QWidget):
 
     def _init_toggle_ui(self, parent_layout: QVBoxLayout):
         """Initialize the toggle switch container (hidden by default)"""
-        from .widgets.toggle_switch import ToggleSwitch
-
         self.toggle_container = QFrame()
         self.toggle_container.setVisible(False)
 

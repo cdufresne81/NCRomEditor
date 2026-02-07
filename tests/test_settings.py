@@ -8,7 +8,23 @@ import pytest
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 
+from PySide6.QtCore import QByteArray
+
 from src.utils.settings import AppSettings, get_settings
+import src.utils.settings as settings_module
+
+
+@pytest.fixture(autouse=True)
+def _restore_settings_globals():
+    """Save and restore the module-level ``_settings`` singleton between tests.
+
+    Tests in ``TestGlobalSettingsInstance`` set ``settings_module._settings = None``
+    to exercise lazy initialization.  Without cleanup, the mutation leaks into
+    later tests and can cause order-dependent failures.
+    """
+    original_settings = settings_module._settings
+    yield
+    settings_module._settings = original_settings
 
 
 @pytest.fixture
@@ -283,7 +299,7 @@ class TestWindowSettings:
         mock_instance, settings_store = mock_qsettings
         app_settings = AppSettings()
 
-        geometry_data = b"fake_geometry_data"
+        geometry_data = QByteArray(b"fake_geometry_data")
         app_settings.set_window_geometry(geometry_data)
 
         result = app_settings.get_window_geometry()
@@ -299,7 +315,7 @@ class TestWindowSettings:
         mock_instance, settings_store = mock_qsettings
         app_settings = AppSettings()
 
-        state_data = b"fake_splitter_state"
+        state_data = QByteArray(b"fake_splitter_state")
         app_settings.set_splitter_state(state_data)
 
         result = app_settings.get_splitter_state()

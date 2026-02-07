@@ -399,14 +399,14 @@ class TableViewerWindow(QMainWindow):
         self.cell_changed.emit(
             self.table, row, col, old_value, new_value, old_raw, new_raw
         )
-        # Refresh graph to show updated data
-        self._refresh_graph()
+        # Schedule debounced graph refresh (consolidates with selection-change draws)
+        self._schedule_graph_refresh()
 
     def _on_bulk_changes(self, changes: list):
         """Forward bulk changes signal with table object"""
         self.bulk_changes.emit(self.table, changes)
-        # Refresh graph to show updated data
-        self._refresh_graph()
+        # Schedule debounced graph refresh (consolidates with selection-change draws)
+        self._schedule_graph_refresh()
 
     def _refresh_graph(self):
         """Refresh graph display if visible.
@@ -416,8 +416,13 @@ class TableViewerWindow(QMainWindow):
         a visible zoom-out due to constrained_layout recalculation).
         The graph widget holds a reference to the same data dict, so
         cell value changes are already reflected without re-setting data.
+
+        Also cancels any pending selection-only timer since this refresh
+        already includes the current selection, preventing a redundant draw.
         """
         if self._graph_visible and self.graph_widget:
+            # Cancel pending selection update — this refresh supersedes it
+            self._selection_timer.stop()
             selected_cells = self._get_selected_data_cells()
             self.graph_widget.update_selection(selected_cells)
 
@@ -432,14 +437,14 @@ class TableViewerWindow(QMainWindow):
         self.axis_changed.emit(
             self.table, axis_type, index, old_value, new_value, old_raw, new_raw
         )
-        # Refresh graph to show updated axis
-        self._refresh_graph()
+        # Schedule debounced graph refresh (consolidates with selection-change draws)
+        self._schedule_graph_refresh()
 
     def _on_axis_bulk_changes(self, changes: list):
         """Forward axis bulk changes signal with table object"""
         self.axis_bulk_changes.emit(self.table, changes)
-        # Refresh graph to show updated axis
-        self._refresh_graph()
+        # Schedule debounced graph refresh (consolidates with selection-change draws)
+        self._schedule_graph_refresh()
 
     def _auto_size_window(self):
         """Auto-size window to fit table content - compact like ECUFlash"""

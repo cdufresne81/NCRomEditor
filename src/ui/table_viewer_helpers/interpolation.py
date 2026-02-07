@@ -9,11 +9,11 @@ from typing import TYPE_CHECKING, List, Tuple
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush
-from PySide6.QtWidgets import QMessageBox, QHeaderView
+from PySide6.QtWidgets import QMessageBox
 
 from ...core.rom_definition import TableType, AxisType
 from ...core.rom_reader import ScalingConverter
-from .context import TableViewerContext
+from .context import TableViewerContext, frozen_table_updates
 
 if TYPE_CHECKING:
     from .display import TableDisplayHelper
@@ -28,12 +28,44 @@ class TableInterpolationHelper:
         self.ctx = ctx
         self.display = display
 
+    def _check_scaling_available(self) -> bool:
+        """Check if scaling is available for interpolation. Warn user if not."""
+        if not self.ctx.current_table or not self.ctx.rom_definition:
+            return False
+
+        scaling_name = self.ctx.current_table.scaling
+        if not scaling_name:
+            logger.warning("Interpolation skipped: table has no scaling defined")
+            QMessageBox.warning(
+                self.ctx.viewer,
+                "Interpolation Skipped",
+                "Interpolation requires a scaling definition, but this table "
+                "has no scaling configured. The operation was skipped."
+            )
+            return False
+
+        scaling = self.ctx.rom_definition.get_scaling(scaling_name)
+        if not scaling:
+            logger.warning("Interpolation skipped: scaling '%s' not found", scaling_name)
+            QMessageBox.warning(
+                self.ctx.viewer,
+                "Interpolation Skipped",
+                f"Interpolation requires a valid scaling definition, but "
+                f"scaling '{scaling_name}' was not found. The operation was skipped."
+            )
+            return False
+
+        return True
+
     def interpolate_vertical(self):
         """Fill gaps vertically with linear interpolation (V key)"""
         logger.debug("interpolate_vertical() called")
 
         if not self.ctx.current_table or not self.ctx.current_data:
             logger.debug("No current table or data")
+            return
+
+        if not self._check_scaling_available():
             return
 
         selected_ranges = self.ctx.table_widget.selectedRanges()
@@ -46,21 +78,7 @@ class TableInterpolationHelper:
         all_changes = []
         axis_changes = []
 
-        # Disable widget updates during bulk interpolation to prevent repaints on every cell
-        self.ctx.table_widget.setUpdatesEnabled(False)
-        self.ctx.table_widget.blockSignals(True)
-
-        # Save and disable ResizeToContents header modes
-        h_header = self.ctx.table_widget.horizontalHeader()
-        v_header = self.ctx.table_widget.verticalHeader()
-        h_resize_modes = [h_header.sectionResizeMode(i) for i in range(h_header.count())]
-        v_resize_modes = [v_header.sectionResizeMode(i) for i in range(v_header.count())]
-        for i in range(h_header.count()):
-            h_header.setSectionResizeMode(i, QHeaderView.Fixed)
-        for i in range(v_header.count()):
-            v_header.setSectionResizeMode(i, QHeaderView.Fixed)
-
-        try:
+        with frozen_table_updates(self.ctx.table_widget):
             for sel_range in selected_ranges:
                 logger.debug(f"Selection range: rows {sel_range.topRow()}-{sel_range.bottomRow()}, cols {sel_range.leftColumn()}-{sel_range.rightColumn()}")
 
@@ -231,19 +249,6 @@ class TableInterpolationHelper:
             if axis_changes:
                 logger.info(f"Vertical interpolation: updated {len(axis_changes)} axis cells")
                 self.ctx.viewer.axis_bulk_changes.emit(axis_changes)
-        finally:
-            # Restore header resize modes
-            for i, mode in enumerate(h_resize_modes):
-                if i < h_header.count():
-                    h_header.setSectionResizeMode(i, mode)
-            for i, mode in enumerate(v_resize_modes):
-                if i < v_header.count():
-                    v_header.setSectionResizeMode(i, mode)
-
-            # Re-enable signals and updates, trigger a single repaint
-            self.ctx.table_widget.blockSignals(False)
-            self.ctx.table_widget.setUpdatesEnabled(True)
-            self.ctx.table_widget.viewport().update()
 
         if not all_changes and not axis_changes:
             logger.debug("Vertical interpolation: no changes made")
@@ -256,6 +261,9 @@ class TableInterpolationHelper:
             logger.debug("No current table or data")
             return
 
+        if not self._check_scaling_available():
+            return
+
         selected_ranges = self.ctx.table_widget.selectedRanges()
         if not selected_ranges:
             logger.debug("No selection")
@@ -266,21 +274,7 @@ class TableInterpolationHelper:
         all_changes = []
         axis_changes = []
 
-        # Disable widget updates during bulk interpolation to prevent repaints on every cell
-        self.ctx.table_widget.setUpdatesEnabled(False)
-        self.ctx.table_widget.blockSignals(True)
-
-        # Save and disable ResizeToContents header modes
-        h_header = self.ctx.table_widget.horizontalHeader()
-        v_header = self.ctx.table_widget.verticalHeader()
-        h_resize_modes = [h_header.sectionResizeMode(i) for i in range(h_header.count())]
-        v_resize_modes = [v_header.sectionResizeMode(i) for i in range(v_header.count())]
-        for i in range(h_header.count()):
-            h_header.setSectionResizeMode(i, QHeaderView.Fixed)
-        for i in range(v_header.count()):
-            v_header.setSectionResizeMode(i, QHeaderView.Fixed)
-
-        try:
+        with frozen_table_updates(self.ctx.table_widget):
             for sel_range in selected_ranges:
                 logger.debug(f"Selection range: rows {sel_range.topRow()}-{sel_range.bottomRow()}, cols {sel_range.leftColumn()}-{sel_range.rightColumn()}")
 
@@ -454,19 +448,6 @@ class TableInterpolationHelper:
 
             if not all_changes and not axis_changes:
                 logger.debug("Horizontal interpolation: no changes made")
-        finally:
-            # Restore header resize modes
-            for i, mode in enumerate(h_resize_modes):
-                if i < h_header.count():
-                    h_header.setSectionResizeMode(i, mode)
-            for i, mode in enumerate(v_resize_modes):
-                if i < v_header.count():
-                    v_header.setSectionResizeMode(i, mode)
-
-            # Re-enable signals and updates, trigger a single repaint
-            self.ctx.table_widget.blockSignals(False)
-            self.ctx.table_widget.setUpdatesEnabled(True)
-            self.ctx.table_widget.viewport().update()
 
     def interpolate_2d(self):
         """2D bilinear interpolation for 3D tables (B key)"""
@@ -474,6 +455,9 @@ class TableInterpolationHelper:
 
         if not self.ctx.current_table or not self.ctx.current_data:
             logger.debug("No current table or data")
+            return
+
+        if not self._check_scaling_available():
             return
 
         # Only works for 3D tables
@@ -495,21 +479,7 @@ class TableInterpolationHelper:
 
         all_changes = []
 
-        # Disable widget updates during bulk interpolation to prevent repaints on every cell
-        self.ctx.table_widget.setUpdatesEnabled(False)
-        self.ctx.table_widget.blockSignals(True)
-
-        # Save and disable ResizeToContents header modes
-        h_header = self.ctx.table_widget.horizontalHeader()
-        v_header = self.ctx.table_widget.verticalHeader()
-        h_resize_modes = [h_header.sectionResizeMode(i) for i in range(h_header.count())]
-        v_resize_modes = [v_header.sectionResizeMode(i) for i in range(v_header.count())]
-        for i in range(h_header.count()):
-            h_header.setSectionResizeMode(i, QHeaderView.Fixed)
-        for i in range(v_header.count()):
-            v_header.setSectionResizeMode(i, QHeaderView.Fixed)
-
-        try:
+        with frozen_table_updates(self.ctx.table_widget):
             for sel_range in selected_ranges:
                 top_row = sel_range.topRow()
                 bottom_row = sel_range.bottomRow()
@@ -621,16 +591,3 @@ class TableInterpolationHelper:
                     self.ctx.viewer.bulk_changes.emit(all_changes)
                 else:
                     logger.debug("2D bilinear interpolation: no changes made")
-        finally:
-            # Restore header resize modes
-            for i, mode in enumerate(h_resize_modes):
-                if i < h_header.count():
-                    h_header.setSectionResizeMode(i, mode)
-            for i, mode in enumerate(v_resize_modes):
-                if i < v_header.count():
-                    v_header.setSectionResizeMode(i, mode)
-
-            # Re-enable signals and updates, trigger a single repaint
-            self.ctx.table_widget.blockSignals(False)
-            self.ctx.table_widget.setUpdatesEnabled(True)
-            self.ctx.table_widget.viewport().update()
