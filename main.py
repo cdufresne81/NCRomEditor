@@ -14,15 +14,13 @@ from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
     QWidget,
-    QVBoxLayout,
     QHBoxLayout,
     QSplitter,
     QFileDialog,
     QMessageBox,
-    QLabel,
     QTabWidget
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 
 from src.utils.logging_config import setup_logging, get_logger
 from src.utils.settings import get_settings
@@ -37,23 +35,24 @@ from src.core.rom_detector import RomDetector
 from src.core.exceptions import (
     DefinitionError,
     RomFileError,
+    RomWriteError,
     DetectionError,
     ScalingNotFoundError,
-    RomReadError
+    RomReadError,
 )
-from src.ui.table_browser import TableBrowser
 from src.ui.table_viewer_window import TableViewerWindow
 from src.ui.log_console import LogConsole
-from src.ui.settings_dialog import SettingsDialog
 from src.ui.setup_wizard import SetupWizard
 from src.ui.rom_document import RomDocument
-from src.ui.project_wizard import ProjectWizard
-from src.ui.commit_dialog import CommitDialog
-from src.ui.history_viewer import HistoryViewer
 from src.core.project_manager import ProjectManager
 from src.core.change_tracker import ChangeTracker
 from src.core.table_undo_manager import TableUndoManager, make_table_key, extract_table_address, extract_rom_path
 from src.core.version_models import CellChange, AxisChange
+
+# Mixin classes — each handles one responsibility group
+from src.ui.recent_files_mixin import RecentFilesMixin
+from src.ui.project_mixin import ProjectMixin
+from src.ui.session_mixin import SessionMixin
 
 logger = get_logger(__name__)
 
@@ -72,7 +71,7 @@ def handle_rom_operation_error(parent, operation: str, exception: Exception):
     QMessageBox.critical(parent, "Error", error_msg)
 
 
-class MainWindow(QMainWindow):
+class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
     """Main application window"""
 
     def __init__(self):
@@ -111,6 +110,27 @@ class MainWindow(QMainWindow):
             end_bulk_update=self._end_bulk_update,
         )
 
+        # ROM detector initialized in _deferred_init (XML parsing is heavy)
+        self.rom_detector = None
+
+        # Initialize UI (lightweight widget creation)
+        self.init_ui()
+        self.init_menu()
+
+        # Defer heavy work to after the window is shown:
+        # - definitions directory check + setup wizard (modal dialog)
+        # - ROM detector initialization (XML parsing)
+        # - startup log message (depends on rom_detector)
+        # - session restore (file I/O)
+        QTimer.singleShot(0, self._deferred_init)
+
+    def _deferred_init(self):
+        """
+        Perform heavy initialization after the window is shown.
+
+        This includes file I/O, modal dialogs, XML parsing, and session restore
+        that would otherwise block the constructor and delay window display.
+        """
         # Check if definitions directory is configured and valid
         if not self.check_definitions_directory():
             # Show setup wizard on first run or if definitions directory is invalid
@@ -123,7 +143,9 @@ class MainWindow(QMainWindow):
                     f"{APP_NAME} requires a definitions directory to function.\n"
                     "Application will now exit."
                 )
-                sys.exit(1)
+                # Defer exit to the event loop so Qt can clean up properly
+                QTimer.singleShot(0, lambda: sys.exit(1))
+                return
 
         # ROM detector for automatic XML matching
         try:
@@ -139,22 +161,18 @@ class MainWindow(QMainWindow):
             )
             self.rom_detector = None
         except Exception as e:
-            logger.error(f"Unexpected error initializing ROM detector: {e}")
+            logger.exception(f"Unexpected error initializing ROM detector: {type(e).__name__}: {e}")
             QMessageBox.critical(
                 self,
                 "Initialization Error",
-                f"Failed to initialize ROM detector:\n{str(e)}"
+                f"Unexpected error initializing ROM detector:\n{type(e).__name__}: {e}"
             )
             self.rom_detector = None
 
-        # Initialize UI
-        self.init_ui()
-        self.init_menu()
-
-        # Log startup message
+        # Log startup message (depends on rom_detector)
         self.log_startup_message()
 
-        # Restore previous session
+        # Restore previous session (file I/O)
         self._restore_session()
 
     def check_definitions_directory(self) -> bool:
@@ -306,69 +324,7 @@ class MainWindow(QMainWindow):
         about_action = help_menu.addAction("About")
         about_action.triggered.connect(self.show_about)
 
-    def update_recent_files_menu(self):
-        """Update the recent files menu with current list"""
-        # Remove existing recent file actions
-        for action in self.recent_files_actions:
-            self.file_menu.removeAction(action)
-        self.recent_files_actions.clear()
-
-        # Get recent files from settings
-        recent_files = self.settings.get_recent_files()
-
-        if recent_files:
-            # Add each recent file
-            for i, file_path in enumerate(recent_files, 1):
-                # Show just the filename, but store full path
-                file_name = Path(file_path).name
-                action_text = f"{i}. {file_name}"
-
-                action = self.file_menu.addAction(action_text)
-                action.setData(file_path)  # Store full path in action data
-                action.setStatusTip(file_path)  # Show full path in status bar
-                action.triggered.connect(lambda checked=False, path=file_path: self.open_recent_file(path))
-
-                # Insert before the separator
-                self.file_menu.insertAction(self.recent_files_separator, action)
-                self.recent_files_actions.append(action)
-
-            # Add "Clear Recent Files" option
-            clear_action = self.file_menu.addAction("Clear Recent Files")
-            clear_action.triggered.connect(self.clear_recent_files)
-            self.file_menu.insertAction(self.recent_files_separator, clear_action)
-            self.recent_files_actions.append(clear_action)
-
-    def open_recent_file(self, file_path: str):
-        """
-        Open a ROM file from recent files list
-
-        Args:
-            file_path: Full path to ROM file
-        """
-        if not Path(file_path).exists():
-            QMessageBox.warning(
-                self,
-                "File Not Found",
-                f"The file no longer exists:\n{file_path}\n\n"
-                "It will be removed from recent files."
-            )
-            # Remove from recent files
-            recent = self.settings.get_recent_files()
-            if file_path in recent:
-                recent.remove(file_path)
-                self.settings.settings.setValue("recent_files", recent)
-                self.settings.settings.sync()
-                self.update_recent_files_menu()
-            return
-
-        # Open the file (reuse existing logic by calling the internal open method)
-        self._open_rom_file(file_path)
-
-    def clear_recent_files(self):
-        """Clear the recent files list"""
-        self.settings.clear_recent_files()
-        self.update_recent_files_menu()
-        logger.info("Recent files list cleared")
+    # ========== Tab and Document Management ==========
 
     def update_window_title(self):
         """Update window title based on tab count"""
@@ -482,6 +438,17 @@ class MainWindow(QMainWindow):
                 logger.info(f"Switched to ROM: {document.file_name}")
         else:
             self.update_window_title()
+
+    def _update_tab_title(self, document):
+        """Update tab title to show modified state"""
+        tab_index = self.tab_widget.indexOf(document)
+        if tab_index >= 0:
+            title = document.file_name
+            if document.is_modified():
+                title = f"*{title}"
+            self.tab_widget.setTabText(tab_index, title)
+
+    # ========== ROM I/O ==========
 
     def open_rom(self):
         """Open a ROM file via file dialog"""
@@ -672,6 +639,8 @@ class MainWindow(QMainWindow):
                     f"Unexpected error saving ROM file:\n{type(e).__name__}: {e}"
                 )
 
+    # ========== Table Selection and Window Management ==========
+
     def on_table_selected(self, table, rom_reader):
         """Handle table selection from browser - opens table in new window"""
         try:
@@ -784,293 +753,6 @@ class MainWindow(QMainWindow):
             for defn in definitions:
                 logger.info(f"  • {defn['xmlid']} - {defn['make']} {defn['model']}")
 
-    def show_settings(self):
-        """Show settings dialog"""
-        dialog = SettingsDialog(self)
-        dialog.settings_changed.connect(self.on_settings_changed)
-        dialog.exec()
-
-    def on_settings_changed(self):
-        """Handle settings changes"""
-        # Reinitialize ROM detector with new definitions path
-        try:
-            definitions_dir = self.settings.get_definitions_directory()
-            self.rom_detector = RomDetector(definitions_dir)
-            logger.info(f"ROM detector reinitialized with definitions directory: {definitions_dir}")
-            self.statusBar().showMessage(f"Settings updated. Definitions directory: {definitions_dir}")
-        except DetectionError as e:
-            logger.error(f"Failed to reinitialize ROM detector: {e}")
-            QMessageBox.warning(
-                self,
-                "Settings Error",
-                f"Failed to load definitions from new directory:\n{str(e)}\n\n"
-                "Please check the definitions directory path in settings."
-            )
-
-    def show_about(self):
-        """Show about dialog"""
-        QMessageBox.about(
-            self,
-            f"About {APP_NAME}",
-            f"{APP_NAME} {APP_VERSION_STRING}\n\n"
-            f"{APP_DESCRIPTION}\n\n"
-            "Designed to replace EcuFlash for ROM editing tasks.\n"
-            "Works with RomDrop for ECU flashing."
-        )
-
-    # ========== Project Management Methods ==========
-
-    def new_project(self):
-        """Create a new project via wizard"""
-        wizard = ProjectWizard(self)
-        if wizard.exec() == QDialog.Accepted:
-            try:
-                # Create the project
-                project = self.project_manager.create_project(
-                    project_path=wizard.project_location,
-                    project_name=wizard.project_name,
-                    source_rom_path=wizard.rom_path,
-                    rom_definition=wizard.rom_definition,
-                    description=wizard.project_description
-                )
-
-                # Open the project's working ROM
-                self._open_rom_file(project.working_rom_path)
-
-                # Update UI state
-                self._update_project_ui()
-
-                logger.info(f"Created project: {project.name}")
-                self.statusBar().showMessage(f"Created project: {project.name}")
-
-                QMessageBox.information(
-                    self,
-                    "Project Created",
-                    f"Project '{project.name}' created successfully.\n\n"
-                    f"Location: {project.project_path}"
-                )
-
-            except Exception as e:
-                handle_rom_operation_error(self, "create project", e)
-
-    def open_project(self):
-        """Open an existing project"""
-        project_path = QFileDialog.getExistingDirectory(
-            self,
-            "Open Project Folder",
-            str(Path.home())
-        )
-
-        if not project_path:
-            return
-
-        # Check if it's a valid project folder
-        if not ProjectManager.is_project_folder(project_path):
-            QMessageBox.warning(
-                self,
-                "Invalid Project",
-                "The selected folder is not a valid NC ROM Editor project.\n\n"
-                "A project folder must contain a project.json file."
-            )
-            return
-
-        try:
-            # Open the project
-            project = self.project_manager.open_project(project_path)
-
-            # Get ROM definition for the project
-            rom_id = project.original_rom.rom_id
-            xml_path = self.rom_detector.find_definition_by_id(rom_id)
-
-            if xml_path:
-                rom_definition = load_definition(xml_path)
-
-                # Create ROM reader for working ROM
-                rom_reader = RomReader(project.working_rom_path, rom_definition)
-
-                # Create ROM document widget
-                rom_document = RomDocument(
-                    project.working_rom_path, rom_definition, rom_reader, self
-                )
-                rom_document.table_selected.connect(self.on_table_selected)
-
-                # Add as new tab
-                tab_title = f"[P] {project.name}"
-                tab_index = self.tab_widget.addTab(rom_document, tab_title)
-                self.tab_widget.setTabToolTip(tab_index, project.project_path)
-                self.tab_widget.setCurrentIndex(tab_index)
-
-                # Update UI state
-                self._update_project_ui()
-
-                logger.info(f"Opened project: {project.name}")
-                self.statusBar().showMessage(f"Opened project: {project.name}")
-            else:
-                QMessageBox.warning(
-                    self,
-                    "Definition Not Found",
-                    f"Could not find ROM definition for ID: {rom_id}\n\n"
-                    "The project was created with a ROM definition that is no longer available."
-                )
-
-        except Exception as e:
-            handle_rom_operation_error(self, "open project", e)
-
-    def commit_changes(self):
-        """Commit pending changes to the project"""
-        if not self.project_manager.is_project_open():
-            QMessageBox.warning(
-                self,
-                "No Project",
-                "No project is currently open.\n\n"
-                "Use File > New Project to create a project first."
-            )
-            return
-
-        if not self.change_tracker.has_pending_changes():
-            QMessageBox.information(
-                self,
-                "No Changes",
-                "There are no pending changes to commit."
-            )
-            return
-
-        # Get pending changes
-        pending = self.change_tracker.get_pending_changes()
-
-        # Get version info for dialog
-        next_version = self.project_manager.get_next_version()
-        rom_id = self.project_manager.current_project.original_rom.rom_id
-        suggested_suffix = self.project_manager.current_project.last_suffix
-
-        # Show commit dialog with version info
-        dialog = CommitDialog(
-            pending,
-            next_version=next_version,
-            rom_id=rom_id,
-            suggested_suffix=suggested_suffix,
-            parent=self
-        )
-        if dialog.exec() == QDialog.Accepted:
-            try:
-                message = dialog.get_commit_message()
-                create_snapshot = dialog.get_create_snapshot()
-                snapshot_suffix = dialog.get_snapshot_suffix()
-
-                # Save changes to working ROM file first
-                document = self.get_current_document()
-                if document:
-                    document.rom_reader.save_rom()
-
-                # Create commit with version numbering
-                commit = self.project_manager.commit_changes(
-                    message=message,
-                    changes=pending,
-                    create_snapshot=create_snapshot,
-                    snapshot_suffix=snapshot_suffix
-                )
-
-                # Clear pending changes
-                self.change_tracker.clear_pending_changes()
-
-                # Update UI
-                self._update_project_ui()
-
-                logger.info(f"Committed v{commit.version}: {message[:50]}...")
-                self.statusBar().showMessage(f"Saved version {commit.version}")
-
-            except Exception as e:
-                handle_rom_operation_error(self, "commit changes", e)
-
-    def show_history(self):
-        """Show commit history viewer"""
-        if not self.project_manager.is_project_open():
-            QMessageBox.information(
-                self,
-                "No Project",
-                "Open a project to view commit history."
-            )
-            return
-
-        dialog = HistoryViewer(self.project_manager, self)
-        dialog.view_table_diff.connect(self._on_view_table_diff)
-        dialog.exec()
-
-    def _on_view_table_diff(self, table_name: str, commit):
-        """
-        Open a table viewer showing changes from a specific commit
-
-        Args:
-            table_name: Name of the table to view
-            commit: Commit object containing the changes
-        """
-        document = self.get_current_document()
-        if not document:
-            return
-
-        # Find the table definition
-        table = document.rom_definition.get_table_by_name(table_name)
-        if not table:
-            QMessageBox.warning(
-                self,
-                "Table Not Found",
-                f"Could not find table: {table_name}"
-            )
-            return
-
-        try:
-            # Load base version data (previous version)
-            base_version = commit.version - 1 if commit.version > 0 else 0
-            base_rom_data = self.project_manager.load_version_data(base_version)
-
-            if base_rom_data is None:
-                QMessageBox.warning(
-                    self,
-                    "Version Not Found",
-                    f"Could not load base version {base_version} data."
-                )
-                return
-
-            # Create a temporary RomReader to read base version table data
-            from src.core.rom_reader import RomReader
-            import tempfile
-            import os
-
-            # Write base ROM to temp file and read table data
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.bin') as tmp:
-                tmp.write(base_rom_data)
-                tmp_path = tmp.name
-
-            try:
-                base_reader = RomReader(tmp_path, document.rom_definition)
-                base_data = base_reader.read_table_data(table)
-            finally:
-                os.unlink(tmp_path)
-
-            # Read current version table data
-            current_data = document.rom_reader.read_table_data(table)
-
-            # Open diff viewer
-            viewer_window = TableViewerWindow(
-                table,
-                current_data,
-                document.rom_definition,
-                rom_path=document.rom_path,
-                parent=self,
-                diff_mode=True,
-                diff_base_data=base_data
-            )
-            viewer_window.setWindowTitle(f"{table_name} (v{base_version} → v{commit.version})")
-            viewer_window.show()
-
-        except Exception as e:
-            logger.error(f"Failed to open diff view: {e}")
-            QMessageBox.warning(
-                self,
-                "Error",
-                f"Failed to open diff view: {e}"
-            )
-
     # ========== Undo/Redo Callback Methods ==========
     # These are called by TableUndoManager when undo/redo operations occur
 
@@ -1122,8 +804,10 @@ class MainWindow(QMainWindow):
                     document.rom_reader.write_cell_value(
                         window.table, change.row, change.col, change.new_raw
                     )
-                except Exception as e:
+                except RomWriteError as e:
                     logger.error(f"Failed to write cell value during undo/redo: {e}")
+                except Exception as e:
+                    logger.exception(f"Unexpected error writing cell value during undo/redo: {type(e).__name__}: {e}")
 
         logger.debug(f"Applied cell change: {change.table_name}[{change.row},{change.col}]")
 
@@ -1146,8 +830,10 @@ class MainWindow(QMainWindow):
                     document.rom_reader.write_axis_value(
                         window.table, change.axis_type, change.index, change.new_raw
                     )
-                except Exception as e:
+                except RomWriteError as e:
                     logger.error(f"Failed to write axis value during undo/redo: {e}")
+                except Exception as e:
+                    logger.exception(f"Unexpected error writing axis value during undo/redo: {type(e).__name__}: {e}")
 
         logger.debug(f"Applied axis change: {change.table_name}[{change.axis_type}][{change.index}]")
 
@@ -1206,6 +892,8 @@ class MainWindow(QMainWindow):
         # Single deferred UI update for all changes in this bulk operation
         self._update_project_ui()
 
+    # ========== Change Tracking and UI Updates ==========
+
     def _on_changes_updated(self):
         """Called when change tracker state changes (via _notify_change callback)"""
         # During bulk undo, defer UI updates until _end_bulk_update calls it once
@@ -1246,6 +934,8 @@ class MainWindow(QMainWindow):
                 modified_addresses = self.change_tracker.get_modified_addresses_for_rom(rom_path)
                 document.table_browser.update_modified_tables_by_address(modified_addresses)
 
+    # ========== Cell/Axis Change Handlers ==========
+
     def _on_table_cell_changed(self, table, row: int, col: int,
                                old_value: float, new_value: float,
                                old_raw: float, new_raw: float):
@@ -1276,8 +966,10 @@ class MainWindow(QMainWindow):
 
                 if not document.is_modified():
                     document.set_modified(True)
-            except Exception as e:
+            except RomWriteError as e:
                 logger.error(f"Failed to write cell value: {e}")
+            except Exception as e:
+                logger.exception(f"Unexpected error writing cell value: {type(e).__name__}: {e}")
 
     def _on_table_bulk_changes(self, table, changes: list, description: str = "Bulk Operation"):
         """Handle bulk changes from table viewer window (data manipulation operations)"""
@@ -1303,8 +995,10 @@ class MainWindow(QMainWindow):
                     document.set_modified(True)
 
                 logger.debug(f"Applied bulk changes: {len(changes)} cells in {table.name}")
-            except Exception as e:
+            except RomWriteError as e:
                 logger.error(f"Failed to write bulk changes: {e}")
+            except Exception as e:
+                logger.exception(f"Unexpected error writing bulk changes: {type(e).__name__}: {e}")
 
     def _on_table_axis_changed(self, table, axis_type: str, index: int,
                                old_value: float, new_value: float,
@@ -1328,8 +1022,10 @@ class MainWindow(QMainWindow):
 
                 if not document.is_modified():
                     document.set_modified(True)
-            except Exception as e:
+            except RomWriteError as e:
                 logger.error(f"Failed to write axis value: {e}")
+            except Exception as e:
+                logger.exception(f"Unexpected error writing axis value: {type(e).__name__}: {e}")
 
     def _on_table_axis_bulk_changes(self, table, changes: list, description: str = "Axis Bulk Operation"):
         """Handle axis bulk changes from table viewer window (interpolation, etc.)"""
@@ -1352,8 +1048,10 @@ class MainWindow(QMainWindow):
                     document.set_modified(True)
 
                 logger.debug(f"Applied axis bulk changes: {len(changes)} cells in {table.name}")
-            except Exception as e:
+            except RomWriteError as e:
                 logger.error(f"Failed to write axis bulk changes: {e}")
+            except Exception as e:
+                logger.exception(f"Unexpected error writing axis bulk changes: {type(e).__name__}: {e}")
 
     def _on_table_window_focused(self, table_key: str):
         """
@@ -1371,49 +1069,6 @@ class MainWindow(QMainWindow):
         document = self.get_current_document()
         if document and hasattr(document, 'table_browser'):
             document.table_browser.select_table_by_address(table_address)
-
-    def _update_tab_title(self, document):
-        """Update tab title to show modified state"""
-        tab_index = self.tab_widget.indexOf(document)
-        if tab_index >= 0:
-            title = document.file_name
-            if document.is_modified():
-                title = f"*{title}"
-            self.tab_widget.setTabText(tab_index, title)
-
-    def _restore_session(self):
-        """Restore files from previous session"""
-        session_files = self.settings.get_session_files()
-
-        if not session_files:
-            return
-
-        logger.info(f"Restoring session: {len(session_files)} file(s)")
-
-        for file_path in session_files:
-            if Path(file_path).exists():
-                try:
-                    self._open_rom_file(file_path)
-                except Exception as e:
-                    logger.warning(f"Failed to restore session file: {file_path} - {e}")
-            else:
-                logger.warning(f"Session file no longer exists: {file_path}")
-
-    def closeEvent(self, event):
-        """Save session state before closing"""
-        # Collect paths of all open ROM documents
-        open_files = []
-        for i in range(self.tab_widget.count()):
-            document = self.tab_widget.widget(i)
-            if document and hasattr(document, 'rom_path'):
-                open_files.append(document.rom_path)
-
-        # Save to settings
-        self.settings.set_session_files(open_files)
-        logger.info(f"Session saved: {len(open_files)} file(s)")
-
-        # Accept close event
-        event.accept()
 
 
 def main():
