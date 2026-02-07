@@ -14,6 +14,65 @@
 ## Environment Notes
 - Use `python3` not `python` (WSL2 environment lacks symlink)
 
+## Recent Completed Work (Feb 7, 2026) - Post-Remediation Re-Audit
+- **Comprehensive re-audit of all 40 findings** — Systematically verified every fix by reading source files. All 40 fixes confirmed in place. No regressions introduced by the remediation work. Updated `docs/CODE_AUDIT_REPORT.md` with: all items moved to DONE table, updated scores (Maintainability 9/10, Reliability 9/10, Test Quality 7/10, Performance 8/10, Security 9/10), Post-Remediation Notes section assessing new code (mixins, context manager, vectorized scaling, deferred init), and updated priority list for future improvements.
+- **Test suite results:** 240 passed, 1 skipped, 1 failed (platform-specific path normalization in `test_custom_definitions_dir` — Windows backslash vs forward slash, not a production bug).
+
+## Recent Completed Work (Feb 7, 2026) - Audit Fixes #19, #20
+- **Deferred heavy init work to `_deferred_init()` (#19)** — `MainWindow.__init__` was synchronously doing file I/O, modal dialogs, XML parsing, ROM detection, and session restore, blocking startup. Moved `check_definitions_directory()` + `show_setup_wizard()`, `RomDetector` initialization, `log_startup_message()`, and `_restore_session()` to `_deferred_init()` called via `QTimer.singleShot(0, ...)`. Set `self.rom_detector = None` initially; it's already handled as None by `_open_rom_file()`.
+- **Extracted 3 mixin classes from MainWindow (#20)** — Reduced `main.py` from ~1,513 lines / 44 methods to ~1,104 lines / 33 methods. Created: `RecentFilesMixin` (3 methods: `update_recent_files_menu`, `open_recent_file`, `clear_recent_files`) in `src/ui/recent_files_mixin.py`; `ProjectMixin` (5 methods: `new_project`, `open_project`, `commit_changes`, `show_history`, `_on_view_table_diff`) in `src/ui/project_mixin.py`; `SessionMixin` (5 methods: `_restore_session`, `closeEvent`, `show_settings`, `on_settings_changed`, `show_about`) in `src/ui/session_mixin.py`. MainWindow now inherits from `QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin`.
+
+## Recent Completed Work (Feb 7, 2026) - Audit Fix #30
+- **Extracted header resize mode save/restore into `frozen_table_updates` context manager (#30)** — The pattern of saving per-section header resize modes, setting them to Fixed for bulk operations, and restoring them in a finally block was duplicated 8 times across `operations.py` (2), `clipboard.py` (1), `interpolation.py` (3), and `display.py` (2 in `begin/end_bulk_update`). Created `frozen_table_updates()` context manager and `save_header_resize_modes()`, `set_headers_fixed()`, `restore_header_resize_modes()` helper functions in `context.py`. Replaced all 6 inline try/finally patterns with `with frozen_table_updates(...)`, and refactored `begin_bulk_update`/`end_bulk_update` in `display.py` to use the shared helpers. Removed now-unused `QHeaderView` imports from `operations.py`, `clipboard.py`, and `interpolation.py`.
+
+## Recent Completed Work (Feb 7, 2026) - Audit Fix #39
+- **Moved function-level imports to module level (#39)** — Moved `import matplotlib.pyplot as plt` in `graph_viewer.py`, `from pathlib import Path` in `version_models.py`, `QPainter/QFontMetrics/QSize` in `table_viewer.py`, `ToggleSwitch` in `table_viewer.py`, `QSize` in `toggle_switch.py`, `from simpleeval import simple_eval` in `editing.py`, and `AddValueDialog/MultiplyDialog/SetValueDialog` in `operations.py` from inside function bodies to module-level imports. Left `from .settings import get_settings` lazy in `colormap.py` (test mock compatibility).
+
+## Recent Completed Work (Feb 7, 2026) - Audit Fix #29
+- **Eliminated redundant graph draw calls on cell/axis edits (#29)** — When editing a cell or axis, `_on_cell_changed`/`_on_bulk_changes`/`_on_axis_changed`/`_on_axis_bulk_changes` in `table_viewer_window.py` called `_refresh_graph()` directly AND the selection-change signal also fired a second debounced draw. Changed all four handlers to use `_schedule_graph_refresh()` (50ms debounce) instead of direct calls, and added `self._selection_timer.stop()` inside `_refresh_graph()` so that when the data-refresh fires, it cancels any pending selection-only timer. Result: one draw per user action instead of two.
+
+## Recent Completed Work (Feb 7, 2026) - Audit Fix #18
+- **Fixed `clear_all()` not freeing undo stacks from QUndoGroup (#18)** — `remove_stack()` was already fixed in a prior session (composite keys + `deleteLater()`), but `clear_all()` had the same leak: it called `stack.clear()` without `stack.deleteLater()`, leaving QUndoStack objects registered in the QUndoGroup. Added `self._undo_group.setActiveStack(None)` and `stack.deleteLater()` to match `remove_stack()` cleanup behavior.
+
+## Recent Completed Work (Feb 7, 2026) - Audit Fix #32
+- **Fixed test state leaking across tests (#32)** — `tests/test_colormap.py` mutated `ColorMap._builtin_gradient` and `colormap_module._current_colormap` without cleanup; `tests/test_settings.py` mutated `settings_module._settings` without cleanup. Added `@pytest.fixture(autouse=True)` fixtures in both files that save original values before each test and restore them in teardown, preventing order-dependent failures.
+
+## Recent Completed Work (Feb 7, 2026) - Audit Fixes #26, #34
+- **Fixed QAction memory leak in recent files menu (#26)** — `update_recent_files_menu()` in `main.py` called `removeAction()` but never deleted the old QAction objects, leaking them (and their lambda connections) on every menu rebuild. Added `action.deleteLater()` before clearing the list.
+- **Fixed `sys.exit(1)` in MainWindow constructor bypassing Qt cleanup (#34)** — When the user cancels the setup wizard, `sys.exit(1)` was called directly inside `__init__`, bypassing Qt's cleanup sequence. Replaced with `QTimer.singleShot(0, lambda: sys.exit(1))` plus `return` to defer the exit to the event loop, allowing Qt to finish construction and clean up properly.
+- **Audit finding #17 already fixed** — `modified_cells` and `original_table_values` are already cleaned in `close_tab()` (lines 461-463) via `.pop(rom_path, None)` calls added in an earlier fix.
+
+## Recent Completed Work (Feb 7, 2026) - Audit Fixes #22, #27
+- **Fixed `_display_3d` per-cell signal storm (#22)** — `_display_3d` in `display.py` calls `setItem()` cell-by-cell, each firing internal model signals causing the view to repaint per cell. Wrapped the entire cell-population block in `blockSignals(True)` / `setUpdatesEnabled(False)` with a single `viewport().update()` at the end for one batched repaint.
+- **Added user warning when interpolation skips cells due to missing scaling (#27)** — All three interpolation methods (`interpolate_vertical`, `interpolate_horizontal`, `interpolate_2d`) in `interpolation.py` now check upfront whether the table's scaling is defined and resolvable. If not, a `QMessageBox.warning()` informs the user that interpolation was skipped and why. Previously, the operation silently did nothing.
+
+## Recent Completed Work (Feb 7, 2026) - Audit Fix #16
+- **Vectorized scaling expressions (#16)** — `ScalingConverter` in `rom_reader.py` now pre-compiles scaling expressions (via `ast` validation + `compile()`) into numpy-compatible code objects at init time. Array evaluation uses a single `eval()` call on the whole numpy array instead of per-element `simple_eval` loops. Falls back to per-element `simple_eval` for expressions that fail AST safety checks or vectorized eval. Added `_is_safe_numpy_expr()` (AST whitelist: only arithmetic ops + `x` variable) and `_compile_numpy_expr()` helpers.
+
+## Recent Completed Work (Feb 7, 2026) - Audit Fix #31
+- **Mitigated lxml XXE (XML External Entity) injection** — All `etree.parse()` calls across the codebase now use a secure parser with `resolve_entities=False` and `no_network=True`. Fixed in `definition_parser.py`, `rom_detector.py`, and `metadata_writer.py` (two call sites). Prevents crafted XML definition files from reading local files or making network requests via entity expansion.
+
+## Recent Completed Work (Feb 7, 2026) - Audit Fix #23
+- **Fixed O(N) `get_commit()` calls per keystroke in history filter** — `_filter_commits` in `history_viewer.py` was calling `self.project_manager.get_commit(commit_id)` for every tree item on every keystroke. The commit object was already stored in the item at `Qt.UserRole + 1` (set in `_add_commit_item`). Changed to `item.data(0, Qt.UserRole + 1)` to use the stored data directly, eliminating the redundant lookups.
+
+## Recent Completed Work (Feb 7, 2026) - Audit Fixes #33, #35, #37
+- **Cached O(n) table lookups (#33)** — `get_tables_by_category()` and `get_table_by_name()` in `rom_definition.py` now build lazy lookup dicts on first access and return cached results on subsequent calls. Cache fields use `field(init=False, repr=False, compare=False)` to stay invisible to dataclass construction and equality.
+- **Full UUID for commit IDs (#35)** — `Commit.create()` in `version_models.py` now uses `uuid.uuid4().hex` (32 hex chars) instead of `str(uuid.uuid4())[:12]` (12 chars). The full hex string provides proper collision resistance.
+- **Cross-platform monospace font (#37)** — Renamed `LOG_CONSOLE_FONT_FAMILY` to `LOG_CONSOLE_FONT_FAMILIES` in `constants.py`, changed from a single `"Courier New"` string to a tuple of fallbacks `("Consolas", "Courier New", "DejaVu Sans Mono", "Monospace")`. Updated `log_console.py` to use `QFont.setFamilies()` for proper cross-platform font resolution.
+
+## Recent Completed Work (Feb 7, 2026) - Audit Fixes #36, #38
+- **Fixed `setup_logging()` at import time (#36)** — Removed the module-level `setup_logging()` auto-call at the bottom of `logging_config.py`. The entry point in `main.py` already calls `setup_logging()` explicitly, so the import-time call was clobbering any pre-existing logging configuration.
+- **Implemented backup file rotation (#38)** — `metadata_writer.py` now keeps the last 3 backups using `.bak.1`, `.bak.2`, `.bak.3` naming (`.bak.1` = most recent). Before creating a new backup, existing ones are rotated (delete `.bak.3`, rename `.bak.2`->`.bak.3`, `.bak.1`->`.bak.2`, current->`.bak.1`). Updated test to match new naming and added `test_backup_rotation` test.
+
+## Recent Completed Work (Feb 7, 2026) - Audit Fix #28
+- **Fixed `closeEvent` not checking for unsaved changes across tabs** — When the user closed the main window (X button), it bypassed the per-tab unsaved-change prompts and silently discarded all work. Modified `closeEvent` in `main.py` to iterate through all open tabs, check `is_modified()` on each, and prompt Save/Discard/Cancel. If the user cancels on any tab, the close is aborted via `event.ignore()`. Session save (`_save_session`) still runs if the user proceeds with closing.
+
+## Recent Completed Work (Feb 7, 2026) - Audit Fix #21
+- **Fixed `lstrip('0x')` bug in `table_browser.py`** — `lstrip('0x')` strips individual characters (`0` and `x`), not the literal prefix `"0x"`. For example, `"0x0080".lstrip('0x')` returns `"80"` instead of `"0080"`. Replaced both instances (lines 423 and 435 in `select_table_by_address`) with `removeprefix('0x')` which correctly removes only the exact prefix string.
+
+## Recent Completed Work (Feb 7, 2026) - Audit Fix #10
+- **Fixed exception handling swallowing programming bugs** — Refactored all 12 `except Exception` blocks in `main.py` to separate expected errors (`RomEditorError` hierarchy) from unexpected exceptions. Expected errors (e.g., `RomWriteError`, `RomFileError`, `DetectionError`) get clean user-facing messages via `logger.error()`. Unexpected exceptions now use `logger.exception()` for full traceback logging plus a generic "Unexpected error" user message that includes the exception type. Added `RomEditorError`, `RomWriteError`, and `ProjectError` to imports.
+
 ## Recent Completed Work (Feb 7, 2026) - Multi-ROM Undo Isolation Fix
 - **Fixed undo stacks shared across ROMs with same definition** — When two ROMs share the same definition (same ECU type), they have identical table addresses. The undo stacks, change tracker, and table highlighting were all keyed by bare `table_address`, causing: (1) both ROMs' edits going into the same undo stack, (2) closing one ROM destroying the other's undo stacks and pending changes, (3) table highlighting showing modifications from the wrong ROM. Fix: introduced composite keys (`rom_path|table_address`) throughout the undo and change tracking systems. Files modified: `version_models.py` (added `table_key` field to CellChange/AxisChange), `table_undo_manager.py` (composite key helpers, rom_path params), `undo_commands.py` (propagate table_key through undo/redo), `change_tracker.py` (composite keys, per-ROM filtering), `main.py` (pass rom_path to all handlers, per-ROM highlight filtering), `table_viewer_window.py` (emit composite key on focus).
 
