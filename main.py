@@ -387,6 +387,16 @@ class MainWindow(QMainWindow):
             return self.tab_widget.widget(current_index)
         return None
 
+    def _find_document_by_rom_path(self, rom_path):
+        """Find the RomDocument tab that owns the given ROM file path."""
+        if not rom_path:
+            return None
+        for i in range(self.tab_widget.count()):
+            doc = self.tab_widget.widget(i)
+            if hasattr(doc, 'rom_path') and doc.rom_path == rom_path:
+                return doc
+        return None
+
     def close_tab(self, index: int):
         """
         Close a ROM tab
@@ -1035,8 +1045,8 @@ class MainWindow(QMainWindow):
                 change.row, change.col, change.new_value
             )
 
-            # Also update ROM data in memory
-            document = self.get_current_document()
+            # Write to the ROM that owns this table (not the active tab)
+            document = self._find_document_by_rom_path(window.rom_path)
             if document:
                 try:
                     document.rom_reader.write_cell_value(
@@ -1059,8 +1069,8 @@ class MainWindow(QMainWindow):
                 change.axis_type, change.index, change.new_value
             )
 
-            # Also update ROM data in memory
-            document = self.get_current_document()
+            # Write to the ROM that owns this table (not the active tab)
+            document = self._find_document_by_rom_path(window.rom_path)
             if document:
                 try:
                     document.rom_reader.write_axis_value(
@@ -1178,16 +1188,14 @@ class MainWindow(QMainWindow):
             old_raw, new_raw
         )
 
-        # Also update the ROM data in memory
-        document = self.get_current_document()
+        # Write to the ROM that owns this table (sender is the TableViewerWindow)
+        sender = self.sender()
+        rom_path = getattr(sender, 'rom_path', None)
+        document = self._find_document_by_rom_path(rom_path) if rom_path else self.get_current_document()
         if document:
             try:
-                # Write the cell change to ROM reader's in-memory data
-                # Note: This writes to memory only, not to disk
-                # The actual ROM file write happens on commit/save
                 document.rom_reader.write_cell_value(table, row, col, new_raw)
 
-                # Mark document as modified
                 if not document.is_modified():
                     document.set_modified(True)
             except Exception as e:
@@ -1204,15 +1212,15 @@ class MainWindow(QMainWindow):
         # Record to change tracker (for pending changes / commit tracking)
         self.change_tracker.record_pending_bulk_changes(table, changes)
 
-        # Also update the ROM data in memory for all changes
-        document = self.get_current_document()
+        # Write to the ROM that owns this table (sender is the TableViewerWindow)
+        sender = self.sender()
+        rom_path = getattr(sender, 'rom_path', None)
+        document = self._find_document_by_rom_path(rom_path) if rom_path else self.get_current_document()
         if document:
             try:
                 for row, col, old_value, new_value, old_raw, new_raw in changes:
-                    # Write each cell change to ROM reader's in-memory data
                     document.rom_reader.write_cell_value(table, row, col, new_raw)
 
-                # Mark document as modified
                 if not document.is_modified():
                     document.set_modified(True)
 
@@ -1231,14 +1239,14 @@ class MainWindow(QMainWindow):
             old_raw, new_raw
         )
 
-        # Also update the ROM data in memory
-        document = self.get_current_document()
+        # Write to the ROM that owns this table (sender is the TableViewerWindow)
+        sender = self.sender()
+        rom_path = getattr(sender, 'rom_path', None)
+        document = self._find_document_by_rom_path(rom_path) if rom_path else self.get_current_document()
         if document:
             try:
-                # Write the axis change to ROM reader's in-memory data
                 document.rom_reader.write_axis_value(table, axis_type, index, new_raw)
 
-                # Mark document as modified
                 if not document.is_modified():
                     document.set_modified(True)
             except Exception as e:
@@ -1252,15 +1260,15 @@ class MainWindow(QMainWindow):
         # Record to undo manager (per-table undo/redo)
         self.table_undo_manager.record_axis_bulk_changes(table, changes, description)
 
-        # Also update the ROM data in memory for all changes
-        document = self.get_current_document()
+        # Write to the ROM that owns this table (sender is the TableViewerWindow)
+        sender = self.sender()
+        rom_path = getattr(sender, 'rom_path', None)
+        document = self._find_document_by_rom_path(rom_path) if rom_path else self.get_current_document()
         if document:
             try:
                 for axis_type, index, old_value, new_value, old_raw, new_raw in changes:
-                    # Write each axis change to ROM reader's in-memory data
                     document.rom_reader.write_axis_value(table, axis_type, index, new_raw)
 
-                # Mark document as modified
                 if not document.is_modified():
                     document.set_modified(True)
 
