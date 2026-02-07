@@ -402,12 +402,17 @@ class TableViewerWindow(QMainWindow):
         self._refresh_graph()
 
     def _refresh_graph(self):
-        """Refresh graph display if visible"""
+        """Refresh graph display if visible.
+
+        Uses update_selection (which rebuilds the 3D surface in-place)
+        instead of set_data (which clears the entire figure and causes
+        a visible zoom-out due to constrained_layout recalculation).
+        The graph widget holds a reference to the same data dict, so
+        cell value changes are already reflected without re-setting data.
+        """
         if self._graph_visible and self.graph_widget:
             selected_cells = self._get_selected_data_cells()
-            self.graph_widget.set_data(
-                self.table, self.data, self.rom_definition, selected_cells
-            )
+            self.graph_widget.update_selection(selected_cells)
 
     def _schedule_graph_refresh(self):
         """Schedule a debounced graph refresh (restarts timer on each call)"""

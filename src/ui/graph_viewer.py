@@ -308,8 +308,56 @@ class _GraphPlotMixin:
     def update_selection(self, selected_cells: list):
         """Update the selected cells and redraw the graph"""
         self.selected_cells = selected_cells
-        if self.table is not None:
+        if self.table is None:
+            return
+        # For 3D plots, update colors in-place without full replot to
+        # preserve the view (axis limits, zoom, angles). A full figure.clear()
+        # resets the constrained_layout state, causing a visible zoom-out.
+        if self.table.type == TableType.THREE_D and self.ax_3d is not None:
+            self._update_3d_surface()
+            self.canvas.draw_idle()
+        else:
             self._plot_data()
+
+    def _update_3d_surface(self):
+        """Update 3D surface in-place without full replot (preserves view)."""
+        ax = self.ax_3d
+
+        # Save axis limits before modifying collections
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        zlim = ax.get_zlim()
+
+        # Remove old surface collections
+        while ax.collections:
+            ax.collections[0].remove()
+
+        # Rebuild surface with updated colors on the same axes
+        values = self.data['values']
+        rows, cols = values.shape
+        X, Y = np.meshgrid(np.arange(cols + 1), np.arange(rows + 1))
+
+        Z_extended = np.zeros((rows + 1, cols + 1))
+        Z_extended[:rows, :cols] = values
+        Z_extended[rows, :cols] = values[-1, :]
+        Z_extended[:rows, cols] = values[:, -1]
+        Z_extended[rows, cols] = values[-1, -1]
+
+        colors = self._calculate_colors(values)
+        if self.selected_cells:
+            blue_color = (0.0, 0.5, 1.0, 1.0)
+            for row, col in self.selected_cells:
+                if row < colors.shape[0] and col < colors.shape[1]:
+                    colors[row, col] = blue_color
+
+        ax.plot_surface(X, Y, Z_extended, facecolors=colors,
+                        linewidth=0.5, edgecolor='gray',
+                        antialiased=True, shade=False)
+
+        # Restore axis limits to prevent auto-rescale
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+        ax.set_zlim(zlim)
 
 
 class GraphWidget(_GraphPlotMixin, QWidget):
@@ -374,7 +422,12 @@ class GraphWidget(_GraphPlotMixin, QWidget):
     def update_data(self, data: dict):
         """Update just the data values (e.g., after cell edit)"""
         self.data = data
-        if self.table is not None:
+        if self.table is None:
+            return
+        if self.table.type == TableType.THREE_D and self.ax_3d is not None:
+            self._update_3d_surface()
+            self.canvas.draw_idle()
+        else:
             self._plot_data()
 
     def _plot_data(self):

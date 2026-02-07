@@ -55,6 +55,7 @@ python tools/test_runner.py --interactive
 2. For visual bug investigation, take screenshots to capture the problematic state
 3. Test scripts live in `tests/gui/*.txt` - create new ones for reproducible test cases
 4. See `docs/UI_TESTING.md` for full command reference
+5. **Always screenshot the full window** (use `table` target, not `graph`) to capture full context — graph-only screenshots miss layout/sizing issues
 
 ## Landing the Plane (Session Completion)
 

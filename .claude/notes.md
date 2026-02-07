@@ -25,6 +25,9 @@
 - **Debounced graph selection updates** — arrow key navigation no longer triggers full 3D re-render per key press (100ms debounce timer)
 - **Eliminated double-draw** in graph widget — `canvas.draw_idle()` + deferred redraw only on first plot
 
+## Recent Completed Work (Feb 7, 2026) - 3D Graph Zoom Fix
+- **Fixed 3D graph zoom-out on cell edits and selection changes** — `_refresh_graph()` was calling `set_data()` on every cell change, which did `figure.clear()` → full replot → `constrained_layout` recalculation → visible zoom-out. Changed to `update_selection()` which routes through `_update_3d_surface()` — replaces the surface collection on the existing axes without clearing the figure. Also added `_update_3d_surface` fast path for `update_data` and `update_selection` in GraphWidget. Axis limits saved/restored to prevent auto-rescale.
+
 ## Recent Completed Work (Feb 7, 2026) - Audit Fix #11
 - **Deduplicated GraphWidget and GraphViewer** (~700 lines → ~350 lines) — extracted `_GraphPlotMixin` with 14 shared methods (plotting, colors, axis labels, keyboard rotation/zoom). Both classes now inherit from the mixin, keeping only their unique setup logic. Also fixed minor bug: GraphViewer was not resetting `ax_3d = None` on figure clear, and removed dead `tick_positions` variable in GraphWidget._plot_3d.
 
