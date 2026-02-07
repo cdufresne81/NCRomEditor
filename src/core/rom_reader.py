@@ -6,6 +6,7 @@ Extracts and scales table data based on definitions.
 """
 
 import struct
+import os
 import numpy as np
 from pathlib import Path
 from typing import Optional, Union
@@ -335,9 +336,10 @@ class RomReader:
         # Convert display values back to raw
         converter = ScalingConverter(scaling)
 
-        # Flatten if 2D array
+        # Flatten if 2D array (must match reshape order used in read_table_data)
         if isinstance(values, np.ndarray) and values.ndim > 1:
-            values = values.flatten()
+            order = 'F' if table.swapxy else 'C'
+            values = values.flatten(order=order)
 
         raw_values = converter.from_display(values)
 
@@ -523,10 +525,21 @@ class RomReader:
 
         logger.info(f"Saving ROM to {output_path}")
 
+        # Atomic write: write to temp file, then replace original
+        tmp_path = str(output_path) + '.tmp'
         try:
-            with open(output_path, 'wb') as f:
+            with open(tmp_path, 'wb') as f:
                 f.write(self.rom_data)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, str(output_path))
             logger.info(f"Successfully saved {len(self.rom_data)} bytes to {output_path}")
-        except IOError as e:
+        except Exception as e:
+            # Clean up temp file on failure
+            try:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except OSError:
+                pass
             logger.error(f"Failed to save ROM file to {output_path}: {e}")
             raise RomWriteError(f"Failed to save ROM file: {e}")

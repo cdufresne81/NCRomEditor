@@ -177,16 +177,9 @@ class TableClipboardHelper:
                         # Record change for signaling
                         changes_made.append((data_row, data_col, old_value, new_value, old_raw, new_raw))
 
-            # Emit signals for all changes (use address as unique identifier)
-            for data_row, data_col, old_value, new_value, old_raw, new_raw in changes_made:
-                self.ctx.viewer.cell_changed.emit(
-                    self.ctx.current_table.address,
-                    data_row, data_col,
-                    old_value, new_value,
-                    old_raw, new_raw
-                )
-
+            # Emit single bulk signal for atomic undo (matches operations.py pattern)
             if changes_made:
+                self.ctx.viewer.bulk_changes.emit(changes_made)
                 logger.debug(f"Pasted {len(changes_made)} cell(s)")
         finally:
             # Restore header resize modes

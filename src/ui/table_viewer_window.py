@@ -157,6 +157,14 @@ class TableViewerWindow(QMainWindow):
         self._refresh_timer.setInterval(50)  # 50ms debounce
         self._refresh_timer.timeout.connect(self._refresh_graph)
 
+        # Debounce timer for selection-driven graph updates (arrow key navigation
+        # fires itemSelectionChanged on every key press — full 3D re-render each
+        # time makes the UI sluggish without debouncing)
+        self._selection_timer = QTimer()
+        self._selection_timer.setSingleShot(True)
+        self._selection_timer.setInterval(100)  # 100ms debounce for selection
+        self._selection_timer.timeout.connect(self._update_graph_selection)
+
         # Connect data_updated signal to debounced refresh (for undo/redo)
         self.viewer.data_updated.connect(self._schedule_graph_refresh)
 
@@ -297,7 +305,12 @@ class TableViewerWindow(QMainWindow):
         return selected_cells
 
     def _on_table_selection_changed(self):
-        """Handle table selection changes - update graph if visible"""
+        """Handle table selection changes - debounce graph update"""
+        if self._graph_visible and self.graph_widget:
+            self._selection_timer.start()
+
+    def _update_graph_selection(self):
+        """Actually update graph selection (called after debounce)"""
         if self._graph_visible and self.graph_widget:
             selected_cells = self._get_selected_data_cells()
             self.graph_widget.update_selection(selected_cells)
@@ -546,11 +559,23 @@ class TableViewerWindow(QMainWindow):
             main_window.table_undo_manager.undo_group.redo()
 
     def closeEvent(self, event):
-        """Handle window close event - deactivate undo stack so undo/redo is disabled"""
+        """Handle window close event - deactivate undo stack and clean up resources"""
         main_window = self.parent()
         if main_window and hasattr(main_window, 'table_undo_manager'):
             main_window.table_undo_manager.set_active_stack(None)
+        # Remove from parent's tracking list before deletion
+        if main_window and hasattr(main_window, 'open_table_windows'):
+            try:
+                main_window.open_table_windows.remove(self)
+            except ValueError:
+                pass
+        # Clean up matplotlib figure to prevent leak in global registry
+        if self.graph_widget and hasattr(self.graph_widget, 'figure'):
+            import matplotlib.pyplot as plt
+            plt.close(self.graph_widget.figure)
         event.accept()
+        # Schedule widget destruction for next event loop iteration
+        self.deleteLater()
 
     def event(self, event):
         """Handle window events to detect activation/focus"""

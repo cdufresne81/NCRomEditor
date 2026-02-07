@@ -39,6 +39,7 @@ class GraphWidget(QWidget):
         self._scaling_range = None  # Cached (min, max) from scaling
         self.selected_cells = []
         self.ax_3d = None
+        self._first_plot = True  # Track first plot for deferred redraw
 
         # Create matplotlib figure and canvas
         # Use constrained_layout for stable sizing (avoids resizing on redraws)
@@ -136,11 +137,13 @@ class GraphWidget(QWidget):
         else:
             self._plot_1d()
 
-        self.canvas.draw()
-        # Qt may still have pending layout/resize events that change the canvas
-        # size after this draw. Schedule one more redraw after the event loop
-        # settles to prevent a visible reframing snap on next user interaction.
-        QTimer.singleShot(0, self.canvas.draw)
+        self.canvas.draw_idle()
+        # On first plot, Qt may still have pending layout/resize events that
+        # change the canvas size. Schedule one more redraw to prevent a visible
+        # reframing snap. Skip on subsequent plots to avoid double-rendering.
+        if self._first_plot:
+            self._first_plot = False
+            QTimer.singleShot(0, self.canvas.draw_idle)
 
     def _plot_3d(self):
         """Plot 3D table as surface with uniform cell sizes"""
@@ -414,6 +417,7 @@ class GraphViewer(QMainWindow):
             Qt.CustomizeWindowHint |
             Qt.WindowTitleHint
         )
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
 
         # Create matplotlib figure and canvas
         self.figure = Figure(figsize=(10, 8))
@@ -430,6 +434,12 @@ class GraphViewer(QMainWindow):
 
         # Set window size
         self.resize(800, 600)
+
+    def closeEvent(self, event):
+        """Clean up matplotlib figure to prevent leak in global registry"""
+        import matplotlib.pyplot as plt
+        plt.close(self.figure)
+        event.accept()
 
     def _get_scaling_range(self):
         """Get min/max from the table's scaling definition, or None."""

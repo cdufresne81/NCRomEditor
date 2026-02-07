@@ -412,8 +412,10 @@ class MainWindow(QMainWindow):
             elif response == QMessageBox.Save:
                 document.save()
 
-        # Remove the tab
+        # Remove the tab and schedule widget cleanup
         self.tab_widget.removeTab(index)
+        if document:
+            document.deleteLater()
         self.update_window_title()
 
         logger.info(f"Closed ROM tab: {document.file_name if document else 'unknown'}")
@@ -611,9 +613,6 @@ class MainWindow(QMainWindow):
             # Get ROM path for duplicate detection
             rom_path = rom_reader.rom_path
 
-            # Clean up closed windows from the list first
-            self.open_table_windows = [w for w in self.open_table_windows if w.isVisible()]
-
             # Check if this table is already open for this ROM
             # Use address for comparison since table names may not be unique across categories
             for window in self.open_table_windows:
@@ -673,7 +672,7 @@ class MainWindow(QMainWindow):
 
                 viewer_window.show()
 
-                # Track the window
+                # Track the window (removed in TableViewerWindow.closeEvent)
                 self.open_table_windows.append(viewer_window)
 
                 # Log to console

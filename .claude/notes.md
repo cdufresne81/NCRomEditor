@@ -14,7 +14,17 @@
 ## Environment Notes
 - Use `python3` not `python` (WSL2 environment lacks symlink)
 
-## Recent Completed Work (Feb 7, 2026)
+## Recent Completed Work (Feb 7, 2026) - Audit Fixes
+- **Atomic file writes** for `save_rom`, `_save_project_file`, `_save_commits` — write-to-temp + `os.replace()` prevents corruption on crash
+- **Fixed swapxy flatten bug** in `write_table_data` — was using C order instead of F order for swapxy tables, causing silent data corruption on bulk write
+- **Fixed paste to use `bulk_changes` signal** — paste now creates a single undo entry instead of N individual entries (one per cell)
+- **Memory leak fixes** — added `deleteLater()` in `close_tab`, `WA_DeleteOnClose` on `TableViewerWindow` and `GraphViewer`, matplotlib figure cleanup in `closeEvent`
+- **Fixed `rom_document.save()` to clear modified flag** — `set_modified(False)` was missing after successful save
+- **Rewrote 3 tautological test files** — `test_axis_editing.py`, `test_interpolation.py`, `test_table_viewer_helpers.py` now import and test actual production code (ScalingConverter, _convert_expr_to_python, swapxy round-trips, atomic writes)
+- **Pinned dependency versions** in `requirements.txt` with upper bounds (e.g., `PySide6>=6.10.0,<7.0.0`)
+- **Code audit report** saved to `docs/CODE_AUDIT_REPORT.md` (gitignored, personal reference)
+
+## Recent Completed Work (Feb 7, 2026) - Earlier
 - Fixed undo/redo performance: ROM data writes were O(N*ROM_size) per operation due to immutable `bytes` concatenation. Changed `rom_data` to `bytearray` for O(1) in-place writes.
 - Fixed CTRL+Z not working in newly opened table viewer: `set_active_stack()` failed to create the undo stack on first window focus, so the stack was never activated until the window was closed and reopened.
 - Fixed bulk undo/redo performance in main.py: `_update_project_ui()` was called N+1 times during bulk undo (once per cell via `_notify_change` callback + once direct). Added `_in_bulk_undo` guard to both `_on_changes_updated` callback and removed redundant direct call in `_update_pending_from_undo`. Now called exactly once at `_end_bulk_update`.
