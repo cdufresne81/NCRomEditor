@@ -17,6 +17,10 @@
 ## Recent Completed Work (Feb 7, 2026)
 - Fixed undo/redo performance: ROM data writes were O(N*ROM_size) per operation due to immutable `bytes` concatenation. Changed `rom_data` to `bytearray` for O(1) in-place writes.
 - Fixed CTRL+Z not working in newly opened table viewer: `set_active_stack()` failed to create the undo stack on first window focus, so the stack was never activated until the window was closed and reopened.
+- Fixed bulk undo/redo performance in main.py: `_update_project_ui()` was called N+1 times during bulk undo (once per cell via `_notify_change` callback + once direct). Added `_in_bulk_undo` guard to both `_on_changes_updated` callback and removed redundant direct call in `_update_pending_from_undo`. Now called exactly once at `_end_bulk_update`.
+- Fixed undo stack staying active after closing table viewer window: `closeEvent` now deactivates the undo stack, preventing undo from executing on closed tables.
+- Changed min/max coloring to use scaling definition min/max instead of current data values. Applies to table viewer (values + both axes) and graph viewer. Each of the 3 scalings in a 3D table (X axis, Y axis, values) uses its own scaling range.
+- Fixed non-uniform graph cell sizes: graphs now use uniform indices for mesh coordinates (all cells same size) with actual axis values as tick labels. Previously, non-uniformly spaced axis values (e.g., RPM) caused edge cells to be thinner.
 
 ## Recent Completed Work (Feb 1, 2026)
 - Fixed undo/redo performance for bulk operations (matching increment/decrement speed)

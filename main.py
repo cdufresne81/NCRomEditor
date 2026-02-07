@@ -52,7 +52,8 @@ from src.ui.commit_dialog import CommitDialog
 from src.ui.history_viewer import HistoryViewer
 from src.core.project_manager import ProjectManager
 from src.core.change_tracker import ChangeTracker
-from src.core.version_models import AxisChange
+from src.core.table_undo_manager import TableUndoManager
+from src.core.version_models import CellChange, AxisChange
 
 logger = get_logger(__name__)
 
@@ -99,6 +100,16 @@ class MainWindow(QMainWindow):
         self.project_manager = ProjectManager()
         self.change_tracker = ChangeTracker()
         self.change_tracker.add_change_callback(self._on_changes_updated)
+
+        # Per-table undo/redo manager (uses Qt's QUndoGroup pattern)
+        self.table_undo_manager = TableUndoManager()
+        self.table_undo_manager.set_callbacks(
+            apply_cell=self._apply_cell_change_from_undo,
+            apply_axis=self._apply_axis_change_from_undo,
+            update_pending=self._update_pending_from_undo,
+            begin_bulk_update=self._begin_bulk_update,
+            end_bulk_update=self._end_bulk_update,
+        )
 
         # Check if definitions directory is configured and valid
         if not self.check_definitions_directory():
@@ -268,15 +279,15 @@ class MainWindow(QMainWindow):
         # Edit menu
         edit_menu = menubar.addMenu("Edit")
 
-        self.undo_action = edit_menu.addAction("Undo")
+        # Use QUndoGroup's createUndoAction/createRedoAction for per-table undo/redo
+        # These actions automatically enable/disable based on active stack state
+        self.undo_action = self.table_undo_manager.undo_group.createUndoAction(self, "Undo")
         self.undo_action.setShortcut("Ctrl+Z")
-        self.undo_action.triggered.connect(self.undo)
-        self.undo_action.setEnabled(False)
+        edit_menu.addAction(self.undo_action)
 
-        self.redo_action = edit_menu.addAction("Redo")
+        self.redo_action = self.table_undo_manager.undo_group.createRedoAction(self, "Redo")
         self.redo_action.setShortcut("Ctrl+Y")
-        self.redo_action.triggered.connect(self.redo)
-        self.redo_action.setEnabled(False)
+        edit_menu.addAction(self.redo_action)
 
         edit_menu.addSeparator()
 
@@ -657,11 +668,7 @@ class MainWindow(QMainWindow):
                 # Connect axis_bulk_changes signal to change tracker
                 viewer_window.axis_bulk_changes.connect(self._on_table_axis_bulk_changes)
 
-                # Connect undo/redo signals
-                viewer_window.undo_requested.connect(self.undo)
-                viewer_window.redo_requested.connect(self.redo)
-
-                # Connect window focus signal to highlight table in tree
+                # Connect window focus signal to highlight table in tree and activate undo stack
                 viewer_window.window_focused.connect(self._on_table_window_focused)
 
                 viewer_window.show()
@@ -994,137 +1001,134 @@ class MainWindow(QMainWindow):
                 f"Failed to open diff view: {e}"
             )
 
-    # ========== Undo/Redo Methods ==========
+    # ========== Undo/Redo Callback Methods ==========
+    # These are called by TableUndoManager when undo/redo operations occur
 
-    def undo(self):
-        """Undo last change (single or bulk, cell or axis)"""
-        result = self.change_tracker.undo()
-        if result:
-            # Handle both single and bulk changes
-            if isinstance(result, list):
-                # Bulk undo - check if axis or cell changes
-                if result and isinstance(result[0], AxisChange):
-                    for change in result:
-                        self._apply_axis_change(change)
-                    logger.debug(f"Undo axis bulk: {len(result)} cells")
-                else:
-                    for change in result:
-                        self._apply_cell_change(change)
-                    logger.debug(f"Undo bulk: {len(result)} cells")
-            elif isinstance(result, AxisChange):
-                # Single axis undo
-                self._apply_axis_change(result)
-                logger.debug(f"Undo axis: {result.table_name}[{result.axis_type}][{result.index}]")
-            else:
-                # Single cell undo
-                self._apply_cell_change(result)
-                logger.debug(f"Undo: {result.table_name}[{result.row},{result.col}]")
-            self._update_project_ui()
+    def _find_table_window(self, table_address: str):
+        """Find visible table viewer window by address, using cache during bulk ops."""
+        # Use cache during bulk operations to avoid per-cell window scans
+        cache = getattr(self, '_bulk_window_cache', None)
+        if cache is not None:
+            if table_address in cache:
+                return cache[table_address]
+            for window in self.open_table_windows:
+                if window.isVisible() and window.table.address == table_address:
+                    cache[table_address] = window
+                    return window
+            cache[table_address] = None
+            return None
 
-    def redo(self):
-        """Redo last undone change (single or bulk, cell or axis)"""
-        result = self.change_tracker.redo()
-        if result:
-            # Handle both single and bulk changes
-            if isinstance(result, list):
-                # Bulk redo - check if axis or cell changes
-                if result and isinstance(result[0], AxisChange):
-                    for change in result:
-                        self._apply_axis_change(change)
-                    logger.debug(f"Redo axis bulk: {len(result)} cells")
-                else:
-                    for change in result:
-                        self._apply_cell_change(change)
-                    logger.debug(f"Redo bulk: {len(result)} cells")
-            elif isinstance(result, AxisChange):
-                # Single axis redo
-                self._apply_axis_change(result)
-                logger.debug(f"Redo axis: {result.table_name}[{result.axis_type}][{result.index}]")
-            else:
-                # Single cell redo
-                self._apply_cell_change(result)
-                logger.debug(f"Redo: {result.table_name}[{result.row},{result.col}]")
-            self._update_project_ui()
-
-    def _apply_cell_change(self, change):
-        """Apply a cell change to open table viewers and ROM data
-
-        Only applies to the currently focused/active table viewer window.
-        """
-        # Find the active table viewer window with matching table address
-        active_window = None
+        # Non-bulk: scan directly
         for window in self.open_table_windows:
-            if (window.isVisible() and
-                window.table.address == change.table_address and
-                window.isActiveWindow()):
-                active_window = window
-                break
+            if window.isVisible() and window.table.address == table_address:
+                return window
+        return None
 
-        # If no active window found, don't apply the change
-        # (user might have multiple windows open and undo/redo should only affect the focused one)
-        if not active_window:
-            logger.debug(f"Undo/redo skipped: no active window for table {change.table_address}")
-            return
-
-        # Update the viewer display
-        active_window.viewer.update_cell_value(
-            change.row, change.col, change.new_value
-        )
-
-        # Also update ROM data in memory
-        document = self.get_current_document()
-        if document:
-            try:
-                document.rom_reader.write_cell_value(
-                    active_window.table, change.row, change.col, change.new_raw
-                )
-            except Exception as e:
-                logger.error(f"Failed to write cell value during undo/redo: {e}")
-
-    def _apply_axis_change(self, change):
-        """Apply an axis change to open table viewers and ROM data
-
-        Only applies to the currently focused/active table viewer window.
+    def _apply_cell_change_from_undo(self, change: CellChange):
         """
-        # Find the active table viewer window with matching table address
-        active_window = None
+        Apply a cell change to open table viewers and ROM data.
+        Called by TableUndoManager during undo/redo operations.
+        """
+        window = self._find_table_window(change.table_address)
+        if window:
+            # Update the viewer display
+            window.viewer.update_cell_value(
+                change.row, change.col, change.new_value
+            )
+
+            # Also update ROM data in memory
+            document = self.get_current_document()
+            if document:
+                try:
+                    document.rom_reader.write_cell_value(
+                        window.table, change.row, change.col, change.new_raw
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to write cell value during undo/redo: {e}")
+
+        logger.debug(f"Applied cell change: {change.table_name}[{change.row},{change.col}]")
+
+    def _apply_axis_change_from_undo(self, change: AxisChange):
+        """
+        Apply an axis change to open table viewers and ROM data.
+        Called by TableUndoManager during undo/redo operations.
+        """
+        window = self._find_table_window(change.table_address)
+        if window:
+            # Update the viewer display
+            window.viewer.update_axis_cell_value(
+                change.axis_type, change.index, change.new_value
+            )
+
+            # Also update ROM data in memory
+            document = self.get_current_document()
+            if document:
+                try:
+                    document.rom_reader.write_axis_value(
+                        window.table, change.axis_type, change.index, change.new_raw
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to write axis value during undo/redo: {e}")
+
+        logger.debug(f"Applied axis change: {change.table_name}[{change.axis_type}][{change.index}]")
+
+    def _update_pending_from_undo(self, change: CellChange, is_undo: bool):
+        """
+        Update pending changes tracking during undo/redo.
+        Called by TableUndoManager to keep change tracker in sync.
+
+        Note: change_tracker._notify_change() fires _on_changes_updated callback,
+        which handles _update_project_ui(). No direct call needed here.
+        """
+        self.change_tracker.update_pending_from_undo(change, is_undo)
+
+    def _begin_bulk_update(self, table_address: str = None):
+        """
+        Begin bulk update on the table viewer window for the given table.
+        Called by undo commands before applying multiple changes for performance.
+
+        Args:
+            table_address: Address of table being edited (if None, affects all visible windows)
+        """
+        self._in_bulk_undo = True  # Defer _update_project_ui calls
+        self._bulk_window_cache = {}  # Cache window lookups during bulk
+        self._bulk_update_windows = []  # Track which windows we started
         for window in self.open_table_windows:
-            if (window.isVisible() and
-                window.table.address == change.table_address and
-                window.isActiveWindow()):
-                active_window = window
-                break
+            if window.isVisible():
+                if table_address is None or window.table.address == table_address:
+                    window.viewer.begin_bulk_update()
+                    self._bulk_update_windows.append(window)
 
-        # If no active window found, don't apply the change
-        # (user might have multiple windows open and undo/redo should only affect the focused one)
-        if not active_window:
-            logger.debug(f"Undo/redo skipped: no active window for table {change.table_address}")
-            return
+    def _end_bulk_update(self, table_address: str = None):
+        """
+        End bulk update on table viewer windows.
+        Called by undo commands after applying multiple changes.
 
-        # Update the viewer display
-        active_window.viewer.update_axis_cell_value(
-            change.axis_type, change.index, change.new_value
-        )
-
-        # Also update ROM data in memory
-        document = self.get_current_document()
-        if document:
+        Args:
+            table_address: Address of table being edited (unused, we use tracked windows)
+        """
+        # End bulk update on exactly the windows we started (not based on visibility)
+        for window in getattr(self, '_bulk_update_windows', []):
             try:
-                document.rom_reader.write_axis_value(
-                    active_window.table, change.axis_type, change.index, change.new_raw
-                )
-            except Exception as e:
-                logger.error(f"Failed to write axis value during undo/redo: {e}")
+                window.viewer.end_bulk_update()
+            except RuntimeError:
+                # Window might have been deleted
+                pass
+        self._bulk_update_windows = []
+        self._in_bulk_undo = False
+        del self._bulk_window_cache  # Clear window cache
+        # Single deferred UI update for all changes in this bulk operation
+        self._update_project_ui()
 
     def _on_changes_updated(self):
-        """Called when change tracker state changes"""
-        self._update_project_ui()
+        """Called when change tracker state changes (via _notify_change callback)"""
+        # During bulk undo, defer UI updates until _end_bulk_update calls it once
+        if not getattr(self, '_in_bulk_undo', False):
+            self._update_project_ui()
 
     def _update_project_ui(self):
         """Update UI elements based on project/change state"""
-        # Update undo/redo actions
-        self.undo_action.setEnabled(self.change_tracker.can_undo())
-        self.redo_action.setEnabled(self.change_tracker.can_redo())
+        # Note: undo/redo action enabled state is managed automatically by QUndoGroup
 
         # Update commit action
         has_project = self.project_manager.is_project_open()
@@ -1161,8 +1165,15 @@ class MainWindow(QMainWindow):
                                old_value: float, new_value: float,
                                old_raw: float, new_raw: float):
         """Handle cell change from table viewer window"""
-        # Record the change
-        self.change_tracker.record_change(
+        # Record to undo manager (per-table undo/redo)
+        self.table_undo_manager.record_cell_change(
+            table, row, col,
+            old_value, new_value,
+            old_raw, new_raw
+        )
+
+        # Record to change tracker (for pending changes / commit tracking)
+        self.change_tracker.record_pending_change(
             table, row, col,
             old_value, new_value,
             old_raw, new_raw
@@ -1183,18 +1194,16 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 logger.error(f"Failed to write cell value: {e}")
 
-    def _on_table_bulk_changes(self, table, changes: list):
+    def _on_table_bulk_changes(self, table, changes: list, description: str = "Bulk Operation"):
         """Handle bulk changes from table viewer window (data manipulation operations)"""
         if not changes:
             return
 
-        # Extract description from first change if available
-        # For now, use a generic description - the actual description will come from
-        # the operation that created these changes
-        operation_desc = "Bulk Operation"
+        # Record to undo manager (per-table undo/redo)
+        self.table_undo_manager.record_bulk_cell_changes(table, changes, description)
 
-        # Record all changes as a single undo operation
-        self.change_tracker.record_bulk_changes(table, changes, operation_desc)
+        # Record to change tracker (for pending changes / commit tracking)
+        self.change_tracker.record_pending_bulk_changes(table, changes)
 
         # Also update the ROM data in memory for all changes
         document = self.get_current_document()
@@ -1216,8 +1225,8 @@ class MainWindow(QMainWindow):
                                old_value: float, new_value: float,
                                old_raw: float, new_raw: float):
         """Handle axis change from table viewer window"""
-        # Record the change
-        self.change_tracker.record_axis_change(
+        # Record to undo manager (per-table undo/redo)
+        self.table_undo_manager.record_axis_change(
             table, axis_type, index,
             old_value, new_value,
             old_raw, new_raw
@@ -1236,15 +1245,13 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 logger.error(f"Failed to write axis value: {e}")
 
-    def _on_table_axis_bulk_changes(self, table, changes: list):
+    def _on_table_axis_bulk_changes(self, table, changes: list, description: str = "Axis Bulk Operation"):
         """Handle axis bulk changes from table viewer window (interpolation, etc.)"""
         if not changes:
             return
 
-        operation_desc = "Axis Bulk Operation"
-
-        # Record all changes as a single undo operation
-        self.change_tracker.record_axis_bulk_changes(table, changes, operation_desc)
+        # Record to undo manager (per-table undo/redo)
+        self.table_undo_manager.record_axis_bulk_changes(table, changes, description)
 
         # Also update the ROM data in memory for all changes
         document = self.get_current_document()
@@ -1265,10 +1272,14 @@ class MainWindow(QMainWindow):
     def _on_table_window_focused(self, table_address: str):
         """
         Handle table viewer window gaining focus - highlight corresponding tree item
+        and activate the correct undo stack.
 
         Args:
             table_address: Address of the table that was focused
         """
+        # Activate the undo stack for this table (enables per-table undo/redo)
+        self.table_undo_manager.set_active_stack(table_address)
+
         # Find the document containing this table and select it in the tree
         document = self.get_current_document()
         if document and hasattr(document, 'table_browser'):

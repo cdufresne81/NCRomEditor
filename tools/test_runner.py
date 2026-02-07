@@ -745,6 +745,45 @@ class TestRunner:
             self._log(f"ERROR: {e}")
             return False
 
+    def focus_table(self, table_name: str) -> bool:
+        """
+        Switch focus to an already-open table window.
+
+        This activates the table's undo stack for per-table undo/redo.
+
+        Args:
+            table_name: Name of the table to focus
+
+        Returns:
+            True if successful
+        """
+        if self.main_window is None:
+            self._log("ERROR: Application not started")
+            return False
+
+        try:
+            # Find the window by table name
+            for window in self.main_window.open_table_windows:
+                if window.table.name == table_name and window.isVisible():
+                    # Activate the window (triggers window_focused signal)
+                    window.raise_()
+                    window.activateWindow()
+                    self.current_table_window = window
+                    self._process_events()
+
+                    # Also explicitly activate the undo stack
+                    self.main_window.table_undo_manager.set_active_stack(window.table.address)
+
+                    self._log(f"Focused table: {table_name}")
+                    return True
+
+            self._log(f"ERROR: Table not open: {table_name}")
+            return False
+
+        except Exception as e:
+            self._log(f"ERROR: {e}")
+            return False
+
     def get_window_size(self) -> tuple:
         """
         Get current table window size
@@ -860,7 +899,9 @@ class TestRunner:
 
     def undo(self) -> bool:
         """
-        Undo last action
+        Undo last action on the currently focused table.
+
+        Uses the per-table undo system via TableUndoManager.
 
         Returns:
             True if successful
@@ -870,7 +911,7 @@ class TestRunner:
             return False
 
         try:
-            self.main_window.undo()
+            self.main_window.table_undo_manager.undo_group.undo()
             self._process_events()
             self._log("Undo executed")
             return True
@@ -880,7 +921,9 @@ class TestRunner:
 
     def redo(self) -> bool:
         """
-        Redo last undone action
+        Redo last undone action on the currently focused table.
+
+        Uses the per-table undo system via TableUndoManager.
 
         Returns:
             True if successful
@@ -890,7 +933,7 @@ class TestRunner:
             return False
 
         try:
-            self.main_window.redo()
+            self.main_window.table_undo_manager.undo_group.redo()
             self._process_events()
             self._log("Redo executed")
             return True
@@ -1114,6 +1157,13 @@ class TestRunner:
             elif cmd == "close_table":
                 return self.close_table()
 
+            elif cmd == "focus_table":
+                if not args:
+                    self._log("ERROR: focus_table requires table name")
+                    return False
+                table_name = " ".join(args).strip('"\'')
+                return self.focus_table(table_name)
+
             elif cmd == "screenshot":
                 name = args[0] if args else None
                 target = args[1] if len(args) > 1 else "table"
@@ -1241,6 +1291,7 @@ class TestRunner:
         print("  undo / redo              - Undo/redo last change")
         print("  wait <ms>                - Wait milliseconds")
         print("  close_table              - Close current table")
+        print("  focus_table \"<name>\"     - Switch focus to open table")
         print("  quit / exit              - Exit interactive mode")
         print("\n")
 

@@ -1,9 +1,13 @@
 # Claude Code Instructions
 
+# PRIME DIRECTIVE
+We work for an hospital and our work is critical, failure to succeed will result in the lost of live, failure is not an option.
+
 ## General Rules
 
 - **"Question:" prefix** - If a prompt starts with "Question:", answer only. Take no actions (no file edits, no commands).
 - **Incremental notes** - After completing code changes that add, update, or delete functionality, immediately update the "Recent Completed Work" section in `.claude/notes.md`. Only note meaningful changes (new features, behavior changes, significant fixes). Skip trivial changes (typos, formatting, minor refactors). Always check existing entries to avoid duplicates.
+- **NEVER commit or push** - Unless the user ask to land the plane or explicitely ask for it.
 
 ## Session Notes
 

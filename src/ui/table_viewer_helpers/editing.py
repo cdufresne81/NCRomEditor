@@ -260,7 +260,7 @@ class TableEditHelper:
             item.setText(self.display.format_value(new_value, axis_fmt))
 
             # Update cell color based on new value
-            color = self.display.get_axis_color(new_value, self.ctx.current_data[axis_key])
+            color = self.display.get_axis_color(new_value, self.ctx.current_data[axis_key], axis_type)
             item.setBackground(QBrush(color))
         finally:
             self.ctx.editing_in_progress = False
@@ -343,7 +343,7 @@ class TableEditHelper:
                 axis_type_enum = AxisType.X_AXIS if axis_type == 'x_axis' else AxisType.Y_AXIS
                 axis_fmt = self.display.get_axis_format(axis_type_enum)
                 item.setText(self.display.format_value(new_value, axis_fmt))
-                color = self.display.get_axis_color(new_value, axis_data)
+                color = self.display.get_axis_color(new_value, axis_data, axis_type_enum)
                 item.setBackground(QBrush(color))
         finally:
             self.ctx.editing_in_progress = False

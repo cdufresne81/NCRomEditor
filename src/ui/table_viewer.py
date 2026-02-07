@@ -417,11 +417,65 @@ class TableViewer(QWidget):
     def update_cell_value(self, data_row: int, data_col: int, new_value: float):
         """Update a cell's value programmatically (for undo/redo)"""
         self._edit.update_cell_value(data_row, data_col, new_value)
-        self.data_updated.emit()
+        # Skip per-cell signal during bulk operations (emitted once in end_bulk_update)
+        if not hasattr(self, '_bulk_update_state'):
+            self.data_updated.emit()
 
     def update_axis_cell_value(self, axis_type: str, data_idx: int, new_value: float):
         """Update an axis cell's value programmatically (for undo/redo)"""
         self._edit.update_axis_cell_value(axis_type, data_idx, new_value)
+        # Skip per-cell signal during bulk operations (emitted once in end_bulk_update)
+        if not hasattr(self, '_bulk_update_state'):
+            self.data_updated.emit()
+
+    def begin_bulk_update(self):
+        """
+        Prepare table for bulk cell updates - disables expensive per-cell operations.
+
+        Call this before applying multiple cell updates (e.g., bulk undo/redo).
+        Must be paired with end_bulk_update().
+        """
+        # Save current state
+        self._bulk_update_state = {
+            'updates_enabled': self.table_widget.updatesEnabled(),
+            'signals_blocked': self.table_widget.signalsBlocked(),
+        }
+
+        # Disable updates and signals to prevent per-cell repaints
+        self.table_widget.setUpdatesEnabled(False)
+        self.table_widget.blockSignals(True)
+
+        # Delegate header mode saving and value caching to display helper
+        self._display.begin_bulk_update()
+
+    def end_bulk_update(self):
+        """
+        Complete bulk update - restores state and triggers single repaint.
+
+        Must be called after begin_bulk_update() to restore normal operation.
+        Safe to call even if begin_bulk_update() wasn't called - ensures clean state.
+        """
+        # Restore display helper state (header modes, value cache)
+        self._display.end_bulk_update()
+
+        # Restore table widget state
+        if hasattr(self, '_bulk_update_state'):
+            self.table_widget.blockSignals(
+                self._bulk_update_state.get('signals_blocked', False)
+            )
+            self.table_widget.setUpdatesEnabled(
+                self._bulk_update_state.get('updates_enabled', True)
+            )
+            del self._bulk_update_state
+        else:
+            # Safety: ensure signals and updates are enabled even if begin wasn't called
+            self.table_widget.blockSignals(False)
+            self.table_widget.setUpdatesEnabled(True)
+
+        # Single repaint for all changes
+        self.table_widget.viewport().update()
+
+        # Single data_updated signal for graph refresh after all bulk changes
         self.data_updated.emit()
 
     def _data_to_ui_coords(self, data_row: int, data_col: int) -> tuple:

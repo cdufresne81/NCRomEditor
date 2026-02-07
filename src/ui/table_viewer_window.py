@@ -51,10 +51,6 @@ class TableViewerWindow(QMainWindow):
     # Args: table, list of (axis_type, index, old_value, new_value, old_raw, new_raw) tuples
     axis_bulk_changes = Signal(Table, list)
 
-    # Signals for undo/redo requests (forwarded to main window)
-    undo_requested = Signal()
-    redo_requested = Signal()
-
     # Signal emitted when this window receives focus
     # Args: table_address (str)
     window_focused = Signal(str)
@@ -164,11 +160,11 @@ class TableViewerWindow(QMainWindow):
         # Connect data_updated signal to debounced refresh (for undo/redo)
         self.viewer.data_updated.connect(self._schedule_graph_refresh)
 
-        # Set up undo/redo shortcuts for this window
+        # Set up undo/redo shortcuts - route to main window's undo group
         undo_shortcut = QShortcut(QKeySequence.Undo, self)
-        undo_shortcut.activated.connect(self.undo_requested.emit)
+        undo_shortcut.activated.connect(self._do_undo)
         redo_shortcut = QShortcut(QKeySequence.Redo, self)
-        redo_shortcut.activated.connect(self.redo_requested.emit)
+        redo_shortcut.activated.connect(self._do_redo)
 
         # Set up Esc key to close window
         close_shortcut = QShortcut(QKeySequence(Qt.Key_Escape), self)
@@ -537,8 +533,23 @@ class TableViewerWindow(QMainWindow):
         if 'inc' in updates:
             scaling.inc = float(updates['inc']) if updates['inc'] else None
 
+    def _do_undo(self):
+        """Perform undo via main window's undo group"""
+        main_window = self.parent()
+        if main_window and hasattr(main_window, 'table_undo_manager'):
+            main_window.table_undo_manager.undo_group.undo()
+
+    def _do_redo(self):
+        """Perform redo via main window's undo group"""
+        main_window = self.parent()
+        if main_window and hasattr(main_window, 'table_undo_manager'):
+            main_window.table_undo_manager.undo_group.redo()
+
     def closeEvent(self, event):
-        """Handle window close event"""
+        """Handle window close event - deactivate undo stack so undo/redo is disabled"""
+        main_window = self.parent()
+        if main_window and hasattr(main_window, 'table_undo_manager'):
+            main_window.table_undo_manager.set_active_stack(None)
         event.accept()
 
     def event(self, event):

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, List, Tuple, Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush
-from PySide6.QtWidgets import QDialog, QTableWidgetSelectionRange
+from PySide6.QtWidgets import QDialog, QTableWidgetSelectionRange, QTableWidgetItem, QHeaderView
 
 from ...core.rom_definition import TableType, AxisType
 from .context import TableViewerContext
@@ -63,9 +63,29 @@ class TableOperationsHelper:
 
         data_changes = []
         axis_changes = []
+        changed_items = []  # Track (item, new_value, data_row, data_col) for color updates
 
-        # Disable widget updates during bulk operation to prevent repaints on every cell
+        # Cache min/max values before bulk operation to avoid O(n²) complexity in color calculations
+        if 'values' in self.ctx.current_data:
+            self.display.cache_value_range(self.ctx.current_data['values'])
+
+        # Cache format string to avoid repeated lookups
+        value_fmt = self.display.get_value_format()
+
+        # Disable widget updates and signals during bulk operation
         self.ctx.table_widget.setUpdatesEnabled(False)
+        self.ctx.table_widget.blockSignals(True)
+
+        # Save and disable ResizeToContents header modes (they cause size recalculations on each setText)
+        h_header = self.ctx.table_widget.horizontalHeader()
+        v_header = self.ctx.table_widget.verticalHeader()
+        h_resize_modes = [h_header.sectionResizeMode(i) for i in range(h_header.count())]
+        v_resize_modes = [v_header.sectionResizeMode(i) for i in range(v_header.count())]
+        for i in range(h_header.count()):
+            h_header.setSectionResizeMode(i, QHeaderView.Fixed)
+        for i in range(v_header.count()):
+            v_header.setSectionResizeMode(i, QHeaderView.Fixed)
+
         try:
             # Iterate through selection
             for row in range(min_row, max_row + 1):
@@ -126,7 +146,7 @@ class TableOperationsHelper:
                         try:
                             axis_fmt = self.display.get_axis_format(axis_type)
                             item.setText(self.display.format_value(new_value, axis_fmt))
-                            color = self.display.get_axis_color(new_value, self.ctx.current_data[axis_key])
+                            color = self.display.get_axis_color(new_value, self.ctx.current_data[axis_key], axis_type)
                             item.setBackground(QBrush(color))
                         finally:
                             self.ctx.editing_in_progress = False
@@ -168,23 +188,42 @@ class TableOperationsHelper:
                         else:
                             self.ctx.current_data['values'][data_row, data_col] = new_value
 
-                        # Update cell display
-                        self.ctx.editing_in_progress = True
-                        try:
-                            value_fmt = self.display.get_value_format()
-                            item.setText(self.display.format_value(new_value, value_fmt))
-                            color = self.display.get_cell_color(new_value, self.ctx.current_data['values'], data_row, data_col)
-                            item.setBackground(QBrush(color))
-                        finally:
-                            self.ctx.editing_in_progress = False
+                        # Track cell for batch update at end (skip per-cell widget updates)
+                        changed_items.append((row, col, new_value, data_row, data_col))
 
                         # Record data change
                         data_changes.append((data_row, data_col, old_value, new_value, old_raw, new_raw))
 
-            logger.debug(f"{operation_name}: Modified {len(data_changes)} data cell(s), {len(axis_changes)} axis cell(s)")
+            # Batch update: set text and colors for all changed cells at once
+            if changed_items and 'values' in self.ctx.current_data:
+                self.display.cache_value_range(self.ctx.current_data['values'])
+                self.ctx.editing_in_progress = True
+                try:
+                    for row, col, new_value, data_row, data_col in changed_items:
+                        item = self.ctx.table_widget.item(row, col)
+                        if item:
+                            formatted = self.display.format_value(new_value, value_fmt)
+                            item.setText(formatted)
+                            color = self.display.get_cell_color(new_value, self.ctx.current_data['values'], data_row, data_col)
+                            item.setBackground(QBrush(color))
+                finally:
+                    self.ctx.editing_in_progress = False
+
             return data_changes, axis_changes
         finally:
-            # Re-enable updates and trigger a single repaint
+            # Clear the cached min/max values
+            self.display.clear_value_range_cache()
+
+            # Restore header resize modes
+            for i, mode in enumerate(h_resize_modes):
+                if i < h_header.count():
+                    h_header.setSectionResizeMode(i, mode)
+            for i, mode in enumerate(v_resize_modes):
+                if i < v_header.count():
+                    v_header.setSectionResizeMode(i, mode)
+
+            # Re-enable signals and updates, trigger a single repaint
+            self.ctx.table_widget.blockSignals(False)
             self.ctx.table_widget.setUpdatesEnabled(True)
             self.ctx.table_widget.viewport().update()
 
@@ -484,6 +523,18 @@ class TableOperationsHelper:
 
         # Disable widget updates during bulk operation to prevent repaints on every cell
         self.ctx.table_widget.setUpdatesEnabled(False)
+        self.ctx.table_widget.blockSignals(True)
+
+        # Save and disable ResizeToContents header modes
+        h_header = self.ctx.table_widget.horizontalHeader()
+        v_header = self.ctx.table_widget.verticalHeader()
+        h_resize_modes = [h_header.sectionResizeMode(i) for i in range(h_header.count())]
+        v_resize_modes = [v_header.sectionResizeMode(i) for i in range(v_header.count())]
+        for i in range(h_header.count()):
+            h_header.setSectionResizeMode(i, QHeaderView.Fixed)
+        for i in range(v_header.count()):
+            v_header.setSectionResizeMode(i, QHeaderView.Fixed)
+
         try:
             for ui_row, ui_col, data_row, data_col in selected_cells:
                 if (data_row, data_col) not in smoothed_values:
@@ -532,6 +583,15 @@ class TableOperationsHelper:
                 self.ctx.viewer.bulk_changes.emit(data_changes)
                 logger.debug(f"Smoothed {len(data_changes)} cell(s)")
         finally:
-            # Re-enable updates and trigger a single repaint
+            # Restore header resize modes
+            for i, mode in enumerate(h_resize_modes):
+                if i < h_header.count():
+                    h_header.setSectionResizeMode(i, mode)
+            for i, mode in enumerate(v_resize_modes):
+                if i < v_header.count():
+                    v_header.setSectionResizeMode(i, mode)
+
+            # Re-enable signals and updates, trigger a single repaint
+            self.ctx.table_widget.blockSignals(False)
             self.ctx.table_widget.setUpdatesEnabled(True)
             self.ctx.table_widget.viewport().update()

@@ -36,6 +36,7 @@ class GraphWidget(QWidget):
         self.table = None
         self.data = None
         self.rom_definition = None
+        self._scaling_range = None  # Cached (min, max) from scaling
         self.selected_cells = []
         self.ax_3d = None
 
@@ -75,6 +76,8 @@ class GraphWidget(QWidget):
         self.data = data
         self.rom_definition = rom_definition
         self.selected_cells = selected_cells or []
+        # Cache scaling range for color calculations
+        self._scaling_range = self._get_scaling_range()
         self._plot_data()
 
     def update_selection(self, selected_cells: list):
@@ -92,6 +95,19 @@ class GraphWidget(QWidget):
         self.data = data
         if self.table is not None:
             self._plot_data()
+
+    def _get_scaling_range(self):
+        """Get min/max from the table's scaling definition, or None."""
+        if not self.rom_definition or not self.table or not self.table.scaling:
+            return None
+        scaling = self.rom_definition.get_scaling(self.table.scaling)
+        if not scaling:
+            return None
+        if scaling.min == 0 and scaling.max == 0:
+            return None
+        if scaling.min == scaling.max:
+            return None
+        return (scaling.min, scaling.max)
 
     def _plot_data(self):
         """Plot the table data based on table type"""
@@ -123,7 +139,7 @@ class GraphWidget(QWidget):
         self.canvas.draw()
 
     def _plot_3d(self):
-        """Plot 3D table as surface"""
+        """Plot 3D table as surface with uniform cell sizes"""
         ax = self.figure.add_subplot(111, projection='3d')
 
         values = self.data['values']
@@ -132,15 +148,8 @@ class GraphWidget(QWidget):
 
         rows, cols = values.shape
 
-        # Extend axes by one point (extrapolate with same spacing)
-        if x_axis is not None and y_axis is not None:
-            x_step = x_axis[1] - x_axis[0] if len(x_axis) > 1 else 1
-            y_step = y_axis[1] - y_axis[0] if len(y_axis) > 1 else 1
-            x_extended = np.append(x_axis, x_axis[-1] + x_step)
-            y_extended = np.append(y_axis, y_axis[-1] + y_step)
-            X, Y = np.meshgrid(x_extended, y_extended)
-        else:
-            X, Y = np.meshgrid(np.arange(cols + 1), np.arange(rows + 1))
+        # Use uniform indices so all cells are the same size
+        X, Y = np.meshgrid(np.arange(cols + 1), np.arange(rows + 1))
 
         # Extend Z values by duplicating last row and column
         Z_extended = np.zeros((rows + 1, cols + 1))
@@ -164,6 +173,27 @@ class GraphWidget(QWidget):
         surf = ax.plot_surface(X, Y, Z, facecolors=colors,
                                linewidth=0.5, edgecolor='gray',
                                antialiased=True, shade=False)
+
+        # Set tick labels to actual axis values
+        if x_axis is not None:
+            tick_positions = np.arange(cols) + 0.5  # Center of each cell
+            # Limit to ~6 ticks for readability
+            if len(x_axis) > 6:
+                step = max(1, len(x_axis) // 6)
+                tick_idx = np.arange(0, len(x_axis), step)
+            else:
+                tick_idx = np.arange(len(x_axis))
+            ax.set_xticks(tick_idx + 0.5)
+            ax.set_xticklabels([f'{x_axis[i]:.4g}' for i in tick_idx])
+
+        if y_axis is not None:
+            if len(y_axis) > 6:
+                step = max(1, len(y_axis) // 6)
+                tick_idx = np.arange(0, len(y_axis), step)
+            else:
+                tick_idx = np.arange(len(y_axis))
+            ax.set_yticks(tick_idx + 0.5)
+            ax.set_yticklabels([f'{y_axis[i]:.4g}' for i in tick_idx])
 
         # Labels
         x_label = self._get_axis_label(AxisType.X_AXIS) if x_axis is not None else 'Column'
@@ -218,14 +248,18 @@ class GraphWidget(QWidget):
         ax.set_xticks([])
 
     def _calculate_colors(self, values: np.ndarray):
-        """Calculate color array matching table viewer gradient"""
-        min_val = np.min(values)
-        max_val = np.max(values)
+        """Calculate color array matching table viewer gradient using scaling range"""
+        if self._scaling_range:
+            min_val, max_val = self._scaling_range
+        else:
+            min_val = np.min(values)
+            max_val = np.max(values)
 
         if max_val == min_val:
             ratios = np.full_like(values, 0.5)
         else:
             ratios = (values - min_val) / (max_val - min_val)
+            ratios = np.clip(ratios, 0.0, 1.0)
 
         colors = np.zeros((*values.shape, 4))
         for i in range(values.shape[0]):
@@ -236,14 +270,18 @@ class GraphWidget(QWidget):
         return colors
 
     def _calculate_colors_1d(self, values: np.ndarray):
-        """Calculate colors for 1D array"""
-        min_val = np.min(values)
-        max_val = np.max(values)
+        """Calculate colors for 1D array using scaling range"""
+        if self._scaling_range:
+            min_val, max_val = self._scaling_range
+        else:
+            min_val = np.min(values)
+            max_val = np.max(values)
 
         if max_val == min_val:
             ratios = np.full_like(values, 0.5)
         else:
             ratios = (values - min_val) / (max_val - min_val)
+            ratios = np.clip(ratios, 0.0, 1.0)
 
         return [self._ratio_to_color(r) for r in ratios]
 
@@ -362,6 +400,7 @@ class GraphViewer(QMainWindow):
         self.rom_definition = rom_definition
         self.selected_cells = selected_cells or []
         self.ax_3d = None  # Store 3D axes for rotation control
+        self._scaling_range = self._get_scaling_range()
 
         # Set window properties
         self.setWindowTitle(f"{table.name} - Graph View - {APP_NAME}")
@@ -388,6 +427,19 @@ class GraphViewer(QMainWindow):
         # Set window size
         self.resize(800, 600)
 
+    def _get_scaling_range(self):
+        """Get min/max from the table's scaling definition, or None."""
+        if not self.rom_definition or not self.table or not self.table.scaling:
+            return None
+        scaling = self.rom_definition.get_scaling(self.table.scaling)
+        if not scaling:
+            return None
+        if scaling.min == 0 and scaling.max == 0:
+            return None
+        if scaling.min == scaling.max:
+            return None
+        return (scaling.min, scaling.max)
+
     def _plot_data(self):
         """Plot the table data based on table type"""
         # Save current view angles before clearing (for 3D plots)
@@ -412,7 +464,7 @@ class GraphViewer(QMainWindow):
         self.canvas.draw()
 
     def _plot_3d(self):
-        """Plot 3D table as surface"""
+        """Plot 3D table as surface with uniform cell sizes"""
         ax = self.figure.add_subplot(111, projection='3d')
 
         values = self.data['values']
@@ -421,39 +473,23 @@ class GraphViewer(QMainWindow):
 
         rows, cols = values.shape
 
-        # For plot_surface with facecolors, we need vertices at cell corners
-        # If we have NxM data cells, we need (N+1)x(M+1) vertices
-        # The colors array represents faces (NxM), not vertices
-
-        # Extend axes by one point (extrapolate with same spacing)
-        if x_axis is not None and y_axis is not None:
-            # Calculate axis spacing
-            x_step = x_axis[1] - x_axis[0] if len(x_axis) > 1 else 1
-            y_step = y_axis[1] - y_axis[0] if len(y_axis) > 1 else 1
-
-            # Extend axes
-            x_extended = np.append(x_axis, x_axis[-1] + x_step)
-            y_extended = np.append(y_axis, y_axis[-1] + y_step)
-
-            X, Y = np.meshgrid(x_extended, y_extended)
-        else:
-            X, Y = np.meshgrid(np.arange(cols + 1), np.arange(rows + 1))
+        # Use uniform indices so all cells are the same size
+        X, Y = np.meshgrid(np.arange(cols + 1), np.arange(rows + 1))
 
         # Extend Z values by duplicating last row and column
         Z_extended = np.zeros((rows + 1, cols + 1))
         Z_extended[:rows, :cols] = values
-        Z_extended[rows, :cols] = values[-1, :]  # Duplicate last row
-        Z_extended[:rows, cols] = values[:, -1]  # Duplicate last column
-        Z_extended[rows, cols] = values[-1, -1]  # Corner value
+        Z_extended[rows, :cols] = values[-1, :]
+        Z_extended[:rows, cols] = values[:, -1]
+        Z_extended[rows, cols] = values[-1, -1]
         Z = Z_extended
 
         # Calculate colors based on gradient (matching table viewer)
-        # Colors represent faces (original data size), not vertices
         colors = self._calculate_colors(values)
 
         # Override colors for selected cells with blue
         if self.selected_cells:
-            blue_color = (0.0, 0.5, 1.0, 1.0)  # Bright blue RGBA
+            blue_color = (0.0, 0.5, 1.0, 1.0)
             for row, col in self.selected_cells:
                 if row < colors.shape[0] and col < colors.shape[1]:
                     colors[row, col] = blue_color
@@ -462,6 +498,25 @@ class GraphViewer(QMainWindow):
         surf = ax.plot_surface(X, Y, Z, facecolors=colors,
                                linewidth=0.5, edgecolor='gray',
                                antialiased=True, shade=False)
+
+        # Set tick labels to actual axis values
+        if x_axis is not None:
+            if len(x_axis) > 6:
+                step = max(1, len(x_axis) // 6)
+                tick_idx = np.arange(0, len(x_axis), step)
+            else:
+                tick_idx = np.arange(len(x_axis))
+            ax.set_xticks(tick_idx + 0.5)
+            ax.set_xticklabels([f'{x_axis[i]:.4g}' for i in tick_idx])
+
+        if y_axis is not None:
+            if len(y_axis) > 6:
+                step = max(1, len(y_axis) // 6)
+                tick_idx = np.arange(0, len(y_axis), step)
+            else:
+                tick_idx = np.arange(len(y_axis))
+            ax.set_yticks(tick_idx + 0.5)
+            ax.set_yticklabels([f'{y_axis[i]:.4g}' for i in tick_idx])
 
         # Labels
         x_label = self._get_axis_label(AxisType.X_AXIS) if x_axis is not None else 'Column'
@@ -599,14 +654,18 @@ class GraphViewer(QMainWindow):
         ax.set_xticks([])
 
     def _calculate_colors(self, values: np.ndarray):
-        """Calculate color array matching table viewer gradient"""
-        min_val = np.min(values)
-        max_val = np.max(values)
+        """Calculate color array matching table viewer gradient using scaling range"""
+        if self._scaling_range:
+            min_val, max_val = self._scaling_range
+        else:
+            min_val = np.min(values)
+            max_val = np.max(values)
 
         if max_val == min_val:
             ratios = np.full_like(values, 0.5)
         else:
             ratios = (values - min_val) / (max_val - min_val)
+            ratios = np.clip(ratios, 0.0, 1.0)
 
         # Convert ratios to RGBA colors
         colors = np.zeros((*values.shape, 4))
@@ -618,14 +677,18 @@ class GraphViewer(QMainWindow):
         return colors
 
     def _calculate_colors_1d(self, values: np.ndarray):
-        """Calculate colors for 1D array"""
-        min_val = np.min(values)
-        max_val = np.max(values)
+        """Calculate colors for 1D array using scaling range"""
+        if self._scaling_range:
+            min_val, max_val = self._scaling_range
+        else:
+            min_val = np.min(values)
+            max_val = np.max(values)
 
         if max_val == min_val:
             ratios = np.full_like(values, 0.5)
         else:
             ratios = (values - min_val) / (max_val - min_val)
+            ratios = np.clip(ratios, 0.0, 1.0)
 
         colors = [self._ratio_to_color(r) for r in ratios]
         return colors

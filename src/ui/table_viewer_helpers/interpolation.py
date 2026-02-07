@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, List, Tuple
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QMessageBox, QHeaderView
 
 from ...core.rom_definition import TableType, AxisType
 from ...core.rom_reader import ScalingConverter
@@ -48,6 +48,18 @@ class TableInterpolationHelper:
 
         # Disable widget updates during bulk interpolation to prevent repaints on every cell
         self.ctx.table_widget.setUpdatesEnabled(False)
+        self.ctx.table_widget.blockSignals(True)
+
+        # Save and disable ResizeToContents header modes
+        h_header = self.ctx.table_widget.horizontalHeader()
+        v_header = self.ctx.table_widget.verticalHeader()
+        h_resize_modes = [h_header.sectionResizeMode(i) for i in range(h_header.count())]
+        v_resize_modes = [v_header.sectionResizeMode(i) for i in range(v_header.count())]
+        for i in range(h_header.count()):
+            h_header.setSectionResizeMode(i, QHeaderView.Fixed)
+        for i in range(v_header.count()):
+            v_header.setSectionResizeMode(i, QHeaderView.Fixed)
+
         try:
             for sel_range in selected_ranges:
                 logger.debug(f"Selection range: rows {sel_range.topRow()}-{sel_range.bottomRow()}, cols {sel_range.leftColumn()}-{sel_range.rightColumn()}")
@@ -157,7 +169,7 @@ class TableInterpolationHelper:
                                         axis_fmt = self.display.get_axis_format(axis_type)
                                         item.setText(self.display.format_value(new_val, axis_fmt))
                                         self.ctx.current_data[axis_key][data_idx] = new_val
-                                        color = self.display.get_axis_color(new_val, self.ctx.current_data[axis_key])
+                                        color = self.display.get_axis_color(new_val, self.ctx.current_data[axis_key], axis_type)
                                         item.setBackground(QBrush(color))
                                     finally:
                                         self.ctx.editing_in_progress = False
@@ -220,7 +232,16 @@ class TableInterpolationHelper:
                 logger.info(f"Vertical interpolation: updated {len(axis_changes)} axis cells")
                 self.ctx.viewer.axis_bulk_changes.emit(axis_changes)
         finally:
-            # Re-enable updates and trigger a single repaint
+            # Restore header resize modes
+            for i, mode in enumerate(h_resize_modes):
+                if i < h_header.count():
+                    h_header.setSectionResizeMode(i, mode)
+            for i, mode in enumerate(v_resize_modes):
+                if i < v_header.count():
+                    v_header.setSectionResizeMode(i, mode)
+
+            # Re-enable signals and updates, trigger a single repaint
+            self.ctx.table_widget.blockSignals(False)
             self.ctx.table_widget.setUpdatesEnabled(True)
             self.ctx.table_widget.viewport().update()
 
@@ -247,6 +268,18 @@ class TableInterpolationHelper:
 
         # Disable widget updates during bulk interpolation to prevent repaints on every cell
         self.ctx.table_widget.setUpdatesEnabled(False)
+        self.ctx.table_widget.blockSignals(True)
+
+        # Save and disable ResizeToContents header modes
+        h_header = self.ctx.table_widget.horizontalHeader()
+        v_header = self.ctx.table_widget.verticalHeader()
+        h_resize_modes = [h_header.sectionResizeMode(i) for i in range(h_header.count())]
+        v_resize_modes = [v_header.sectionResizeMode(i) for i in range(v_header.count())]
+        for i in range(h_header.count()):
+            h_header.setSectionResizeMode(i, QHeaderView.Fixed)
+        for i in range(v_header.count()):
+            v_header.setSectionResizeMode(i, QHeaderView.Fixed)
+
         try:
             for sel_range in selected_ranges:
                 logger.debug(f"Selection range: rows {sel_range.topRow()}-{sel_range.bottomRow()}, cols {sel_range.leftColumn()}-{sel_range.rightColumn()}")
@@ -356,7 +389,7 @@ class TableInterpolationHelper:
                                         axis_fmt = self.display.get_axis_format(axis_type)
                                         item.setText(self.display.format_value(new_val, axis_fmt))
                                         self.ctx.current_data[axis_key][data_idx] = new_val
-                                        color = self.display.get_axis_color(new_val, self.ctx.current_data[axis_key])
+                                        color = self.display.get_axis_color(new_val, self.ctx.current_data[axis_key], axis_type)
                                         item.setBackground(QBrush(color))
                                     finally:
                                         self.ctx.editing_in_progress = False
@@ -422,7 +455,16 @@ class TableInterpolationHelper:
             if not all_changes and not axis_changes:
                 logger.debug("Horizontal interpolation: no changes made")
         finally:
-            # Re-enable updates and trigger a single repaint
+            # Restore header resize modes
+            for i, mode in enumerate(h_resize_modes):
+                if i < h_header.count():
+                    h_header.setSectionResizeMode(i, mode)
+            for i, mode in enumerate(v_resize_modes):
+                if i < v_header.count():
+                    v_header.setSectionResizeMode(i, mode)
+
+            # Re-enable signals and updates, trigger a single repaint
+            self.ctx.table_widget.blockSignals(False)
             self.ctx.table_widget.setUpdatesEnabled(True)
             self.ctx.table_widget.viewport().update()
 
@@ -455,6 +497,18 @@ class TableInterpolationHelper:
 
         # Disable widget updates during bulk interpolation to prevent repaints on every cell
         self.ctx.table_widget.setUpdatesEnabled(False)
+        self.ctx.table_widget.blockSignals(True)
+
+        # Save and disable ResizeToContents header modes
+        h_header = self.ctx.table_widget.horizontalHeader()
+        v_header = self.ctx.table_widget.verticalHeader()
+        h_resize_modes = [h_header.sectionResizeMode(i) for i in range(h_header.count())]
+        v_resize_modes = [v_header.sectionResizeMode(i) for i in range(v_header.count())]
+        for i in range(h_header.count()):
+            h_header.setSectionResizeMode(i, QHeaderView.Fixed)
+        for i in range(v_header.count()):
+            v_header.setSectionResizeMode(i, QHeaderView.Fixed)
+
         try:
             for sel_range in selected_ranges:
                 top_row = sel_range.topRow()
@@ -568,6 +622,15 @@ class TableInterpolationHelper:
                 else:
                     logger.debug("2D bilinear interpolation: no changes made")
         finally:
-                # Re-enable updates and trigger a single repaint
-                self.ctx.table_widget.setUpdatesEnabled(True)
-                self.ctx.table_widget.viewport().update()
+            # Restore header resize modes
+            for i, mode in enumerate(h_resize_modes):
+                if i < h_header.count():
+                    h_header.setSectionResizeMode(i, mode)
+            for i, mode in enumerate(v_resize_modes):
+                if i < v_header.count():
+                    v_header.setSectionResizeMode(i, mode)
+
+            # Re-enable signals and updates, trigger a single repaint
+            self.ctx.table_widget.blockSignals(False)
+            self.ctx.table_widget.setUpdatesEnabled(True)
+            self.ctx.table_widget.viewport().update()
