@@ -14,6 +14,9 @@
 ## Environment Notes
 - Use `python3` not `python` (WSL2 environment lacks symlink)
 
+## Recent Completed Work (Feb 7, 2026) - Multi-ROM Undo Isolation Fix
+- **Fixed undo stacks shared across ROMs with same definition** — When two ROMs share the same definition (same ECU type), they have identical table addresses. The undo stacks, change tracker, and table highlighting were all keyed by bare `table_address`, causing: (1) both ROMs' edits going into the same undo stack, (2) closing one ROM destroying the other's undo stacks and pending changes, (3) table highlighting showing modifications from the wrong ROM. Fix: introduced composite keys (`rom_path|table_address`) throughout the undo and change tracking systems. Files modified: `version_models.py` (added `table_key` field to CellChange/AxisChange), `table_undo_manager.py` (composite key helpers, rom_path params), `undo_commands.py` (propagate table_key through undo/redo), `change_tracker.py` (composite keys, per-ROM filtering), `main.py` (pass rom_path to all handlers, per-ROM highlight filtering), `table_viewer_window.py` (emit composite key on focus).
+
 ## Recent Completed Work (Feb 7, 2026) - Undo Wrong-ROM Fix
 - **Fixed Path vs str type mismatch throughout `main.py`** — `RomReader.rom_path` is `Path`, `RomDocument.rom_path` is `str`; on Windows, forward vs backslash normalization caused `str()` comparison to fail silently. Fixed `_find_document_by_rom_path()` to use `Path()` comparison. Fixed `close_tab()` to use `rom_reader.rom_path` (Path) instead of `document.rom_path` (str) for window matching and dict cleanup.
 - **Fixed test runner operations not emitting signals** — `set_value`, `multiply_selection`, `add_to_selection` called `_apply_bulk_operation` directly which doesn't emit `bulk_changes`/`axis_bulk_changes` signals. Now properly emits signals so changes are written to ROM.

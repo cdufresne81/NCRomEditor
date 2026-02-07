@@ -43,6 +43,7 @@ class CellEditCommand(QUndoCommand):
             new_value=self.change.old_value,
             old_raw=self.change.new_raw,
             new_raw=self.change.old_raw,
+            table_key=self.change.table_key,
         )
         self.apply_callback(reverse)
         if self.update_pending:
@@ -81,12 +82,12 @@ class BulkCellEditCommand(QUndoCommand):
 
     def undo(self):
         """Revert all cells to old values"""
-        # Get table address from first change for targeted bulk update
-        table_address = self.changes[0].table_address if self.changes else None
+        # Use table_key for targeted bulk update
+        table_key = self.changes[0].table_key if self.changes else None
 
         # Begin bulk update for performance (if callback provided)
         if self.begin_bulk:
-            self.begin_bulk(table_address)
+            self.begin_bulk(table_key)
 
         try:
             for change in self.changes:
@@ -99,6 +100,7 @@ class BulkCellEditCommand(QUndoCommand):
                     new_value=change.old_value,
                     old_raw=change.new_raw,
                     new_raw=change.old_raw,
+                    table_key=change.table_key,
                 )
                 self.apply_callback(reverse)
                 if self.update_pending:
@@ -106,7 +108,7 @@ class BulkCellEditCommand(QUndoCommand):
         finally:
             # End bulk update (if callback provided)
             if self.end_bulk:
-                self.end_bulk(table_address)
+                self.end_bulk(table_key)
 
     def redo(self):
         """Apply all changes"""
@@ -114,12 +116,12 @@ class BulkCellEditCommand(QUndoCommand):
             self._first_redo = False
             return
 
-        # Get table address from first change for targeted bulk update
-        table_address = self.changes[0].table_address if self.changes else None
+        # Use table_key for targeted bulk update
+        table_key = self.changes[0].table_key if self.changes else None
 
         # Begin bulk update for performance (if callback provided)
         if self.begin_bulk:
-            self.begin_bulk(table_address)
+            self.begin_bulk(table_key)
 
         try:
             for change in self.changes:
@@ -129,7 +131,7 @@ class BulkCellEditCommand(QUndoCommand):
         finally:
             # End bulk update (if callback provided)
             if self.end_bulk:
-                self.end_bulk(table_address)
+                self.end_bulk(table_key)
 
 
 class AxisEditCommand(QUndoCommand):
@@ -157,6 +159,7 @@ class AxisEditCommand(QUndoCommand):
             new_value=self.change.old_value,
             old_raw=self.change.new_raw,
             new_raw=self.change.old_raw,
+            table_key=self.change.table_key,
         )
         self.apply_callback(reverse)
 
@@ -187,12 +190,12 @@ class BulkAxisEditCommand(QUndoCommand):
 
     def undo(self):
         """Revert all axis cells to old values"""
-        # Get table address from first change for targeted bulk update
-        table_address = self.changes[0].table_address if self.changes else None
+        # Use table_key for targeted bulk update
+        table_key = self.changes[0].table_key if self.changes else None
 
         # Begin bulk update for performance (if callback provided)
         if self.begin_bulk:
-            self.begin_bulk(table_address)
+            self.begin_bulk(table_key)
 
         try:
             for change in self.changes:
@@ -205,12 +208,13 @@ class BulkAxisEditCommand(QUndoCommand):
                     new_value=change.old_value,
                     old_raw=change.new_raw,
                     new_raw=change.old_raw,
+                    table_key=change.table_key,
                 )
                 self.apply_callback(reverse)
         finally:
             # End bulk update (if callback provided)
             if self.end_bulk:
-                self.end_bulk(table_address)
+                self.end_bulk(table_key)
 
     def redo(self):
         """Apply all axis changes"""
@@ -218,12 +222,12 @@ class BulkAxisEditCommand(QUndoCommand):
             self._first_redo = False
             return
 
-        # Get table address from first change for targeted bulk update
-        table_address = self.changes[0].table_address if self.changes else None
+        # Use table_key for targeted bulk update
+        table_key = self.changes[0].table_key if self.changes else None
 
         # Begin bulk update for performance (if callback provided)
         if self.begin_bulk:
-            self.begin_bulk(table_address)
+            self.begin_bulk(table_key)
 
         try:
             for change in self.changes:
@@ -231,4 +235,4 @@ class BulkAxisEditCommand(QUndoCommand):
         finally:
             # End bulk update (if callback provided)
             if self.end_bulk:
-                self.end_bulk(table_address)
+                self.end_bulk(table_key)

@@ -5,6 +5,9 @@ Tracks pending (uncommitted) changes for the commit/save workflow.
 
 Note: Undo/redo functionality has been moved to TableUndoManager (table_undo_manager.py)
 which uses Qt's QUndoGroup pattern for per-table undo/redo.
+
+Keys are composite (rom_path|table_address) to isolate tracking
+when multiple ROMs share the same table addresses.
 """
 
 from typing import List, Dict, Callable
@@ -13,6 +16,7 @@ import logging
 
 from .version_models import CellChange, TableChanges
 from .rom_definition import Table
+from .table_undo_manager import make_table_key, extract_table_address, extract_rom_path
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +25,7 @@ logger = logging.getLogger(__name__)
 class PendingChanges:
     """Tracks uncommitted changes for a table"""
     table_name: str
-    table_address: str
+    table_address: str  # Raw hex address (for ROM I/O and display)
     changes: Dict[tuple, CellChange] = field(default_factory=dict)  # (row, col) -> CellChange
 
     def add_change(self, change: CellChange):
@@ -38,7 +42,8 @@ class PendingChanges:
                 old_value=existing.old_value,  # Keep original
                 new_value=change.new_value,
                 old_raw=existing.old_raw,
-                new_raw=change.new_raw
+                new_raw=change.new_raw,
+                table_key=change.table_key,
             )
         else:
             self.changes[key] = change
@@ -69,11 +74,13 @@ class ChangeTracker:
     - Pending changes that need to be saved/committed
     - Change notifications for UI updates
 
+    Keys are composite (rom_path|table_address) to isolate per-ROM state.
+
     Note: Undo/redo functionality is handled by TableUndoManager.
     """
 
     def __init__(self):
-        # Pending changes by table address
+        # Pending changes by composite key (rom_path|table_address)
         self._pending: Dict[str, PendingChanges] = {}
 
         # Callbacks for UI updates
@@ -81,7 +88,8 @@ class ChangeTracker:
 
     def record_pending_change(self, table: Table, row: int, col: int,
                               old_value: float, new_value: float,
-                              old_raw: float, new_raw: float):
+                              old_raw: float, new_raw: float,
+                              rom_path=None):
         """
         Record a cell value change for pending/commit tracking.
 
@@ -93,7 +101,10 @@ class ChangeTracker:
             new_value: New display value
             old_raw: Previous raw binary value
             new_raw: New raw binary value
+            rom_path: Path to ROM file for multi-ROM isolation
         """
+        table_key = make_table_key(rom_path, table.address)
+
         change = CellChange(
             table_name=table.name,
             table_address=table.address,
@@ -102,32 +113,37 @@ class ChangeTracker:
             old_value=old_value,
             new_value=new_value,
             old_raw=old_raw,
-            new_raw=new_raw
+            new_raw=new_raw,
+            table_key=table_key,
         )
 
-        # Add to pending changes (keyed by address to handle tables with same name)
-        if table.address not in self._pending:
-            self._pending[table.address] = PendingChanges(
+        # Add to pending changes (keyed by composite key for multi-ROM isolation)
+        if table_key not in self._pending:
+            self._pending[table_key] = PendingChanges(
                 table_name=table.name,
                 table_address=table.address
             )
-        self._pending[table.address].add_change(change)
+        self._pending[table_key].add_change(change)
 
         # Notify listeners
         self._notify_change()
 
         logger.debug(f"Recorded pending change: {table.name}[{row},{col}] {old_value} -> {new_value}")
 
-    def record_pending_bulk_changes(self, table: Table, changes: List[tuple]):
+    def record_pending_bulk_changes(self, table: Table, changes: List[tuple],
+                                    rom_path=None):
         """
         Record multiple cell changes for pending/commit tracking.
 
         Args:
             table: Table being edited
             changes: List of (row, col, old_value, new_value, old_raw, new_raw) tuples
+            rom_path: Path to ROM file for multi-ROM isolation
         """
         if not changes:
             return
+
+        table_key = make_table_key(rom_path, table.address)
 
         for row, col, old_value, new_value, old_raw, new_raw in changes:
             change = CellChange(
@@ -138,16 +154,17 @@ class ChangeTracker:
                 old_value=old_value,
                 new_value=new_value,
                 old_raw=old_raw,
-                new_raw=new_raw
+                new_raw=new_raw,
+                table_key=table_key,
             )
 
-            # Add to pending changes (keyed by address to handle tables with same name)
-            if table.address not in self._pending:
-                self._pending[table.address] = PendingChanges(
+            # Add to pending changes (keyed by composite key)
+            if table_key not in self._pending:
+                self._pending[table_key] = PendingChanges(
                     table_name=table.name,
                     table_address=table.address
                 )
-            self._pending[table.address].add_change(change)
+            self._pending[table_key].add_change(change)
 
         # Notify listeners
         self._notify_change()
@@ -159,6 +176,7 @@ class ChangeTracker:
         Update pending changes during undo/redo operations.
 
         Called by TableUndoManager to keep pending changes in sync with undo/redo.
+        Uses change.table_key (composite key) to find the correct pending entry.
 
         Args:
             change: The CellChange being undone/redone
@@ -171,23 +189,28 @@ class ChangeTracker:
 
         self._notify_change()
 
+    def _get_pending_key(self, change: CellChange) -> str:
+        """Get the correct pending dict key from a CellChange."""
+        return change.table_key if change.table_key else change.table_address
+
     def _handle_pending_undo(self, change: CellChange):
         """Handle pending changes update during undo"""
-        if change.table_address not in self._pending:
+        key = self._get_pending_key(change)
+        if key not in self._pending:
             return
 
-        pending = self._pending[change.table_address]
-        key = (change.row, change.col)
+        pending = self._pending[key]
+        cell_key = (change.row, change.col)
 
-        if key in pending.changes:
-            existing = pending.changes[key]
+        if cell_key in pending.changes:
+            existing = pending.changes[cell_key]
             # Check if reverting to original value
             if abs(existing.old_value - change.old_value) < 1e-9:
                 # Reverted to original, remove from pending
                 pending.remove_change(change.row, change.col)
             else:
                 # Update to previous value
-                pending.changes[key] = CellChange(
+                pending.changes[cell_key] = CellChange(
                     table_name=change.table_name,
                     table_address=change.table_address,
                     row=change.row,
@@ -195,18 +218,20 @@ class ChangeTracker:
                     old_value=existing.old_value,
                     new_value=change.old_value,  # Now the "current" value
                     old_raw=existing.old_raw,
-                    new_raw=change.old_raw
+                    new_raw=change.old_raw,
+                    table_key=change.table_key,
                 )
 
     def _handle_pending_redo(self, change: CellChange):
         """Handle pending changes update during redo"""
+        key = self._get_pending_key(change)
         # Re-apply the change to pending
-        if change.table_address not in self._pending:
-            self._pending[change.table_address] = PendingChanges(
+        if key not in self._pending:
+            self._pending[key] = PendingChanges(
                 table_name=change.table_name,
                 table_address=change.table_address
             )
-        self._pending[change.table_address].add_change(change)
+        self._pending[key].add_change(change)
 
     def has_pending_changes(self) -> bool:
         """Check if there are any uncommitted changes"""
@@ -217,12 +242,30 @@ class ChangeTracker:
         return [p.to_table_changes() for p in self._pending.values() if p.has_changes()]
 
     def get_modified_tables(self) -> List[str]:
-        """Get list of table names with pending changes (deprecated - use get_modified_table_addresses)"""
+        """Get list of table names with pending changes (deprecated - use get_modified_addresses_for_rom)"""
         return [p.table_name for p in self._pending.values() if p.has_changes()]
 
     def get_modified_table_addresses(self) -> List[str]:
-        """Get list of table addresses with pending changes"""
+        """Get list of raw table addresses with pending changes (all ROMs combined)."""
         return [p.table_address for p in self._pending.values() if p.has_changes()]
+
+    def get_modified_addresses_for_rom(self, rom_path) -> List[str]:
+        """Get list of raw table addresses with pending changes for a specific ROM.
+
+        Args:
+            rom_path: ROM path to filter by
+
+        Returns:
+            List of raw hex addresses (e.g., ["0x1000", "0x2000"])
+        """
+        rom_path_str = str(rom_path)
+        result = []
+        for key, pending in self._pending.items():
+            if pending.has_changes():
+                key_rom_path = extract_rom_path(key)
+                if key_rom_path == rom_path_str:
+                    result.append(pending.table_address)
+        return result
 
     def get_pending_change_count(self) -> int:
         """Get total number of pending cell changes"""
@@ -234,12 +277,12 @@ class ChangeTracker:
         self._notify_change()
         logger.debug("Cleared pending changes")
 
-    def clear_pending_for_addresses(self, addresses):
-        """Clear pending changes for specific table addresses (e.g., when closing a ROM)."""
+    def clear_pending_for_keys(self, keys):
+        """Clear pending changes for specific composite keys (e.g., when closing a ROM)."""
         removed = 0
-        for addr in addresses:
-            if addr in self._pending:
-                del self._pending[addr]
+        for key in keys:
+            if key in self._pending:
+                del self._pending[key]
                 removed += 1
         if removed:
             self._notify_change()

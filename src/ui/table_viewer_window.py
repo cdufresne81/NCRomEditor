@@ -16,6 +16,7 @@ from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
 
 from ..utils.constants import APP_NAME
+from ..core.table_undo_manager import make_table_key
 from .table_viewer import TableViewer
 from .graph_viewer import GraphWidget
 from .scaling_edit_dialog import TableScalingDialog
@@ -582,5 +583,5 @@ class TableViewerWindow(QMainWindow):
         from PySide6.QtCore import QEvent
         # WindowActivate is fired when the window gains focus (clicked, alt-tabbed to, etc.)
         if event.type() == QEvent.WindowActivate:
-            self.window_focused.emit(self.table.address)
+            self.window_focused.emit(make_table_key(self.rom_path, self.table.address))
         return super().event(event)

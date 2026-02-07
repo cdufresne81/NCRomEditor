@@ -4,6 +4,9 @@ Table Undo Manager
 Manages per-table QUndoStacks using Qt's QUndoGroup pattern.
 Each open table has its own undo stack, with the active stack
 determined by window focus.
+
+Stack keys are composite (rom_path|table_address) to isolate
+undo stacks when multiple ROMs share the same table addresses.
 """
 
 from PySide6.QtGui import QUndoGroup, QUndoStack
@@ -24,18 +27,56 @@ logger = logging.getLogger(__name__)
 MAX_UNDO_PER_TABLE = 100
 
 
+def make_table_key(rom_path, table_address: str) -> str:
+    """Build a composite key unique per ROM per table.
+
+    Args:
+        rom_path: Path to the ROM file (str or Path)
+        table_address: Hex address string (e.g., "0x1000")
+
+    Returns:
+        Composite key string like "C:\\path\\rom.bin|0x1000"
+    """
+    return f"{rom_path}|{table_address}" if rom_path else table_address
+
+
+def extract_table_address(table_key: str) -> str:
+    """Extract the raw table address from a composite key.
+
+    Args:
+        table_key: Composite key or bare address
+
+    Returns:
+        Raw table address (e.g., "0x1000")
+    """
+    if '|' in table_key:
+        return table_key.rsplit('|', 1)[1]
+    return table_key
+
+
+def extract_rom_path(table_key: str) -> Optional[str]:
+    """Extract the ROM path from a composite key.
+
+    Returns:
+        ROM path string, or None if key has no ROM prefix.
+    """
+    if '|' in table_key:
+        return table_key.rsplit('|', 1)[0]
+    return None
+
+
 class TableUndoManager:
     """
     Manages per-table undo/redo using Qt's QUndoGroup.
 
-    - One QUndoStack per table (keyed by table_address)
+    - One QUndoStack per table (keyed by composite rom_path|table_address)
     - QUndoGroup manages active stack based on focus
     - Provides unified interface for recording changes
     """
 
     def __init__(self):
         self._undo_group = QUndoGroup()
-        self._stacks: Dict[str, QUndoStack] = {}  # table_address -> QUndoStack
+        self._stacks: Dict[str, QUndoStack] = {}  # table_key -> QUndoStack
 
         # Callbacks for applying changes to ROM/UI
         self._apply_cell_change: Optional[Callable[[CellChange], None]] = None
@@ -74,25 +115,25 @@ class TableUndoManager:
         self._begin_bulk_update = begin_bulk_update
         self._end_bulk_update = end_bulk_update
 
-    def get_or_create_stack(self, table_address: str) -> QUndoStack:
+    def get_or_create_stack(self, table_key: str) -> QUndoStack:
         """
         Get or create an undo stack for a table.
 
         Args:
-            table_address: Unique table identifier (hex address)
+            table_key: Composite key (rom_path|table_address)
 
         Returns:
             QUndoStack for the table
         """
-        if table_address not in self._stacks:
+        if table_key not in self._stacks:
             stack = QUndoStack(self._undo_group)
             stack.setUndoLimit(MAX_UNDO_PER_TABLE)
-            self._stacks[table_address] = stack
-            logger.debug(f"Created undo stack for table {table_address}")
+            self._stacks[table_key] = stack
+            logger.debug(f"Created undo stack for table {table_key}")
 
-        return self._stacks[table_address]
+        return self._stacks[table_key]
 
-    def set_active_stack(self, table_address: Optional[str]):
+    def set_active_stack(self, table_key: Optional[str]):
         """
         Set the active undo stack (called when table window gains focus).
 
@@ -100,39 +141,39 @@ class TableUndoManager:
         available after the first edit in a newly opened table window.
 
         Args:
-            table_address: Address of table to activate, or None to deactivate
+            table_key: Composite key of table to activate, or None to deactivate
         """
-        if table_address:
-            stack = self.get_or_create_stack(table_address)
+        if table_key:
+            stack = self.get_or_create_stack(table_key)
             stack.setActive(True)
-            logger.debug(f"Activated undo stack for table {table_address}")
+            logger.debug(f"Activated undo stack for table {table_key}")
         else:
             # Deactivate by setting no stack active
             self._undo_group.setActiveStack(None)
             logger.debug("Deactivated undo stack (no table focused)")
 
-    def remove_stack(self, table_address: str):
+    def remove_stack(self, table_key: str):
         """Remove and delete the undo stack for a table."""
-        if table_address not in self._stacks:
+        if table_key not in self._stacks:
             return
-        stack = self._stacks.pop(table_address)
+        stack = self._stacks.pop(table_key)
         # Deactivate if this was the active stack
         if self._undo_group.activeStack() is stack:
             self._undo_group.setActiveStack(None)
         stack.clear()
         stack.deleteLater()
-        logger.debug(f"Removed undo stack for table {table_address}")
+        logger.debug(f"Removed undo stack for table {table_key}")
 
-    def remove_stacks_for_addresses(self, addresses):
-        """Remove undo stacks for a collection of table addresses."""
-        for addr in list(addresses):
-            self.remove_stack(addr)
+    def remove_stacks_for_keys(self, keys):
+        """Remove undo stacks for a collection of composite keys."""
+        for key in list(keys):
+            self.remove_stack(key)
 
-    def clear_stack(self, table_address: str):
+    def clear_stack(self, table_key: str):
         """Clear the undo stack for a specific table."""
-        if table_address in self._stacks:
-            self._stacks[table_address].clear()
-            logger.debug(f"Cleared undo stack for table {table_address}")
+        if table_key in self._stacks:
+            self._stacks[table_key].clear()
+            logger.debug(f"Cleared undo stack for table {table_key}")
 
     def record_cell_change(
         self,
@@ -143,11 +184,14 @@ class TableUndoManager:
         new_value: float,
         old_raw: float,
         new_raw: float,
+        rom_path=None,
     ):
         """Record a single cell change"""
         if self._apply_cell_change is None:
             logger.warning("No apply_cell callback set, cannot record change")
             return
+
+        table_key = make_table_key(rom_path, table.address)
 
         change = CellChange(
             table_name=table.name,
@@ -158,9 +202,10 @@ class TableUndoManager:
             new_value=new_value,
             old_raw=old_raw,
             new_raw=new_raw,
+            table_key=table_key,
         )
 
-        stack = self.get_or_create_stack(table.address)
+        stack = self.get_or_create_stack(table_key)
         cmd = CellEditCommand(change, self._apply_cell_change, self._update_pending)
         stack.push(cmd)
 
@@ -171,6 +216,7 @@ class TableUndoManager:
         table: Table,
         changes: List[Tuple[int, int, float, float, float, float]],
         description: str,
+        rom_path=None,
     ):
         """
         Record multiple cell changes as single undo operation.
@@ -179,6 +225,7 @@ class TableUndoManager:
             table: Table being edited
             changes: List of (row, col, old_value, new_value, old_raw, new_raw) tuples
             description: Description for undo menu (e.g., "Multiply by 1.1")
+            rom_path: Path to ROM file for multi-ROM isolation
         """
         if not changes:
             return
@@ -186,6 +233,8 @@ class TableUndoManager:
         if self._apply_cell_change is None:
             logger.warning("No apply_cell callback set, cannot record bulk changes")
             return
+
+        table_key = make_table_key(rom_path, table.address)
 
         cell_changes = [
             CellChange(
@@ -197,11 +246,12 @@ class TableUndoManager:
                 new_value=new_value,
                 old_raw=old_raw,
                 new_raw=new_raw,
+                table_key=table_key,
             )
             for row, col, old_value, new_value, old_raw, new_raw in changes
         ]
 
-        stack = self.get_or_create_stack(table.address)
+        stack = self.get_or_create_stack(table_key)
         cmd = BulkCellEditCommand(
             cell_changes,
             description,
@@ -223,11 +273,14 @@ class TableUndoManager:
         new_value: float,
         old_raw: float,
         new_raw: float,
+        rom_path=None,
     ):
         """Record a single axis change"""
         if self._apply_axis_change is None:
             logger.warning("No apply_axis callback set, cannot record axis change")
             return
+
+        table_key = make_table_key(rom_path, table.address)
 
         change = AxisChange(
             table_name=table.name,
@@ -238,9 +291,10 @@ class TableUndoManager:
             new_value=new_value,
             old_raw=old_raw,
             new_raw=new_raw,
+            table_key=table_key,
         )
 
-        stack = self.get_or_create_stack(table.address)
+        stack = self.get_or_create_stack(table_key)
         cmd = AxisEditCommand(change, self._apply_axis_change)
         stack.push(cmd)
 
@@ -251,6 +305,7 @@ class TableUndoManager:
         table: Table,
         changes: List[Tuple[str, int, float, float, float, float]],
         description: str,
+        rom_path=None,
     ):
         """
         Record multiple axis changes as single undo operation.
@@ -259,6 +314,7 @@ class TableUndoManager:
             table: Table being edited
             changes: List of (axis_type, index, old_value, new_value, old_raw, new_raw)
             description: Description for undo menu
+            rom_path: Path to ROM file for multi-ROM isolation
         """
         if not changes:
             return
@@ -266,6 +322,8 @@ class TableUndoManager:
         if self._apply_axis_change is None:
             logger.warning("No apply_axis callback set, cannot record axis bulk changes")
             return
+
+        table_key = make_table_key(rom_path, table.address)
 
         axis_changes = [
             AxisChange(
@@ -277,11 +335,12 @@ class TableUndoManager:
                 new_value=new_value,
                 old_raw=old_raw,
                 new_raw=new_raw,
+                table_key=table_key,
             )
             for axis_type, index, old_value, new_value, old_raw, new_raw in changes
         ]
 
-        stack = self.get_or_create_stack(table.address)
+        stack = self.get_or_create_stack(table_key)
         cmd = BulkAxisEditCommand(
             axis_changes,
             description,
@@ -317,10 +376,10 @@ class TableUndoManager:
         logger.debug("Cleared all undo stacks")
 
     def get_active_table_address(self) -> Optional[str]:
-        """Get address of currently active table, if any"""
+        """Get key of currently active table, if any"""
         active_stack = self._undo_group.activeStack()
         if active_stack:
-            for addr, stack in self._stacks.items():
+            for key, stack in self._stacks.items():
                 if stack is active_stack:
-                    return addr
+                    return key
         return None

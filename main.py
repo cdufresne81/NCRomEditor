@@ -52,7 +52,7 @@ from src.ui.commit_dialog import CommitDialog
 from src.ui.history_viewer import HistoryViewer
 from src.core.project_manager import ProjectManager
 from src.core.change_tracker import ChangeTracker
-from src.core.table_undo_manager import TableUndoManager
+from src.core.table_undo_manager import TableUndoManager, make_table_key, extract_table_address, extract_rom_path
 from src.core.version_models import CellChange, AxisChange
 
 logger = get_logger(__name__)
@@ -439,19 +439,20 @@ class MainWindow(QMainWindow):
             for window in windows_to_close:
                 window.close()
 
-            # Collect all table addresses from this ROM's definition
-            table_addresses = set()
+            # Collect composite keys for this ROM's tables
+            table_keys = set()
             if hasattr(document, 'rom_reader') and document.rom_reader:
                 definition = document.rom_reader.definition
                 if definition:
                     for table in definition.tables:
-                        table_addresses.add(table.address)
+                        table_keys.add(make_table_key(rom_path, table.address))
 
-            # Remove undo stacks for this ROM's tables
-            self.table_undo_manager.remove_stacks_for_addresses(table_addresses)
+            # Remove undo stacks for this ROM's tables (composite keys prevent
+            # accidentally destroying stacks belonging to other open ROMs)
+            self.table_undo_manager.remove_stacks_for_keys(table_keys)
 
             # Clear pending changes for this ROM's tables
-            self.change_tracker.clear_pending_for_addresses(table_addresses)
+            self.change_tracker.clear_pending_for_keys(table_keys)
 
             # Clear per-ROM tracking dicts
             if rom_path:
@@ -1049,24 +1050,33 @@ class MainWindow(QMainWindow):
     # ========== Undo/Redo Callback Methods ==========
     # These are called by TableUndoManager when undo/redo operations occur
 
-    def _find_table_window(self, table_address: str):
-        """Find visible table viewer window by address, using cache during bulk ops."""
+    def _find_table_window(self, table_key: str):
+        """Find visible table viewer window by composite key, using cache during bulk ops.
+
+        Args:
+            table_key: Composite key (rom_path|table_address) or bare table_address
+        """
+        rom_path_str = extract_rom_path(table_key)
+        table_address = extract_table_address(table_key)
+
         # Use cache during bulk operations to avoid per-cell window scans
         cache = getattr(self, '_bulk_window_cache', None)
         if cache is not None:
-            if table_address in cache:
-                return cache[table_address]
+            if table_key in cache:
+                return cache[table_key]
             for window in self.open_table_windows:
                 if window.isVisible() and window.table.address == table_address:
-                    cache[table_address] = window
-                    return window
-            cache[table_address] = None
+                    if rom_path_str is None or str(window.rom_path) == rom_path_str:
+                        cache[table_key] = window
+                        return window
+            cache[table_key] = None
             return None
 
         # Non-bulk: scan directly
         for window in self.open_table_windows:
             if window.isVisible() and window.table.address == table_address:
-                return window
+                if rom_path_str is None or str(window.rom_path) == rom_path_str:
+                    return window
         return None
 
     def _apply_cell_change_from_undo(self, change: CellChange):
@@ -1074,7 +1084,7 @@ class MainWindow(QMainWindow):
         Apply a cell change to open table viewers and ROM data.
         Called by TableUndoManager during undo/redo operations.
         """
-        window = self._find_table_window(change.table_address)
+        window = self._find_table_window(change.table_key or change.table_address)
         if window:
             # Update the viewer display
             window.viewer.update_cell_value(
@@ -1098,7 +1108,7 @@ class MainWindow(QMainWindow):
         Apply an axis change to open table viewers and ROM data.
         Called by TableUndoManager during undo/redo operations.
         """
-        window = self._find_table_window(change.table_address)
+        window = self._find_table_window(change.table_key or change.table_address)
         if window:
             # Update the viewer display
             window.viewer.update_axis_cell_value(
@@ -1127,30 +1137,37 @@ class MainWindow(QMainWindow):
         """
         self.change_tracker.update_pending_from_undo(change, is_undo)
 
-    def _begin_bulk_update(self, table_address: str = None):
+    def _begin_bulk_update(self, table_key: str = None):
         """
         Begin bulk update on the table viewer window for the given table.
         Called by undo commands before applying multiple changes for performance.
 
         Args:
-            table_address: Address of table being edited (if None, affects all visible windows)
+            table_key: Composite key (rom_path|table_address) or None for all windows
         """
         self._in_bulk_undo = True  # Defer _update_project_ui calls
         self._bulk_window_cache = {}  # Cache window lookups during bulk
         self._bulk_update_windows = []  # Track which windows we started
+
+        rom_path_str = extract_rom_path(table_key) if table_key else None
+        table_address = extract_table_address(table_key) if table_key else None
+
         for window in self.open_table_windows:
             if window.isVisible():
-                if table_address is None or window.table.address == table_address:
+                if table_key is None or (
+                    window.table.address == table_address and
+                    (rom_path_str is None or str(window.rom_path) == rom_path_str)
+                ):
                     window.viewer.begin_bulk_update()
                     self._bulk_update_windows.append(window)
 
-    def _end_bulk_update(self, table_address: str = None):
+    def _end_bulk_update(self, table_key: str = None):
         """
         End bulk update on table viewer windows.
         Called by undo commands after applying multiple changes.
 
         Args:
-            table_address: Address of table being edited (unused, we use tracked windows)
+            table_key: Composite key (unused, we use tracked windows)
         """
         # End bulk update on exactly the windows we started (not based on visibility)
         for window in getattr(self, '_bulk_update_windows', []):
@@ -1196,37 +1213,38 @@ class MainWindow(QMainWindow):
         self._update_modified_table_colors()
 
     def _update_modified_table_colors(self):
-        """Update table browser to show modified tables in pink"""
-        # Get list of modified table addresses from change tracker
-        modified_addresses = self.change_tracker.get_modified_table_addresses()
-
-        # Update all open ROM documents' table browsers
+        """Update table browser to show modified tables in pink (per-ROM filtering)"""
+        # Update each ROM document's table browser with only its own modified addresses
         for i in range(self.tab_widget.count()):
             document = self.tab_widget.widget(i)
-            if hasattr(document, 'table_browser'):
+            if hasattr(document, 'table_browser') and hasattr(document, 'rom_reader') and document.rom_reader:
+                rom_path = document.rom_reader.rom_path
+                modified_addresses = self.change_tracker.get_modified_addresses_for_rom(rom_path)
                 document.table_browser.update_modified_tables_by_address(modified_addresses)
 
     def _on_table_cell_changed(self, table, row: int, col: int,
                                old_value: float, new_value: float,
                                old_raw: float, new_raw: float):
         """Handle cell change from table viewer window"""
+        # Get ROM path from the sender window for multi-ROM isolation
+        sender = self.sender()
+        rom_path = getattr(sender, 'rom_path', None)
+
         # Record to undo manager (per-table undo/redo)
         self.table_undo_manager.record_cell_change(
             table, row, col,
             old_value, new_value,
-            old_raw, new_raw
+            old_raw, new_raw,
+            rom_path=rom_path
         )
 
         # Record to change tracker (for pending changes / commit tracking)
         self.change_tracker.record_pending_change(
             table, row, col,
             old_value, new_value,
-            old_raw, new_raw
+            old_raw, new_raw,
+            rom_path=rom_path
         )
-
-        # Write to the ROM that owns this table (sender is the TableViewerWindow)
-        sender = self.sender()
-        rom_path = getattr(sender, 'rom_path', None)
         document = self._find_document_by_rom_path(rom_path) if rom_path else self.get_current_document()
         if document:
             try:
@@ -1242,15 +1260,15 @@ class MainWindow(QMainWindow):
         if not changes:
             return
 
-        # Record to undo manager (per-table undo/redo)
-        self.table_undo_manager.record_bulk_cell_changes(table, changes, description)
-
-        # Record to change tracker (for pending changes / commit tracking)
-        self.change_tracker.record_pending_bulk_changes(table, changes)
-
-        # Write to the ROM that owns this table (sender is the TableViewerWindow)
+        # Get ROM path from the sender window for multi-ROM isolation
         sender = self.sender()
         rom_path = getattr(sender, 'rom_path', None)
+
+        # Record to undo manager (per-table undo/redo)
+        self.table_undo_manager.record_bulk_cell_changes(table, changes, description, rom_path=rom_path)
+
+        # Record to change tracker (for pending changes / commit tracking)
+        self.change_tracker.record_pending_bulk_changes(table, changes, rom_path=rom_path)
         document = self._find_document_by_rom_path(rom_path) if rom_path else self.get_current_document()
         if document:
             try:
@@ -1268,16 +1286,17 @@ class MainWindow(QMainWindow):
                                old_value: float, new_value: float,
                                old_raw: float, new_raw: float):
         """Handle axis change from table viewer window"""
+        # Get ROM path from the sender window for multi-ROM isolation
+        sender = self.sender()
+        rom_path = getattr(sender, 'rom_path', None)
+
         # Record to undo manager (per-table undo/redo)
         self.table_undo_manager.record_axis_change(
             table, axis_type, index,
             old_value, new_value,
-            old_raw, new_raw
+            old_raw, new_raw,
+            rom_path=rom_path
         )
-
-        # Write to the ROM that owns this table (sender is the TableViewerWindow)
-        sender = self.sender()
-        rom_path = getattr(sender, 'rom_path', None)
         document = self._find_document_by_rom_path(rom_path) if rom_path else self.get_current_document()
         if document:
             try:
@@ -1293,12 +1312,12 @@ class MainWindow(QMainWindow):
         if not changes:
             return
 
-        # Record to undo manager (per-table undo/redo)
-        self.table_undo_manager.record_axis_bulk_changes(table, changes, description)
-
-        # Write to the ROM that owns this table (sender is the TableViewerWindow)
+        # Get ROM path from the sender window for multi-ROM isolation
         sender = self.sender()
         rom_path = getattr(sender, 'rom_path', None)
+
+        # Record to undo manager (per-table undo/redo)
+        self.table_undo_manager.record_axis_bulk_changes(table, changes, description, rom_path=rom_path)
         document = self._find_document_by_rom_path(rom_path) if rom_path else self.get_current_document()
         if document:
             try:
@@ -1312,18 +1331,19 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 logger.error(f"Failed to write axis bulk changes: {e}")
 
-    def _on_table_window_focused(self, table_address: str):
+    def _on_table_window_focused(self, table_key: str):
         """
         Handle table viewer window gaining focus - highlight corresponding tree item
         and activate the correct undo stack.
 
         Args:
-            table_address: Address of the table that was focused
+            table_key: Composite key (rom_path|table_address) of the focused table
         """
         # Activate the undo stack for this table (enables per-table undo/redo)
-        self.table_undo_manager.set_active_stack(table_address)
+        self.table_undo_manager.set_active_stack(table_key)
 
         # Find the document containing this table and select it in the tree
+        table_address = extract_table_address(table_key)
         document = self.get_current_document()
         if document and hasattr(document, 'table_browser'):
             document.table_browser.select_table_by_address(table_address)
