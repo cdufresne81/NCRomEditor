@@ -198,11 +198,12 @@ class ScalingConverter:
                 if isinstance(value, np.ndarray) and not isinstance(result, np.ndarray):
                     result = np.full_like(value, result, dtype=float)
                 return result
-            except Exception:
+            except Exception as exc:
                 # Vectorised eval failed (e.g. division by zero on some element).
                 # Fall through to the per-element path below.
-                logger.debug(
-                    f"Vectorized eval failed for '{expr}', falling back to per-element"
+                logger.warning(
+                    f"Vectorized eval failed for '{expr}' ({type(exc).__name__}: {exc}), "
+                    f"falling back to per-element"
                 )
 
         # --- Fallback: per-element simpleeval ---
@@ -275,7 +276,13 @@ class RomReader:
             expected_id = self.definition.romid.internalidstring
             id_length = len(expected_id)
 
-            actual_id = self.rom_data[address:address + id_length].decode('ascii', errors='ignore')
+            raw_bytes = self.rom_data[address:address + id_length]
+            actual_id = raw_bytes.decode('ascii', errors='ignore')
+            if len(actual_id) != len(raw_bytes):
+                logger.warning(
+                    f"ROM ID at {hex(address)} contains non-ASCII bytes "
+                    f"({len(raw_bytes) - len(actual_id)} bytes dropped)"
+                )
             match = actual_id == expected_id
 
             if match:
@@ -389,6 +396,8 @@ class RomReader:
             y_axis = table.y_axis
             if y_axis:
                 y_scaling = self.definition.get_scaling(y_axis.scaling)
+                if not y_scaling:
+                    logger.warning(f"Scaling '{y_axis.scaling}' not found for Y axis of '{table.name}'")
                 if y_scaling:
                     y_raw = self._read_raw_values(
                         address=y_axis.address_int,
@@ -403,6 +412,8 @@ class RomReader:
             x_axis = table.x_axis
             if x_axis:
                 x_scaling = self.definition.get_scaling(x_axis.scaling)
+                if not x_scaling:
+                    logger.warning(f"Scaling '{x_axis.scaling}' not found for X axis of '{table.name}'")
                 if x_scaling:
                     x_raw = self._read_raw_values(
                         address=x_axis.address_int,
@@ -454,6 +465,13 @@ class RomReader:
         if isinstance(values, np.ndarray) and values.ndim > 1:
             order = 'F' if table.swapxy else 'C'
             values = values.flatten(order=order)
+
+        # Validate element count matches table definition
+        if len(values) != table.elements:
+            raise RomWriteError(
+                f"Value count mismatch for '{table.name}': "
+                f"got {len(values)}, expected {table.elements}"
+            )
 
         raw_values = converter.from_display(values)
 
