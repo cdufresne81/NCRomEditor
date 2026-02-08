@@ -2,11 +2,18 @@
 
 ## Next Tasks
 
+### Code Audit Round 2 (Feb 8, 2026) — 13 open findings
+See `docs/CODE_AUDIT_REPORT.md` for full details and batched action plan.
+- ~~**Batch D (main.py)** — DONE: Bug fix #43 + consolidated signal handlers~~
+- ~~**Batch A (rom_reader.py)** — DONE: Validate flatten size, improve error logging~~
+- ~~**Batch B (display.py)** — DONE: O(n^2) min/max caching, regex caching~~
+- ~~**Batch C (table_viewer.py)** — DONE: Removed redundant viewport repaints, optimized diff tooltips, removed dead info_label code~~
+- ~~**Batch E (table_undo_manager.py)** — DONE: Replaced pipe delimiter with null byte~~
+- ~~**Batch F (tests)** — DONE: Integration test + Windows path fix (246 tests, 0 failures)~~
+
 ### ROM Tools
 - **ROM comparison tool** - Compare two ROM files (stock vs modified), highlight differences in tables and raw data
-- **ROM modification tracking** - Git-like tracking for ROM edits, project organization with ROM aliases, change history viewer, export modification logs
-  - Detailed planning docs: `docs/MODIFICATION_TRACKING_PLAN.md` (full technical spec) and `docs/MODIFICATION_TRACKING_SUMMARY.md` (overview)
-  - Status: Not started, estimated 10 weeks part-time
+- **Project/versioning system** - Full rewrite planned (current code excluded from audit)
 
 ### Distribution
 - **Windows packaging** - Use PyInstaller to package as standalone .exe, test on clean Windows system
