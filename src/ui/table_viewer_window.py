@@ -479,9 +479,6 @@ class TableViewerWindow(QMainWindow):
         if self.viewer.x_axis_label.isVisible():
             content_height += self.viewer.x_axis_label.sizeHint().height()
 
-        # Add info label height (TEMPORARILY HIDDEN - not adding height)
-        # content_height += self.viewer.info_label.sizeHint().height()
-
         # Add menu bar height
         if self.menuBar():
             content_height += self.menuBar().height()

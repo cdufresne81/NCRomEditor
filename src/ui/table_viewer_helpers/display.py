@@ -22,6 +22,8 @@ from .context import (
 
 logger = logging.getLogger(__name__)
 
+_PRINTF_PATTERN = re.compile(r'%[-+0 #]*(\d*)\.?(\d*)([diouxXeEfFgGaAcspn%])')
+
 
 class TableDisplayHelper:
     """Helper class for table display and formatting operations"""
@@ -120,15 +122,6 @@ class TableDisplayHelper:
         self.ctx.current_data = data
 
         # Update info label - TEMPORARILY HIDDEN (user request)
-        # TODO: May want to restore this label later or make it toggleable
-        # info_text = (
-        #     f"{table.name} | "
-        #     f"Type: {table.type.value} | "
-        #     f"Category: {table.category} | "
-        #     f"Address: 0x{table.address}"
-        # )
-        # self.ctx.info_label.setText(info_text)
-
         values = data['values']
 
         if table.type == TableType.ONE_D:
@@ -142,7 +135,6 @@ class TableDisplayHelper:
         """Clear the viewer"""
         self.ctx.current_table = None
         self.ctx.current_data = None
-        # self.ctx.info_label.setText("Select a table to view")  # TEMPORARILY HIDDEN
         self.ctx.table_widget.setRowCount(0)
         self.ctx.table_widget.setColumnCount(0)
         # Hide axis labels
@@ -422,17 +414,21 @@ class TableDisplayHelper:
                     self.ctx.table_widget.setItem(row + 1, 0, y_val_item)
 
             # === Data cells (rows 1+, cols 1+) ===
-            for row in range(rows):
-                for col in range(cols):
-                    value_item = QTableWidgetItem(self.format_value(display_values[row, col], value_fmt))
-                    color = self.get_cell_color(display_values[row, col], values, row, col)
-                    value_item.setBackground(QBrush(color))
-                    data_row = (rows - 1 - row) if flipy else row
-                    data_col = (cols - 1 - col) if flipx else col
-                    value_item.setData(Qt.UserRole, (data_row, data_col))
-                    if self.ctx.read_only:
-                        value_item.setFlags(value_item.flags() & ~Qt.ItemIsEditable)
-                    self.ctx.table_widget.setItem(row + 1, col + 1, value_item)
+            self.cache_value_range(values)
+            try:
+                for row in range(rows):
+                    for col in range(cols):
+                        value_item = QTableWidgetItem(self.format_value(display_values[row, col], value_fmt))
+                        color = self.get_cell_color(display_values[row, col], values, row, col)
+                        value_item.setBackground(QBrush(color))
+                        data_row = (rows - 1 - row) if flipy else row
+                        data_col = (cols - 1 - col) if flipx else col
+                        value_item.setData(Qt.UserRole, (data_row, data_col))
+                        if self.ctx.read_only:
+                            value_item.setFlags(value_item.flags() & ~Qt.ItemIsEditable)
+                        self.ctx.table_widget.setItem(row + 1, col + 1, value_item)
+            finally:
+                self.clear_value_range_cache()
         finally:
             self.ctx.editing_in_progress = False
             # Re-enable signals and updates, trigger a single repaint (audit #22)
@@ -496,7 +492,7 @@ class TableDisplayHelper:
         if not printf_format:
             return ".2f"
 
-        match = re.match(r'%[-+0 #]*(\d*)\.?(\d*)([diouxXeEfFgGaAcspn%])', printf_format)
+        match = _PRINTF_PATTERN.match(printf_format)
         if not match:
             return ".2f"
 

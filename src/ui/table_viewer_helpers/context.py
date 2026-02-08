@@ -48,10 +48,6 @@ class TableViewerContext:
         """Check if viewer is in read-only mode"""
         return self.viewer._read_only
 
-    @property
-    def info_label(self):
-        """Access the info label widget"""
-        return self.viewer.info_label
 
 
 def save_header_resize_modes(table_widget: QTableWidget):
