@@ -11,7 +11,8 @@ See `docs/CODE_AUDIT_REPORT.md` for full details and batched action plan.
 - ~~**Batch E (table_undo_manager.py)** — DONE: Replaced pipe delimiter with null byte~~
 - ~~**Batch F (tests)** — DONE: Integration test + Windows path fix (246 tests, 0 failures)~~
 
-### ROM Tools
+### Features
+- ~~**Ctrl+S save** - DONE: Unified save — commits if project open with changes, otherwise saves ROM~~
 - **ROM comparison tool** - Compare two ROM files (stock vs modified), highlight differences in tables and raw data
 - **Project/versioning system** - Full rewrite planned (current code excluded from audit)
 

@@ -264,8 +264,9 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
         open_action = self.file_menu.addAction("Open ROM...")
         open_action.triggered.connect(self.open_rom)
 
-        save_action = self.file_menu.addAction("Save ROM")
-        save_action.triggered.connect(self.save_rom)
+        save_action = self.file_menu.addAction("Save")
+        save_action.setShortcut("Ctrl+S")
+        save_action.triggered.connect(self._save)
 
         save_as_action = self.file_menu.addAction("Save ROM As...")
         save_as_action.triggered.connect(self.save_rom_as)
@@ -274,7 +275,6 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
 
         # Commit (for projects)
         self.commit_action = self.file_menu.addAction("Commit Changes...")
-        self.commit_action.setShortcut("Ctrl+S")
         self.commit_action.triggered.connect(self.commit_changes)
         self.commit_action.setEnabled(False)
 
@@ -557,6 +557,13 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
                 self, "Error",
                 f"Unexpected error opening ROM file:\n{type(e).__name__}: {e}"
             )
+
+    def _save(self):
+        """Unified save: commit if project is open with changes, otherwise save ROM."""
+        if self.project_manager.is_project_open() and self.change_tracker.has_pending_changes():
+            self.commit_changes()
+        else:
+            self.save_rom()
 
     def save_rom(self):
         """Save the current ROM file"""
