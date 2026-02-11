@@ -105,6 +105,10 @@ class TableViewerWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
+        # Match empty areas (e.g. beyond table cells) to the window background
+        win_color = central_widget.palette().window().color().name()
+        central_widget.setStyleSheet(f"background-color: {win_color};")
+
         # Main layout
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
