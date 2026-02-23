@@ -23,7 +23,7 @@ See `docs/CODE_AUDIT_REPORT.md` for full details and batched action plan.
 - **Windows packaging** - Use PyInstaller to package as standalone .exe, test on clean Windows system
 
 ## Environment Notes
-- Use `python3` not `python` (WSL2 environment lacks symlink)
+- Use `python` not `python3` (Windows environment)
 
 ## Recent Completed Work (Feb 10, 2026) - Table Viewer Auto-Size Fix
 - **Fixed table viewer window not showing all rows for 3D tables** — `_auto_size_window()` rewritten to use `header.length()` API instead of manual row/column iteration. Added one-row-height safety padding to prevent the last row from being clipped behind the horizontal scrollbar (the scrollbar `sizeHint()` underreports actual size on themed/high-DPI systems). Also subtracts 40px from available geometry for OS window frame. Verified on 1D, 2D, 3D, and large 3D tables.

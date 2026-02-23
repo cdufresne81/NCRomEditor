@@ -18,9 +18,12 @@ from PySide6.QtWidgets import (
     QSplitter,
     QFileDialog,
     QMessageBox,
-    QTabWidget
+    QTabWidget,
+    QToolButton,
+    QColorDialog,
 )
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QColor
 
 from src.utils.logging_config import setup_logging, get_logger
 from src.utils.settings import get_settings
@@ -110,6 +113,21 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
             begin_bulk_update=self._begin_bulk_update,
             end_bulk_update=self._end_bulk_update,
         )
+
+        # Per-ROM background colors: {rom_path: QColor or None}
+        # First ROM gets None (default gray), subsequent ROMs get auto-assigned tints
+        self.rom_colors = {}
+        self._color_palette = [
+            QColor(180, 210, 240),  # soft blue
+            QColor(210, 240, 180),  # soft green
+            QColor(240, 210, 180),  # soft peach
+            QColor(220, 190, 240),  # soft purple
+            QColor(240, 230, 180),  # soft yellow
+            QColor(180, 235, 220),  # soft teal
+            QColor(240, 190, 210),  # soft pink
+            QColor(200, 220, 200),  # soft sage
+        ]
+        self._next_color_index = 0
 
         # ROM detector initialized in _deferred_init (XML parsing is heavy)
         self.rom_detector = None
@@ -416,6 +434,7 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
             if rom_path:
                 self.modified_cells.pop(rom_path, None)
                 self.original_table_values.pop(rom_path, None)
+                self.rom_colors.pop(rom_path, None)
 
         # Remove the tab and schedule widget cleanup
         self.tab_widget.removeTab(index)
@@ -440,6 +459,65 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
                 logger.info(f"Switched to ROM: {document.file_name}")
         else:
             self.update_window_title()
+
+    def _assign_rom_color(self, rom_path):
+        """Assign a background color for a newly opened ROM.
+        First ROM gets None (default gray), subsequent ROMs get palette colors."""
+        if not self.rom_colors:
+            # First ROM — keep default gray
+            self.rom_colors[rom_path] = None
+        else:
+            color = self._color_palette[self._next_color_index % len(self._color_palette)]
+            self.rom_colors[rom_path] = color
+            self._next_color_index += 1
+        return self.rom_colors[rom_path]
+
+    def _create_tab_color_button(self, rom_path, tab_index):
+        """Create a small color swatch button on the left side of a tab."""
+        color = self.rom_colors.get(rom_path)
+        btn = QToolButton()
+        btn.setFixedSize(16, 16)
+        btn.setAutoRaise(True)
+        self._style_color_button(btn, color)
+        btn.clicked.connect(lambda: self._pick_rom_color(rom_path))
+        self.tab_widget.tabBar().setTabButton(tab_index, self.tab_widget.tabBar().ButtonPosition.LeftSide, btn)
+
+    def _style_color_button(self, btn, color):
+        """Apply color swatch styling to a tab button."""
+        if color:
+            btn.setStyleSheet(
+                f"QToolButton {{ background-color: {color.name()}; border: 1px solid #888; border-radius: 3px; }}"
+                f"QToolButton:hover {{ border: 1px solid #444; }}"
+            )
+        else:
+            # Default gray — use system window color
+            btn.setStyleSheet(
+                "QToolButton { background-color: palette(window); border: 1px solid #888; border-radius: 3px; }"
+                "QToolButton:hover { border: 1px solid #444; }"
+            )
+
+    def _pick_rom_color(self, rom_path):
+        """Open color picker for a ROM and apply the chosen color."""
+        current = self.rom_colors.get(rom_path)
+        initial = current if current else self.palette().window().color()
+        color = QColorDialog.getColor(initial, self, "Choose ROM color")
+        if not color.isValid():
+            return
+        self.rom_colors[rom_path] = color
+
+        # Update the tab color button
+        for i in range(self.tab_widget.count()):
+            doc = self.tab_widget.widget(i)
+            if doc and hasattr(doc, 'rom_reader') and doc.rom_reader and doc.rom_reader.rom_path == rom_path:
+                btn = self.tab_widget.tabBar().tabButton(i, self.tab_widget.tabBar().ButtonPosition.LeftSide)
+                if btn:
+                    self._style_color_button(btn, color)
+                break
+
+        # Update all open table viewer windows for this ROM
+        for window in self.open_table_windows:
+            if window.rom_path == rom_path:
+                window.set_rom_color(color)
 
     def _update_tab_title(self, document):
         """Update tab title to show modified state"""
@@ -524,10 +602,15 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
             rom_document.table_selected.connect(self.on_table_selected)
             rom_document.modified_changed.connect(lambda modified, doc=rom_document: self._update_tab_title(doc))
 
-            # Add as new tab
+            # Assign a color for this ROM (first ROM = default gray)
+            rom_path = rom_reader.rom_path
+            self._assign_rom_color(rom_path)
+
+            # Add as new tab with color swatch
             file_name = Path(file_path).name
             tab_index = self.tab_widget.addTab(rom_document, file_name)
             self.tab_widget.setTabToolTip(tab_index, file_path)
+            self._create_tab_color_button(rom_path, tab_index)
             self.tab_widget.setCurrentIndex(tab_index)
 
             # Add to recent files list
@@ -663,7 +746,8 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
                     # Window already exists - bring to focus
                     window.raise_()
                     window.activateWindow()
-                    logger.info(f"Table already open, bringing to focus: {table.name}")
+                    rom_label = Path(rom_path).stem
+                    logger.info(f"[{rom_label}] Table already open, bringing to focus: {table.name}")
                     self.statusBar().showMessage(f"Table already open: {table.name}")
                     return
 
@@ -695,7 +779,8 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
                     table, data, rom_reader.definition,
                     rom_path=rom_path, parent=self,
                     modified_cells_dict=self.modified_cells[rom_path],
-                    original_values_dict=self.original_table_values[rom_path]
+                    original_values_dict=self.original_table_values[rom_path],
+                    bg_color=self.rom_colors.get(rom_path),
                 )
 
                 # Connect cell_changed signal to change tracker
@@ -719,7 +804,8 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
                 self.open_table_windows.append(viewer_window)
 
                 # Log to console
-                logger.info(f"Opened table: {table.name} ({table.address})")
+                rom_label = Path(rom_path).stem
+                logger.info(f"[{rom_label}] Opened table: {table.name} ({table.address})")
                 logger.debug(f"  Category: {table.category}")
                 logger.debug(f"  Type: {table.type.value}")
                 logger.debug(f"  Address: {table.address}")
