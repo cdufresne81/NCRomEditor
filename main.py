@@ -132,6 +132,9 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
         # ROM detector initialized in _deferred_init (XML parsing is heavy)
         self.rom_detector = None
 
+        # Singleton comparison window reference
+        self.compare_window = None
+
         # Initialize UI (lightweight widget creation)
         self.init_ui()
         self.init_menu()
@@ -338,6 +341,14 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
         history_action = view_menu.addAction("Commit History...")
         history_action.triggered.connect(self.show_history)
 
+        # Compare menu (Alt+C)
+        compare_menu = menubar.addMenu("&Compare")
+
+        self.compare_action = compare_menu.addAction("Compare Open &ROMs...")
+        self.compare_action.setShortcut("Ctrl+Shift+D")
+        self.compare_action.triggered.connect(self._on_compare_roms)
+        self.compare_action.setEnabled(False)
+
         # Help menu (Alt+H)
         help_menu = menubar.addMenu("&Help")
 
@@ -443,6 +454,7 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
         self.update_window_title()
 
         logger.info(f"Closed ROM tab: {document.file_name if document else 'unknown'}")
+        self._update_compare_action()
 
     def close_current_tab(self):
         """Close the currently active tab"""
@@ -459,6 +471,7 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
                 logger.info(f"Switched to ROM: {document.file_name}")
         else:
             self.update_window_title()
+        self._update_compare_action()
 
     def _assign_rom_color(self, rom_path):
         """Assign a background color for a newly opened ROM.
@@ -633,6 +646,8 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
                 f"({len(rom_definition.tables)} tables)"
             )
 
+            self._update_compare_action()
+
         except (DetectionError, RomFileError, DefinitionError) as e:
             handle_rom_operation_error(self, "open ROM file", e)
         except Exception as e:
@@ -730,6 +745,102 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
                     self, "Error",
                     f"Unexpected error saving ROM file:\n{type(e).__name__}: {e}"
                 )
+
+    # ========== ROM Comparison ==========
+
+    def _update_compare_action(self):
+        """Enable/disable the Compare action based on open ROM count."""
+        self.compare_action.setEnabled(self.tab_widget.count() >= 2)
+
+    def _on_compare_roms(self):
+        """Open the ROM comparison window."""
+        from src.ui.compare_window import CompareWindow
+
+        count = self.tab_widget.count()
+        if count < 2:
+            QMessageBox.information(
+                self, "Compare",
+                "Open at least two ROM files to compare."
+            )
+            return
+
+        # Close existing compare window
+        if self.compare_window is not None:
+            self.compare_window.close()
+            self.compare_window = None
+
+        if count == 2:
+            doc_a = self.tab_widget.widget(0)
+            doc_b = self.tab_widget.widget(1)
+        else:
+            # Let user pick which two ROMs to compare
+            rom_names = []
+            for i in range(count):
+                doc = self.tab_widget.widget(i)
+                rom_names.append(doc.file_name)
+
+            from PySide6.QtWidgets import QInputDialog
+            name_a, ok = QInputDialog.getItem(
+                self, "Compare ROMs", "Select original (base) ROM:",
+                rom_names, 0, False
+            )
+            if not ok:
+                return
+            idx_a = rom_names.index(name_a)
+
+            remaining = [n for i, n in enumerate(rom_names) if i != idx_a]
+            name_b, ok = QInputDialog.getItem(
+                self, "Compare ROMs", "Select modified ROM:",
+                remaining, 0, False
+            )
+            if not ok:
+                return
+            idx_b = rom_names.index(name_b)
+
+            doc_a = self.tab_widget.widget(idx_a)
+            doc_b = self.tab_widget.widget(idx_b)
+
+        # Validate same definition
+        if doc_a.rom_definition.romid.xmlid != doc_b.rom_definition.romid.xmlid:
+            QMessageBox.warning(
+                self, "Compare",
+                "Cannot compare ROMs with different definitions.\n\n"
+                f"  {doc_a.file_name}: {doc_a.rom_definition.romid.xmlid}\n"
+                f"  {doc_b.file_name}: {doc_b.rom_definition.romid.xmlid}"
+            )
+            return
+
+        # Get ROM colors
+        color_a = self.rom_colors.get(doc_a.rom_reader.rom_path)
+        color_b = self.rom_colors.get(doc_b.rom_reader.rom_path)
+
+        self.statusBar().showMessage("Computing ROM differences...")
+
+        window = CompareWindow(
+            doc_a.rom_reader, doc_b.rom_reader,
+            doc_a.rom_definition,
+            color_a, color_b,
+            doc_a.file_name, doc_b.file_name,
+            parent=self,
+        )
+
+        if not window.has_diffs:
+            window.deleteLater()
+            QMessageBox.information(
+                self, "Compare",
+                "ROMs are identical \u2014 no differences found."
+            )
+            self.statusBar().showMessage("No differences found.")
+            return
+
+        self.compare_window = window
+        window.show()
+
+        n = len(window._modified_tables)
+        self.statusBar().showMessage(
+            f"Comparing {doc_a.file_name} vs {doc_b.file_name} \u2014 {n} tables differ"
+        )
+        logger.info(f"ROM comparison opened: {doc_a.file_name} vs {doc_b.file_name} ({n} tables differ)")
 
     # ========== Table Selection and Window Management ==========
 

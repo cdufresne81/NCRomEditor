@@ -16,7 +16,7 @@ See `docs/CODE_AUDIT_REPORT.md` for full details and batched action plan.
 
 ### Features
 - ~~**Ctrl+S save** - DONE: Unified save — commits if project open with changes, otherwise saves ROM~~
-- **ROM comparison tool** - Compare two ROM files (stock vs modified), highlight differences in tables and raw data
+- ~~**ROM comparison tool** - DONE: Side-by-side comparison window with table diff~~
 - **Project/versioning system** - Full rewrite planned (current code excluded from audit)
 
 ### Distribution
@@ -24,6 +24,9 @@ See `docs/CODE_AUDIT_REPORT.md` for full details and batched action plan.
 
 ## Environment Notes
 - Use `python` not `python3` (Windows environment)
+
+## Recent Completed Work (Feb 23, 2026) - ROM Comparison Tool
+- **Added ROM comparison tool** — New `CompareWindow` (`src/ui/compare_window.py`) provides side-by-side table comparison between two open ROMs. Features: category tree sidebar listing modified tables with change counts, synchronized scrolling between original and modified panels, changed cells highlighted with gray border (matching `ModifiedCellDelegate` pattern), "Changed only" toggle that dims unchanged cells, keyboard navigation (Up/Down to switch tables, T to toggle, Esc to close). Window supports maximize. Compact "Original"/"Modified" labels above each table panel. Accessible via Compare > Compare Open ROMs (Ctrl+Shift+D). Supports 1D, 2D, and 3D table types with proper axis display, flip handling, and thermal gradient coloring. Validates same ROM definition type before comparing. Spec at `docs/specs/ROM_COMPARISON_TOOL.md`, HTML mockups at `docs/mockups/`.
 
 ## Recent Completed Work (Feb 22, 2026) - Table Viewer Toolbar
 - **Added action toolbar to table viewer window** — 12 quick-access buttons below the menu bar with programmatic QPainter icons (high-DPI aware). Grouped by function: File (clipboard, export CSV), Basic edits (increment, decrement), Value ops (add to data, multiply, set value), Interpolation (vertical, horizontal, 2D, smooth), View (graph toggle). Edit actions auto-disabled in diff mode. Graph toggle button syncs checked state with View menu. Toolbar height accounted for in auto-sizing.
