@@ -444,22 +444,28 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
             p.drawLine(11, 12, 9, 12)
 
         elif name == "settings":
-            # Gear
+            # Gear with flat-topped teeth
             from math import cos, sin, pi
-            cx, cy, r_out, r_in = 10, 10, 8, 5
-            teeth = 8
+            from PySide6.QtCore import QPointF
+            from PySide6.QtGui import QPolygonF
+            cx, cy, r_out, r_in = 10, 10, 8.5, 5.5
+            teeth = 6
+            tooth_half = 0.28  # half-width of tooth in radians fraction
             pts = []
             for i in range(teeth):
-                a_out = 2 * pi * i / teeth - pi / 2
-                a_in = 2 * pi * (i + 0.5) / teeth - pi / 2
-                pts.append((cx + r_out * cos(a_out), cy + r_out * sin(a_out)))
-                pts.append((cx + r_in * cos(a_in), cy + r_in * sin(a_in)))
-            for i in range(len(pts)):
-                x1, y1 = pts[i]
-                x2, y2 = pts[(i + 1) % len(pts)]
-                p.drawLine(int(x1), int(y1), int(x2), int(y2))
+                a = 2 * pi * i / teeth - pi / 2
+                # Outer edge of tooth (two corners)
+                pts.append(QPointF(cx + r_out * cos(a - tooth_half), cy + r_out * sin(a - tooth_half)))
+                pts.append(QPointF(cx + r_out * cos(a + tooth_half), cy + r_out * sin(a + tooth_half)))
+                # Inner edge (valley between teeth)
+                a_next = 2 * pi * (i + 0.5) / teeth - pi / 2
+                pts.append(QPointF(cx + r_in * cos(a + tooth_half), cy + r_in * sin(a + tooth_half)))
+                pts.append(QPointF(cx + r_in * cos(a_next + tooth_half), cy + r_in * sin(a_next + tooth_half)))
+            poly = QPolygonF(pts)
+            p.setBrush(Qt.NoBrush)
+            p.drawPolygon(poly)
             # Center circle
-            p.drawEllipse(7, 7, 6, 6)
+            p.drawEllipse(QPointF(cx, cy), 2.5, 2.5)
 
         p.end()
         return QIcon(pm)

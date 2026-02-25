@@ -17,6 +17,7 @@ See `docs/CODE_AUDIT_REPORT.md` for full details and batched action plan.
 ### Features
 - ~~**Ctrl+S save** - DONE: Unified save — commits if project open with changes, otherwise saves ROM~~
 - ~~**ROM comparison tool** - DONE: Side-by-side comparison window with table diff~~
+- ~~**Cross-definition ROM comparison** - DONE: Name-based table matching, per-ROM definitions, one-sided/shape-mismatch support~~
 - **Project/versioning system** - Full rewrite planned (current code excluded from audit)
 
 ### Distribution
