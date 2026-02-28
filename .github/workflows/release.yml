@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Windows Installer
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-build.txt
+
+    - name: Run tests
+      run: pytest
+
+    - name: Build with PyInstaller
+      run: pyinstaller NCRomEditor.spec --noconfirm
+
+    - name: Verify build output
+      run: |
+        if (!(Test-Path "dist\NCRomEditor\NCRomEditor.exe")) {
+          Write-Error "NCRomEditor.exe not found"
+          exit 1
+        }
+        Write-Output "Build verified: dist\NCRomEditor\NCRomEditor.exe"
+      shell: pwsh
+
+    - name: Install Inno Setup
+      run: choco install innosetup --yes --no-progress
+      shell: pwsh
+
+    - name: Build installer
+      run: |
+        & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer.iss
+      shell: pwsh
+
+    - name: Verify installer output
+      run: |
+        $installer = Get-ChildItem -Path Output -Filter "*.exe" | Select-Object -First 1
+        if (!$installer) {
+          Write-Error "Installer exe not found in Output/"
+          exit 1
+        }
+        Write-Output "Installer built: $($installer.FullName) ($([math]::Round($installer.Length / 1MB, 1)) MB)"
+      shell: pwsh
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: Output/*.exe
+        generate_release_notes: true
