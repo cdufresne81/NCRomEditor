@@ -79,6 +79,12 @@ python main.py
 - Cell selection highlighting on graph
 - Configurable color maps
 
+### ECU Flashing
+- One-click flash via RomDrop integration (`Ctrl+Shift+F`)
+- Safety warning dialog with pre-flash checklist (dynamic flash mode only)
+- Auto-saves unsaved changes before flashing
+- Configurable RomDrop executable path in Settings → Tools
+
 ### ROM Comparison
 - Side-by-side comparison of two ROMs (`Ctrl+Shift+D`)
 - Category tree listing all modified tables with change counts
