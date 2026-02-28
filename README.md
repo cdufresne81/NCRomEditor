@@ -16,6 +16,11 @@ NC ROM Editor is a desktop application that allows you to read, edit, and save E
 
 ## Installation
 
+### Windows Installer
+Download the latest installer from [GitHub Releases](https://github.com/cdufresne81/NCRomEditor/releases).
+
+> **Note:** The installer is not code-signed, so Windows SmartScreen may show an "Unknown publisher" warning. Click **"More info"** then **"Run anyway"** to proceed. This is normal for open-source software without a paid signing certificate.
+
 ### Clone the Repository
 ```bash
 git clone https://github.com/cdufresne81/NCRomEditor.git
@@ -255,7 +260,6 @@ This version includes full table editing, project management with version histor
 
 **Next Priorities:**
 - Project management
-- Windows installer (Inno Setup)
 
 ## Contributing
 
