@@ -40,10 +40,14 @@ python main.py
 ### Core Features
 - Automatic ROM ID detection and XML definition matching
 - Read NC Miata ECU ROM binary files
-- Search and browse tables organized by category
 - View 1D, 2D, and 3D tables with proper axis labels
 - Save modified ROM files
 - ROM ID verification
+
+### Table Browser
+- Browse tables organized by category
+- Search tables by category, name or address 
+- Show only modified tables.
 
 ### Table Editing
 - Direct cell value editing with validation
@@ -79,13 +83,13 @@ python main.py
 
 ### User Interface
 - Multi-ROM support with tabs
+- Per-ROM color swatches on tabs to easily identify which ROM is which when multiple files are open
 - Multi-window table viewers
 - Recent files list
-- Session restoration
+- Session restoration (automatically reopen last ROM)
 - Configurable settings (font size, color maps)
-- Activity log console
+- Verbose activity log console
 - Keyboard shortcuts for all major operations
-- Per-ROM color coding with tab swatches
 
 ### In Development
 - Projects management
