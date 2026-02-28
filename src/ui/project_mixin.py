@@ -18,7 +18,7 @@ This is a mixin class — it has no __init__ and relies on MainWindow providing:
 
 from pathlib import Path
 
-from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
+from PySide6.QtWidgets import QDialog, QMessageBox
 
 from src.utils.logging_config import get_logger
 from src.core.definition_parser import load_definition
