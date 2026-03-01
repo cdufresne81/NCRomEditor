@@ -2,7 +2,7 @@
 
 All notable changes to NC ROM Editor are documented here.
 
-## [Unreleased]
+## [v1.5.0] - 2026-03-01
 
 ### Added
 - **RomDrop setup wizard** — First-run wizard now asks for the RomDrop installation folder (not just a definitions directory). Step 1 selects the folder, Step 2 confirms derived paths for `romdrop.exe` and `metadata/` with green/red validation indicators. Both paths are editable for non-standard layouts
