@@ -6,6 +6,7 @@ An open-source ROM editor for NC Miata ECUs
 """
 
 import json
+import os
 import sys
 import subprocess
 import logging
@@ -900,8 +901,12 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
     def _show_mcp_connection_info(self):
         """Show connection instructions after manually starting the MCP server."""
         url = f"http://127.0.0.1:{self.MCP_SSE_PORT}/sse"
+
+        # Build STDIO config using run-mcp.bat for Claude Desktop
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        bat_path = os.path.join(app_dir, "run-mcp.bat")
         config_snippet = json.dumps(
-            {"mcpServers": {"nc-rom-editor": {"url": url}}},
+            {"mcpServers": {"nc-rom-editor": {"command": bat_path, "args": []}}},
             indent=2,
         )
 
@@ -928,7 +933,7 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
         snippet_box = QTextEdit()
         snippet_box.setPlainText(config_snippet)
         snippet_box.setReadOnly(True)
-        snippet_box.setFixedHeight(110)
+        snippet_box.setFixedHeight(130)
         snippet_box.setStyleSheet(
             "font-family: Consolas, monospace; font-size: 12px; background: #f5f5f5;"
         )
