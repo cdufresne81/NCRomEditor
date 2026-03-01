@@ -384,10 +384,9 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin):
         settings_action = edit_menu.addAction("Settings...")
         settings_action.triggered.connect(self.show_settings)
 
-        # View menu (Alt+V)
-        view_menu = menubar.addMenu("&View")
-
+        # View menu (Alt+V) — only shown when projects are enabled
         if self.projects_enabled:
+            view_menu = menubar.addMenu("&View")
             history_action = view_menu.addAction("Commit History...")
             history_action.triggered.connect(self.show_history)
 

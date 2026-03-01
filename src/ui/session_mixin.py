@@ -130,7 +130,7 @@ class SessionMixin:
 
     def show_settings(self):
         """Show settings dialog"""
-        dialog = SettingsDialog(self)
+        dialog = SettingsDialog(self, projects_enabled=self.projects_enabled)
         dialog.settings_changed.connect(self.on_settings_changed)
         dialog.exec()
 

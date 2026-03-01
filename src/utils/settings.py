@@ -198,6 +198,25 @@ class AppSettings:
         """
         self.settings.setValue("paths/colormap_directory", path)
 
+    def get_export_directory(self) -> str:
+        """
+        Get the configured CSV export directory path
+
+        Returns:
+            str: Path to export directory
+        """
+        default_path = str(get_user_data_dir() / "exports")
+        return self.settings.value("paths/export_directory", default_path)
+
+    def set_export_directory(self, path: str):
+        """
+        Set the CSV export directory path
+
+        Args:
+            path: Path to export directory, or empty string for default
+        """
+        self.settings.setValue("paths/export_directory", path)
+
     def get_projects_directory(self) -> str:
         """
         Get the configured projects directory path
