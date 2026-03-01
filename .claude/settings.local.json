@@ -8,12 +8,8 @@
       "Glob",
       "Grep",
       "WebFetch",
-      "Skill(mind:mind)",
       "WebSearch",
-      "Skill(eyesight)",
-      "Skill(eyesight:*)",
-      "mcp__ide__getDiagnostics",
-      "mcp__ide__executeCode"
+      "Skill(eyesight)"
     ],
     "ask": [
       "Bash(rm -rf*)",
