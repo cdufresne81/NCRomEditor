@@ -113,7 +113,7 @@ python main.py
 - Built-in MCP server for AI assistants (Claude, ChatGPT, Gemini)
 - Start/stop from the app via Tools menu or toolbar
 - Auto-discovery of open ROMs — AI can see what you're working on
-- 6 read-only tools: get workspace, ROM info, list tables, read table, compare tables, statistics
+- 9 tools: read-only inspection (ROM info, list/read/compare tables, statistics) plus live read/write through the app with full undo support
 - Works with Claude Code (`.mcp.json`) and Claude Desktop (`claude_desktop_config.json`)
 - Optional auto-start on app launch (Settings > Tools)
 
@@ -176,6 +176,8 @@ nc-rom-editor/
 │   │   ├── history_viewer.py          # Version history viewer
 │   │   ├── project_wizard.py          # Project creation dialog
 │   │   └── settings_dialog.py         # Settings/preferences
+│   ├── api/                           # Command API (HTTP bridge for MCP)
+│   │   └── command_server.py          # HTTP server bridging to Qt thread
 │   ├── mcp/                           # MCP server for AI assistants
 │   │   ├── server.py                  # FastMCP server (STDIO + SSE)
 │   │   └── rom_context.py            # ROM loading, caching, tool logic

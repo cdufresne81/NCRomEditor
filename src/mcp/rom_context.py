@@ -7,6 +7,8 @@ and implements the core logic for all MCP tools.
 
 import json
 import re
+import urllib.request
+import urllib.error
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -588,3 +590,65 @@ class RomContext:
             }
 
         return stats
+
+    # ------------------------------------------------------------------
+    # Live app bridge — these POST to the app's command API
+    # ------------------------------------------------------------------
+
+    def _post_to_app(self, payload: dict) -> dict:
+        """POST JSON to the app's command API server.
+
+        Reads the command_api_url from workspace.json. Returns the
+        parsed JSON response, or an error dict on failure.
+        """
+        workspace = self.get_workspace()
+        url = workspace.get("command_api_url")
+        if not url:
+            return {
+                "success": False,
+                "error": "App command API not available. Start MCP server from the app.",
+            }
+
+        body = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url + payload["endpoint"],
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return json.loads(resp.read())
+        except urllib.error.URLError as e:
+            return {
+                "success": False,
+                "error": f"Cannot connect to app. Is the app running? ({e})",
+            }
+        except TimeoutError:
+            return {"success": False, "error": "Request timed out"}
+        except json.JSONDecodeError:
+            return {"success": False, "error": "Invalid response from app"}
+
+    def list_modified_tables(self, rom_path: str) -> dict:
+        """List tables with unsaved modifications in the running app."""
+        return self._post_to_app({
+            "endpoint": "/api/modified",
+            "rom_path": rom_path,
+        })
+
+    def read_live_table(self, rom_path: str, table_name: str) -> dict:
+        """Read a table's current in-memory values from the running app."""
+        return self._post_to_app({
+            "endpoint": "/api/read-table",
+            "rom_path": rom_path,
+            "table_name": table_name,
+        })
+
+    def write_table(self, rom_path: str, table_name: str, cells: list) -> dict:
+        """Write values to a ROM table through the app's editing pipeline."""
+        return self._post_to_app({
+            "endpoint": "/api/edit-table",
+            "rom_path": rom_path,
+            "table_name": table_name,
+            "cells": cells,
+        })

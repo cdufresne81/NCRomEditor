@@ -1,11 +1,13 @@
 """
-MCP Server for read-only ROM access.
+MCP Server for NC Miata ECU ROM access.
 
-Exposes ROM inspection tools via the Model Context Protocol.
+Exposes ROM inspection and editing tools via the Model Context Protocol.
 Supports STDIO transport (default, for CLI clients like Claude Code)
 and SSE transport (for app-managed server, any client connects via HTTP).
 
-No Qt/GUI dependency — imports only src.core modules.
+Disk-based tools (read_table, list_tables, etc.) have no Qt dependency.
+Live tools (read_live_table, write_table, list_modified_tables) communicate
+with the running app via its command API HTTP bridge.
 
 Usage:
     python -m src.mcp.server [--definitions-dir PATH] [--transport stdio|sse] [--port PORT]
@@ -39,7 +41,7 @@ def _create_mcp(port: int = DEFAULT_SSE_PORT) -> FastMCP:
     """Create and configure the FastMCP server instance with all tools."""
     server = FastMCP(
         "nc-rom-editor",
-        instructions="Read-only access to NC Miata ECU ROM files — inspect tables, values, and compare ROMs",
+        instructions="Access NC Miata ECU ROM files — inspect tables, values, compare ROMs, and edit live table values through the app",
         host="127.0.0.1",
         port=port,
     )
@@ -143,6 +145,52 @@ def _create_mcp(port: int = DEFAULT_SSE_PORT) -> FastMCP:
             table_name: Exact name of the table to analyze.
         """
         return _get_ctx().get_table_statistics(rom_path, table_name)
+
+    # ------------------------------------------------------------------
+    # Live app bridge tools (require app running with MCP server enabled)
+    # ------------------------------------------------------------------
+
+    @server.tool()
+    def list_modified_tables(rom_path: str) -> dict:
+        """List tables with unsaved modifications in the running app.
+
+        Returns table names and change counts for the given ROM.
+        Requires the app to be running with MCP server enabled.
+
+        Args:
+            rom_path: Path to the ROM binary file (as shown in get_workspace).
+        """
+        return _get_ctx().list_modified_tables(rom_path)
+
+    @server.tool()
+    def read_live_table(rom_path: str, table_name: str) -> dict:
+        """Read a table's current in-memory values from the running app.
+
+        Unlike read_table (which reads from disk), this returns unsaved edits.
+        Same output format as read_table.
+        Requires the app to be running with MCP server enabled.
+
+        Args:
+            rom_path: Path to the ROM binary file (as shown in get_workspace).
+            table_name: Exact name of the table to read.
+        """
+        return _get_ctx().read_live_table(rom_path, table_name)
+
+    @server.tool()
+    def write_table(rom_path: str, table_name: str, cells: list[dict]) -> dict:
+        """Write values to a ROM table through the app's editing pipeline.
+
+        Changes appear in the app with full undo support.
+        Values are in display units (same as read_table/read_live_table).
+        Requires the app to be running with MCP server enabled.
+
+        Args:
+            rom_path: Path to the ROM binary file (as shown in get_workspace).
+            table_name: Exact name of the table to edit.
+            cells: List of cell edits, each a dict with "row", "col", "value" keys.
+                   Example: [{"row": 0, "col": 0, "value": 42.5}]
+        """
+        return _get_ctx().write_table(rom_path, table_name, cells)
 
     return server
 
