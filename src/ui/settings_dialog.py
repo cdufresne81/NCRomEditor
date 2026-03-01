@@ -34,11 +34,12 @@ class SettingsDialog(QDialog):
     # Signal emitted when settings are applied
     settings_changed = Signal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, projects_enabled=False):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMinimumSize(600, 400)
         self.settings = get_settings()
+        self.projects_enabled = projects_enabled
         self.init_ui()
         self.load_settings()
 
@@ -77,22 +78,23 @@ class SettingsDialog(QDialog):
         paths_layout = QFormLayout()
         paths_group.setLayout(paths_layout)
 
-        # Projects directory setting
-        projects_layout = QHBoxLayout()
-        self.projects_path_edit = QLineEdit()
-        self.projects_path_edit.setPlaceholderText("Path to store ROM projects")
-        projects_layout.addWidget(self.projects_path_edit)
+        # Projects directory setting (only when projects feature is enabled)
+        if self.projects_enabled:
+            projects_layout = QHBoxLayout()
+            self.projects_path_edit = QLineEdit()
+            self.projects_path_edit.setPlaceholderText("Path to store ROM projects")
+            projects_layout.addWidget(self.projects_path_edit)
 
-        browse_projects_button = QPushButton("Browse...")
-        browse_projects_button.clicked.connect(self.browse_projects_directory)
-        projects_layout.addWidget(browse_projects_button)
+            browse_projects_button = QPushButton("Browse...")
+            browse_projects_button.clicked.connect(self.browse_projects_directory)
+            projects_layout.addWidget(browse_projects_button)
 
-        paths_layout.addRow("Projects Directory:", projects_layout)
+            paths_layout.addRow("Projects Directory:", projects_layout)
 
-        # Add help text for projects
-        projects_help = QLabel("Location where ROM tuning projects are stored")
-        projects_help.setStyleSheet("color: gray; font-size: 10px;")
-        paths_layout.addRow("", projects_help)
+            # Add help text for projects
+            projects_help = QLabel("Location where ROM tuning projects are stored")
+            projects_help.setStyleSheet("color: gray; font-size: 10px;")
+            paths_layout.addRow("", projects_help)
 
         # Definitions directory setting
         definitions_layout = QHBoxLayout()
@@ -112,6 +114,25 @@ class SettingsDialog(QDialog):
         help_label = QLabel("Location of ROM definition XML files (e.g., lf9veb.xml)")
         help_label.setStyleSheet("color: gray; font-size: 10px;")
         paths_layout.addRow("", help_label)
+
+        # Export directory setting
+        export_layout = QHBoxLayout()
+        self.export_path_edit = QLineEdit()
+        self.export_path_edit.setPlaceholderText(
+            "Folder for CSV exports"
+        )
+        export_layout.addWidget(self.export_path_edit)
+
+        browse_export_button = QPushButton("Browse...")
+        browse_export_button.clicked.connect(self.browse_export_directory)
+        export_layout.addWidget(browse_export_button)
+
+        paths_layout.addRow("Export Directory:", export_layout)
+
+        # Add help text for export
+        export_help = QLabel("Default folder for CSV exports (Ctrl+E)")
+        export_help.setStyleSheet("color: gray; font-size: 10px;")
+        paths_layout.addRow("", export_help)
 
         layout.addWidget(paths_group)
         layout.addStretch()
@@ -260,9 +281,10 @@ class SettingsDialog(QDialog):
 
     def load_settings(self):
         """Load current settings into the UI"""
-        # Load projects directory
-        projects_dir = self.settings.get_projects_directory()
-        self.projects_path_edit.setText(projects_dir)
+        # Load projects directory (only when projects feature is enabled)
+        if self.projects_enabled:
+            projects_dir = self.settings.get_projects_directory()
+            self.projects_path_edit.setText(projects_dir)
 
         # Load definitions directory
         definitions_dir = self.settings.get_definitions_directory()
@@ -281,6 +303,10 @@ class SettingsDialog(QDialog):
         # Load colormap path
         colormap_path = self.settings.get_colormap_path()
         self.colormap_path_edit.setText(colormap_path)
+
+        # Load export directory
+        export_dir = self.settings.get_export_directory()
+        self.export_path_edit.setText(export_dir)
 
         # Load toggle categories setting
         toggle_cats = self.settings.get_toggle_categories()
@@ -342,6 +368,22 @@ class SettingsDialog(QDialog):
         if file_path:
             self.colormap_path_edit.setText(file_path)
 
+    def browse_export_directory(self):
+        """Open directory browser for export directory"""
+        current_path = self.export_path_edit.text()
+        if not current_path:
+            current_path = str(Path.cwd())
+
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Select Export Directory",
+            current_path,
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
+        )
+
+        if directory:
+            self.export_path_edit.setText(directory)
+
     def browse_romdrop_executable(self):
         """Open file browser for RomDrop executable"""
         current_path = self.romdrop_path_edit.text()
@@ -360,10 +402,11 @@ class SettingsDialog(QDialog):
 
     def apply_settings(self):
         """Apply settings without closing the dialog"""
-        # Save projects directory
-        projects_dir = self.projects_path_edit.text().strip()
-        if projects_dir:
-            self.settings.set_projects_directory(projects_dir)
+        # Save projects directory (only when projects feature is enabled)
+        if self.projects_enabled:
+            projects_dir = self.projects_path_edit.text().strip()
+            if projects_dir:
+                self.settings.set_projects_directory(projects_dir)
 
         # Save definitions directory
         definitions_dir = self.definitions_path_edit.text().strip()
@@ -382,6 +425,10 @@ class SettingsDialog(QDialog):
         colormap_path = self.colormap_path_edit.text().strip()
         self.settings.set_colormap_path(colormap_path)
         reload_colormap()
+
+        # Save export directory
+        export_dir = self.export_path_edit.text().strip()
+        self.settings.set_export_directory(export_dir)
 
         # Save toggle categories
         toggle_cats = []
