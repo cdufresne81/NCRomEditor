@@ -1,6 +1,7 @@
 # Session Notes
 
 ## Next Tasks
+- Focus on the first value field of a table immediately after opening a table. 
 
 - **Project/versioning system** - Full rewrite planned (current code excluded from audit)
 - **Cross-platform packaging (GitHub Actions CI)** - Triggers on tag/release only. Build with PyInstaller on Windows, macOS, Linux runners. Upload artifacts to GitHub Release.
@@ -197,6 +198,10 @@
 - Fixed undo/redo to only apply to the focused table viewer window
   - Modified `_apply_cell_change()` and `_apply_axis_change()` in main.py to check `window.isActiveWindow()` before applying changes
   - Prevents undo/redo from affecting the wrong window when multiple table viewers are open
+
+## Recent Completed Work (Jan 18, 2026)
+- Fixed blank space under table cells: set QTableWidget size policy to prevent vertical expansion beyond content
+- Fixed Windows-only blank space issue: added post-resize correction for high-DPI displays (detects/removes viewport blank space)
 
 ## Recent Completed Work (Jan 17, 2026)
 - Added focus/highlight selected table feature: clicking a table viewer window now highlights and scrolls to that table in the tree view

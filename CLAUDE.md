@@ -6,6 +6,7 @@ We work for an hospital and our work is critical, failure to succeed will result
 ## General Rules
 
 - **"Question:" prefix** - If a prompt starts with "Question:", answer only. Take no actions (no file edits, no commands).
+- **No auto-commit** - NEVER run `git commit` or `git push` unless the user explicitly asks OR requests to "land the plane" (session completion).
 - **Incremental notes** - After completing code changes that add, update, or delete functionality, immediately update the "Recent Completed Work" section in `.claude/notes.md`. Only note meaningful changes (new features, behavior changes, significant fixes). Skip trivial changes (typos, formatting, minor refactors). Always check existing entries to avoid duplicates.
 - **Changelog** - When adding features, fixing bugs, or making notable changes, update `CHANGELOG.md` under an `## [Unreleased]` section at the top. When a version is tagged, the unreleased section becomes the release notes on GitHub. Follow the existing format (Added/Changed/Fixed subsections).
 - **NEVER commit or push** - Unless the user ask to land the plane or explicitely ask for it.
