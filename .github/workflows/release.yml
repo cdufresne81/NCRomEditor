@@ -48,6 +48,7 @@ jobs:
 
     - name: Build installer
       run: |
+        $env:APP_VERSION = "${{ github.ref_name }}".TrimStart("v")
         & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging/installer.iss
       shell: pwsh
 
