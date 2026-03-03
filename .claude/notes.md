@@ -14,6 +14,7 @@
 - **Test runner dispatch refactor** — Replaced 159-line if/elif chain in `_execute_command` with dispatch table + small handler methods.
 - **Dependency split** — `requirements.txt` now runtime-only; dev tools in `requirements-dev.txt`. CI updated to use `requirements-dev.txt`.
 - **Doc cleanup** — Archived abandoned `MODIFICATION_TRACKING_PLAN/SUMMARY.md` to `docs/archive/`. Updated ROM comparison spec to reflect implemented features.
+- **MCP mixin extraction** — Moved 13 MCP/API methods (~500 lines) from `main.py` into `src/ui/mcp_mixin.py`. `main.py` is now 1,970 lines (was 2,606). Also fixed latent import bug where API handlers referenced renamed `_printf_to_python_format`.
 
 ## Recent Completed Work (Mar 2, 2026) - Rebrand: NC ROM Editor → NC Flash
 - **Full project rename** — Renamed all references from "NC ROM Editor" / "NCRomEditor" to "NC Flash" across the entire codebase. Display name is "NC Flash", exe/filenames use "NCFlash" (no space), GitHub repo is `cdufresne81/nc-flash`. Updated: app name, exe name, asset files, installer, build scripts, CI workflow, MCP server, QSettings keys, user data directory, launcher scripts, setup wizard, documentation, tests, and CHANGELOG.

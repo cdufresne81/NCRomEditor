@@ -21,6 +21,7 @@
 - **M4** — Split `requirements.txt` into runtime-only + `requirements-dev.txt`; CI updated
 - **DOC4** — Archived `MODIFICATION_TRACKING_PLAN.md` and `SUMMARY.md` to `docs/archive/`
 - **DOC5** — Updated ROM comparison spec: marked implemented "Out of Scope" items, fixed architecture table
+- **S1 (MCP + API)** — Extracted 13 methods (~500 lines) from `main.py` into `src/ui/mcp_mixin.py`: MCP server lifecycle (6), command API bridge (3), API handlers (4). `main.py` now 1,970 lines (was 2,606). Also fixed latent bug: API handlers imported renamed `_printf_to_python_format` from `rom_context.py` — now imports from `src.utils.formatting`.
 - **E2** — `_load_commits` warning now includes `exc_info=True` for stack trace
 - **Bonus** — Fixed pre-existing test failure: `test_get_table_font_size_default` expected 9 but default was changed to 11
 
