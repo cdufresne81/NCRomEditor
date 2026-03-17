@@ -395,6 +395,9 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin, McpM
         self.flash_action.triggered.connect(self._on_flash_rom)
         self.flash_action.setEnabled(False)
 
+        patch_action = tools_menu.addAction("Apply &Patch to Stock ROM...")
+        patch_action.triggered.connect(self._on_apply_patch)
+
         tools_menu.addSeparator()
 
         self.mcp_action = tools_menu.addAction("&MCP Server")
@@ -1316,6 +1319,13 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin, McpM
         logger.info(
             f"ROM comparison opened: {doc_a.file_name} vs {doc_b.file_name} ({n} tables differ)"
         )
+
+    def _on_apply_patch(self):
+        """Open the patch dialog to apply a RomDrop patch to a stock ROM."""
+        from src.ui.patch_dialog import PatchDialog
+
+        dialog = PatchDialog(self)
+        dialog.exec()
 
     def _on_flash_rom(self):
         """Launch RomDrop to flash the current ROM to the ECU."""
