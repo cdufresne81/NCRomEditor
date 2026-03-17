@@ -77,8 +77,8 @@ def get_cal_id(rom_data: bytes) -> bytes:
     for offset in CAL_ID_OFFSETS:
         if len(rom_data) >= offset + 6:
             cal_id = rom_data[offset : offset + 6]
-            # Check if it looks valid (not all 0xFF)
-            if cal_id != b"\xff" * 6:
+            # Valid cal-IDs start with 'L' (e.g., LF9VEB)
+            if cal_id[0:1] == b"L":
                 return cal_id
 
     raise ROMValidationError("Could not find valid calibration ID in ROM")
@@ -264,11 +264,10 @@ def patch_rom(stock_rom: bytes, patch_data: bytes) -> PatchResult:
                 )
                 all_ok = False
             if patch_crc != entry.patch_crc:
-                crc_warnings.append(
-                    f"Patch file CRC mismatch: got 0x{patch_crc:08X}, "
-                    f"expected 0x{entry.patch_crc:08X}"
+                raise ROMValidationError(
+                    f"Patch file does not match cal-ID {stock_cal_id!r}: "
+                    f"CRC 0x{patch_crc:08X}, expected 0x{entry.patch_crc:08X}"
                 )
-                all_ok = False
             if patched_crc != entry.patched_cal_crc:
                 crc_warnings.append(
                     f"Patched ROM CRC mismatch: got 0x{patched_crc:08X}, "
