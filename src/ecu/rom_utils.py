@@ -52,20 +52,18 @@ def detect_vehicle_generation(rom_data: bytes) -> str:
 
 def get_rom_id(rom_data: bytes) -> str:
     """
-    Extract ROM ID string from offset 0xFFC4C.
+    Extract ROM ID from offset 0xFFC4C as an 8-character hex string.
 
-    Returns 3-4 byte hex string identifier.
+    The ROM ID is a fixed 4-byte value (e.g. patch engine revision 21053000).
+    Returns the full hex representation without stripping.
     """
     if len(rom_data) < ROM_ID_OFFSET + 4:
         raise ROMValidationError("ROM too small to read ROM ID")
 
-    # ROM ID is typically 3-4 ASCII bytes
     raw = rom_data[ROM_ID_OFFSET : ROM_ID_OFFSET + 4]
-    # Strip trailing null/0xFF bytes
-    id_bytes = raw.rstrip(b"\x00").rstrip(b"\xff")
-    if not id_bytes:
+    if raw == b"\x00\x00\x00\x00" or raw == b"\xff\xff\xff\xff":
         raise ROMValidationError("Empty ROM ID at offset 0x{:X}".format(ROM_ID_OFFSET))
-    return id_bytes.hex().upper()
+    return raw.hex().upper()
 
 
 def get_cal_id(rom_data: bytes) -> bytes:

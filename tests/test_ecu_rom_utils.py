@@ -249,7 +249,7 @@ class TestPatchRomGoldenFile:
     def test_rom_id(self):
         """Patched ROM has ROM ID from patch revision."""
         result = patch_rom(STOCK_ROM.read_bytes(), PATCH_FILE.read_bytes())
-        assert result.rom_id == "210530"
+        assert result.rom_id == "21053000"
 
     @_skip_no_9veb
     def test_crc_values_match_romdrop(self):
