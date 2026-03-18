@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QHBoxLayout,
-    QFormLayout,
     QLabel,
     QPushButton,
     QFileDialog,
@@ -19,6 +18,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QLineEdit,
 )
+
 from src.ecu.rom_utils import patch_rom, validate_rom_size, get_cal_id
 from src.ecu.exceptions import ROMValidationError
 
@@ -34,8 +34,8 @@ class PatchDialog(QDialog):
         self.setMinimumWidth(550)
 
         self._stock_data = None
+        self._stock_path = None
         self._patch_data = None
-        self._result = None
 
         self._init_ui()
 
@@ -87,25 +87,6 @@ class PatchDialog(QDialog):
 
         layout.addWidget(patch_group)
 
-        # --- Result ---
-        result_group = QGroupBox("3. Result")
-        result_layout = QFormLayout()
-        result_group.setLayout(result_layout)
-
-        self._result_cal_id = QLabel("-")
-        self._result_crc_status = QLabel("-")
-        self._result_warnings = QLabel("")
-        self._result_warnings.setWordWrap(True)
-        self._result_output = QLineEdit()
-        self._result_output.setReadOnly(True)
-
-        result_layout.addRow("Cal ID:", self._result_cal_id)
-        result_layout.addRow("CRC Verification:", self._result_crc_status)
-        result_layout.addRow("", self._result_warnings)
-        result_layout.addRow("Output file:", self._result_output)
-
-        layout.addWidget(result_group)
-
         # --- Buttons ---
         button_row = QHBoxLayout()
         button_row.addStretch()
@@ -114,11 +95,6 @@ class PatchDialog(QDialog):
         self._apply_button.setEnabled(False)
         self._apply_button.clicked.connect(self._apply_patch)
         button_row.addWidget(self._apply_button)
-
-        self._save_button = QPushButton("Save")
-        self._save_button.setEnabled(False)
-        self._save_button.clicked.connect(self._save_result)
-        button_row.addWidget(self._save_button)
 
         close_button = QPushButton("Close")
         close_button.clicked.connect(self.reject)
@@ -136,7 +112,12 @@ class PatchDialog(QDialog):
         if not path:
             return
 
-        data = Path(path).read_bytes()
+        try:
+            data = Path(path).read_bytes()
+        except OSError as e:
+            QMessageBox.warning(self, "Read Error", f"Could not read file:\n{e}")
+            return
+
         if not validate_rom_size(data):
             QMessageBox.warning(
                 self, "Invalid ROM", f"File must be exactly 1 MB, got {len(data):,} bytes."
@@ -150,11 +131,10 @@ class PatchDialog(QDialog):
             return
 
         self._stock_data = data
+        self._stock_path = path
         self._stock_path_edit.setText(path)
         self._stock_info.setText(f"Cal ID: {cal_id.decode('ascii', errors='replace')}  |  Size: 1 MB")
         self._stock_info.setStyleSheet("color: green; font-size: 10px;")
-
-        self._clear_result()
         self._update_apply_button()
 
     def _browse_patch(self):
@@ -167,7 +147,12 @@ class PatchDialog(QDialog):
         if not path:
             return
 
-        data = Path(path).read_bytes()
+        try:
+            data = Path(path).read_bytes()
+        except OSError as e:
+            QMessageBox.warning(self, "Read Error", f"Could not read file:\n{e}")
+            return
+
         if not validate_rom_size(data):
             QMessageBox.warning(
                 self, "Invalid Patch", f"Patch file must be exactly 1 MB, got {len(data):,} bytes."
@@ -184,23 +169,12 @@ class PatchDialog(QDialog):
         self._patch_path_edit.setText(path)
         self._patch_info.setText("Valid patch file  |  Size: 1 MB")
         self._patch_info.setStyleSheet("color: green; font-size: 10px;")
-
-        self._clear_result()
         self._update_apply_button()
 
     def _update_apply_button(self):
         self._apply_button.setEnabled(
             self._stock_data is not None and self._patch_data is not None
         )
-
-    def _clear_result(self):
-        self._result = None
-        self._result_cal_id.setText("-")
-        self._result_crc_status.setText("-")
-        self._result_crc_status.setStyleSheet("")
-        self._result_warnings.setText("")
-        self._result_output.setText("")
-        self._save_button.setEnabled(False)
 
     def _apply_patch(self):
         try:
@@ -209,54 +183,24 @@ class PatchDialog(QDialog):
             QMessageBox.critical(self, "Patch Failed", str(e))
             return
 
-        self._result = result
-
         cal_id_str = bytes(result.cal_id).decode("ascii", errors="replace")
-        self._result_cal_id.setText(cal_id_str)
-
-        if result.crc_verified:
-            self._result_crc_status.setText("Verified")
-            self._result_crc_status.setStyleSheet("color: green; font-weight: bold;")
-        else:
-            self._result_crc_status.setText("Unverified")
-            self._result_crc_status.setStyleSheet("color: orange; font-weight: bold;")
-
-        if result.crc_warnings:
-            self._result_warnings.setText("\n".join(result.crc_warnings))
-            self._result_warnings.setStyleSheet("color: orange; font-size: 10px;")
-        else:
-            self._result_warnings.setText("")
-
-        # Default output path: same directory as stock ROM
-        stock_dir = Path(self._stock_path_edit.text()).parent
         output_name = f"{cal_id_str}_Rev_{result.rom_id}.bin"
-        self._result_output.setText(str(stock_dir / output_name))
-
-        self._save_button.setEnabled(True)
-        logger.info(f"Patch applied: {cal_id_str} (CRC verified: {result.crc_verified})")
-
-    def _save_result(self):
-        output_path = self._result_output.text()
-        if not output_path:
-            return
-
-        # Let user change the save location
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save Patched ROM",
-            output_path,
-            "ROM Files (*.bin);;All Files (*)",
-        )
-        if not path:
-            return
+        output_path = Path(self._stock_path).parent / output_name
 
         try:
-            Path(path).write_bytes(bytes(self._result.patched_rom))
-            QMessageBox.information(
-                self,
-                "Patch Saved",
-                f"Patched ROM saved to:\n{path}",
-            )
-            logger.info(f"Patched ROM saved: {path}")
+            output_path.write_bytes(bytes(result.patched_rom))
         except OSError as e:
             QMessageBox.critical(self, "Save Failed", f"Could not save file:\n{e}")
+            return
+
+        logger.info(f"Patched ROM saved: {output_path}")
+
+        # Build status message
+        status = f"Patched ROM saved to:\n{output_path}"
+        if result.crc_warnings:
+            status += "\n\nWarnings:\n" + "\n".join(result.crc_warnings)
+
+        if result.crc_verified:
+            QMessageBox.information(self, "Patch Applied", status)
+        else:
+            QMessageBox.warning(self, "Patch Applied (Unverified)", status)
