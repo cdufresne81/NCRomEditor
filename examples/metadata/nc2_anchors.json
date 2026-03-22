@@ -1,0 +1,191 @@
+[
+  {
+    "name": "[Patch] DFCO Disable | Unpatched = 36610, Patched = 9",
+    "ref_addr": "0x46DC6",
+    "signature": "8f02ff9da045fefad0686000c810002970ff600b88018f13f4e8d364f338f435",
+    "cross_rom_correct": 45,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 18,
+    "lfnpea": "0x4C51E"
+  },
+  {
+    "name": "[Patch] Immobilizer Bypass - PARTIAL | Unpatched = 36616, Patched = 9",
+    "ref_addr": "0x9699A",
+    "signature": "8f080009b1d50009e27f940e2e204f26a3fd6ef6b1eb000992072e20b3f7e401",
+    "cross_rom_correct": 54,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 9,
+    "lfnpea": "0xA30A2"
+  },
+  {
+    "name": "VCT Error - CKP to CMP Synchronizing Offset",
+    "ref_addr": "0xBA86C",
+    "signature": "41194bc7411c08314123db23412b1eb8412da5e3412e872b4131ced9413276c9",
+    "cross_rom_correct": 63,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 0,
+    "lfnpea": "0xC25F0"
+  },
+  {
+    "name": "TP Closed - Default",
+    "ref_addr": "0xBB0D0",
+    "signature": "412800004180000040a00000428c000042bd00004120000042bd000040000000",
+    "cross_rom_correct": 63,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 0,
+    "lfnpea": "0xC2E54"
+  },
+  {
+    "name": "IMTV Short Runner Activation A - Max RPM Threshold | Not Idle",
+    "ref_addr": "0xBB840",
+    "signature": "4544e000433b800045947000433b800043fa0000447a000044bb800044fa0000",
+    "cross_rom_correct": 63,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 0,
+    "lfnpea": "0xC35C4"
+  },
+  {
+    "name": "AFS Scaling - Barometric Multiplier | BARO_6DE8",
+    "ref_addr": "0xBF4F4",
+    "signature": "428c000042a0000042b4000042c800003fb333333f9b43963f8df3b63f800000",
+    "cross_rom_correct": 63,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 0,
+    "lfnpea": "0xC74F4"
+  },
+  {
+    "name": "Low Speed Fan Enable - ECT Threshold",
+    "ref_addr": "0xBF9E0",
+    "signature": "00a200a200a200a200a200a200a200a24257b85242776666428b8000429b570a",
+    "cross_rom_correct": 63,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 0,
+    "lfnpea": "0xC79E0"
+  },
+  {
+    "name": "Tip-In Retard First Gear - Add Advance | MT, AC On",
+    "ref_addr": "0xC012C",
+    "signature": "41340000000000004479c0003f9f5c29000000004070a3d7419666664070a3d7",
+    "cross_rom_correct": 63,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 0,
+    "lfnpea": "0xC82DC"
+  },
+  {
+    "name": "OL Transition A Delay | Above BARO Threshold",
+    "ref_addr": "0xC4BCA",
+    "signature": "3c3c0f0f0f0f3c1e00010190003c001400000064000f000f000f000f00140014",
+    "cross_rom_correct": 44,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 19,
+    "lfnpea": "0xCCD7C"
+  },
+  {
+    "name": "Speed Limiter - RPM Activation Threshold ",
+    "ref_addr": "0xC4C40",
+    "signature": "457a000042bb8000437a000040b47ae142a0000040a000004510880042bb8000",
+    "cross_rom_correct": 58,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 5,
+    "lfnpea": "0xCCDFC"
+  },
+  {
+    "name": "IMRC Cold Exit - RPM Threshold",
+    "ref_addr": "0xC9EA4",
+    "signature": "456a600042bb8000454b200042bb800043fa0000447a000044bb800044fa0000",
+    "cross_rom_correct": 63,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 0,
+    "lfnpea": "0xD4A04"
+  },
+  {
+    "name": "Injector Scaling - Global Multiplier",
+    "ref_addr": "0xCBD80",
+    "signature": "3f885d313f4d916800000000400000003f8000004316000041f0000000000000",
+    "cross_rom_correct": 53,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 10,
+    "lfnpea": "0xD68E0"
+  },
+  {
+    "name": "DFCO Multiplier - Enleanment To Full Fuel Cut Threshold | 73F2 Mode 10",
+    "ref_addr": "0xCD900",
+    "signature": "3f19999a3be560423c75c28f3a83126f3be560423f3000003b4b295f3b4b295f",
+    "cross_rom_correct": 46,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 17,
+    "lfnpea": "0xD8504"
+  },
+  {
+    "name": "Spark Enrichment - RPM Threshold ",
+    "ref_addr": "0xCE25C",
+    "signature": "459c400042c800003f59999a3d4ccccd42a0000040a0000042be000040a00000",
+    "cross_rom_correct": 63,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 0,
+    "lfnpea": "0xD9260"
+  },
+  {
+    "name": "Spark Final Trim | Cylinder 1",
+    "ref_addr": "0xCFBE8",
+    "signature": "00000000000000000000000000000000411dc28f4120000042480000c1580000",
+    "cross_rom_correct": 63,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 0,
+    "lfnpea": "0xDACCC"
+  },
+  {
+    "name": "Spark Retard Limit | LC Activated",
+    "ref_addr": "0xD4A8C",
+    "signature": "000000000000000042c8000040a00000459c400042bb800000080c000000ffff",
+    "cross_rom_correct": 63,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 0,
+    "lfnpea": "0xDFB70"
+  },
+  {
+    "name": "MAF Breakpoint 0 - Idle",
+    "ref_addr": "0xD6348",
+    "signature": "40b666663f23d70a417000003f80000041f000003fc00000434800003fc00000",
+    "cross_rom_correct": 44,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 19,
+    "lfnpea": "0xE142C"
+  },
+  {
+    "name": "Tip-In Retard From Stop - Base Retard | AC On",
+    "ref_addr": "0xDA4CC",
+    "signature": "40d00000413000003d4ccccd3ca3d70a3cf5c28f3d4ccccd3ca3d70ac2200000",
+    "cross_rom_correct": 63,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 0,
+    "lfnpea": "0xE59D0"
+  },
+  {
+    "name": "IAT Scaling - Voltage to IAT | IAT_V_4042 * MULT",
+    "ref_addr": "0xDB758",
+    "signature": "3d71a9fc3ebdf3b63f2f1aa03f7ef9db3fa78d503fcf7cee3ff78d50400fbe77",
+    "cross_rom_correct": 54,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 9,
+    "lfnpea": "0xEA930"
+  },
+  {
+    "name": " P2006 - Variable tumble valve stuck closed",
+    "ref_addr": "0xE0954",
+    "signature": "0101010101010101010101010101010101010101010101010101010101030003",
+    "cross_rom_correct": 9,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 0,
+    "lfnpea": "0xED108"
+  },
+  {
+    "name": "TP Delta - Fault Threshold | Cruise Control",
+    "ref_addr": "0xF44C0",
+    "signature": "42b40000412db22d0000000040cae9790000000041c80000412db22d41c80000",
+    "cross_rom_correct": 63,
+    "cross_rom_total": 63,
+    "cross_rom_missing": 0,
+    "lfnpea": "0xF44F0"
+  }
+]

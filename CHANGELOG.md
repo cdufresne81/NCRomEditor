@@ -4,6 +4,18 @@ All notable changes to NC Flash are documented here.
 
 ## [Unreleased]
 
+### Added
+- **XML definition relocator** — New `tools/generate_definition.py` CLI tool generates XML metadata definitions for new ROM calibrations by relocating table addresses from an existing definition. Uses a 4-phase byte-context matching algorithm (unique match → verified delta → multi-match disambiguation → unverified delta) to map all ~838 table addresses across calibrations. Handles scaling name relocation (decimal-address-based names) and RomID updates. Achieves >95% resolution rate on tested calibrations.
+- **Definition relocator module** (`src/ecu/definition_relocator.py`) — `DataMatcher` for raw byte-context address relocation and `DefinitionRelocator` for XML tree editing. 22 new tests covering unit and integration scenarios.
+- **Automated patch generator** — New `tools/generate_patch.py` CLI tool generates RomDrop-compatible patches for calibrations that RomDrop doesn't cover. Learns from existing reference pairs (stock ROM + .patch file) using SH-2 instruction matching to relocate hook sites across builds. Supports multi-reference consensus voting and embedded address fixup.
+- **SH-2 instruction matching engine** (`src/ecu/sh2_match.py`) — Cross-calibration pattern matching for SH7058 CPU code. Masks PC-relative displacements in 16-bit instructions to produce stable signatures across builds. Includes literal pool backtracking and pool-by-value search strategies.
+- **Patch generation orchestrator** (`src/ecu/patch_generator.py`) — Extracts modification sites from reference pairs, classifies hooks (JSR, pool redirect, code replacement, data patch), copies 0xFF-region content, and builds XOR patch masks with multi-reference consensus.
+- **36 new tests** for patch generator and SH-2 matching engine
+- **Anchor-based relocation** — `docs/ANCHOR_RELOCATION.md` documents 12 NC2 anchors (63/63 verified) and 11 NC1 anchors (38/38 verified) for constraining table address search across calibrations.
+
+### Fixed
+- **Definition relocator address collisions** — Fixed 35 collision groups where multiple source addresses mapped to the same target address, causing wrong table data in ROM comparisons. Phase 3 now skips already-claimed targets, Phase 4 tries k-nearest neighbors with same-region preference, and post-phase collision resolution detects legitimate merges vs errors.
+
 ### Fixed
 - **Settings dialog crash on fresh install** — Clicking Settings did nothing on release builds because the ECU tab imported `src.ecu.flash_manager` which doesn't exist without the ECU module. The import now fails early and the ECU tab is gracefully skipped (#16)
 - **Version mismatch in About dialog** — Release builds showed `v2.0.0` regardless of the git tag. The release pipeline now stamps `APP_VERSION` from the tag before building (#16)

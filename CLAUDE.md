@@ -26,6 +26,7 @@ Reference these before modifying related functionality:
 - `docs/LOGGING.md` - Logging configuration and exception hierarchy
 - `docs/ROM_DEFINITION_FORMAT.md` - XML format for ROM definitions
 - `docs/UI_TESTING.md` - GUI test runner, screenshots, and test scripts
+- `docs/ANCHOR_RELOCATION.md` - Anchor-based table address relocation for XML metadata generation
 
 **Rule:** When creating new documentation in `docs/`, add it to this list with a brief description of when to reference it.
 
