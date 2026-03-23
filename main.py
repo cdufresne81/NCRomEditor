@@ -8,7 +8,6 @@ An open-source ROM editor for NC Miata ECUs
 import json
 import os
 import sys
-import subprocess
 import logging
 from pathlib import Path
 from datetime import datetime
@@ -75,6 +74,7 @@ from src.ui.recent_files_mixin import RecentFilesMixin
 from src.ui.project_mixin import ProjectMixin
 from src.ui.session_mixin import SessionMixin
 from src.ui.mcp_mixin import McpMixin
+from src.ui.flash_mixin import FlashMixin
 
 logger = get_logger(__name__)
 
@@ -93,7 +93,9 @@ def handle_rom_operation_error(parent, operation: str, exception: Exception):
     QMessageBox.critical(parent, "Error", error_msg)
 
 
-class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin, McpMixin):
+class MainWindow(
+    QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin, McpMixin, FlashMixin
+):
     """Main application window"""
 
     def __init__(self):
@@ -310,6 +312,13 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin, McpM
         # Matches longest table name width on left, rest for activity log
         main_splitter.setSizes([MAIN_SPLITTER_LEFT, MAIN_SPLITTER_RIGHT])
 
+        # ECU connection status indicator in status bar
+        self._ecu_status_label = QLabel("ECU: Not Connected")
+        self._ecu_status_label.setStyleSheet(
+            "color: gray; font-size: 10px; padding: 0 6px;"
+        )
+        self.statusBar().addPermanentWidget(self._ecu_status_label)
+
     def init_menu(self):
         """Initialize the menu bar"""
         menubar = self.menuBar()
@@ -390,19 +399,38 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin, McpM
         self.compare_action.triggered.connect(self._on_compare_roms)
         self.compare_action.setEnabled(False)
 
-        self.flash_action = tools_menu.addAction("&Flash ROM to ECU...")
-        self.flash_action.setShortcut("Ctrl+Shift+F")
-        self.flash_action.triggered.connect(self._on_flash_rom)
-        self.flash_action.setEnabled(False)
-
         patch_action = tools_menu.addAction("Apply &Patch to Stock ROM...")
-        patch_action.triggered.connect(self._on_apply_patch)
+        patch_action.triggered.connect(self._on_patch_rom)
 
         tools_menu.addSeparator()
 
         self.mcp_action = tools_menu.addAction("&MCP Server")
         self.mcp_action.setCheckable(True)
         self.mcp_action.triggered.connect(self._toggle_mcp_server)
+
+        # ECU menu (Alt+U)
+        ecu_menu = menubar.addMenu("EC&U")
+
+        self.ecu_flash_action = ecu_menu.addAction("&Flash ROM to ECU...")
+        self.ecu_flash_action.setShortcut("Ctrl+Shift+F")
+        self.ecu_flash_action.triggered.connect(self._on_flash_rom)
+        self.ecu_flash_action.setEnabled(False)
+
+        self.ecu_read_action = ecu_menu.addAction("&Read ROM from ECU...")
+        self.ecu_read_action.triggered.connect(self._on_read_rom)
+
+        ecu_menu.addSeparator()
+
+        self.ecu_read_dtcs_action = ecu_menu.addAction("Read &DTCs...")
+        self.ecu_read_dtcs_action.triggered.connect(self._on_clear_dtcs)
+
+        self.ecu_clear_dtcs_action = ecu_menu.addAction("&Clear DTCs")
+        self.ecu_clear_dtcs_action.triggered.connect(self._on_clear_dtcs)
+
+        ecu_menu.addSeparator()
+
+        self.ecu_info_action = ecu_menu.addAction("ECU &Info...")
+        self.ecu_info_action.triggered.connect(self._on_ecu_info)
 
         # Help menu (Alt+H)
         help_menu = menubar.addMenu("&Help")
@@ -459,8 +487,9 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin, McpM
         self._toolbar_history = act
 
         act = tb.addAction(self._make_icon("flash"), "")
-        act.setToolTip("Flash ROM to ECU  (Ctrl+Shift+F)")
+        act.setToolTip("Flash ROM to ECU (Ctrl+Shift+F)")
         act.triggered.connect(self._on_flash_rom)
+        act.setEnabled(False)
         self._toolbar_flash = act
 
         tb.addSeparator()
@@ -1003,7 +1032,7 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin, McpM
             self._toolbar_compare.setEnabled(compare_enabled)
 
         flash_enabled = self.tab_widget.count() >= 1
-        self.flash_action.setEnabled(flash_enabled)
+        self.ecu_flash_action.setEnabled(flash_enabled)
         if hasattr(self, "_toolbar_flash"):
             self._toolbar_flash.setEnabled(flash_enabled)
 
@@ -1315,118 +1344,6 @@ class MainWindow(QMainWindow, RecentFilesMixin, ProjectMixin, SessionMixin, McpM
         logger.info(
             f"ROM comparison opened: {doc_a.file_name} vs {doc_b.file_name} ({n} tables differ)"
         )
-
-    def _on_apply_patch(self):
-        """Open the patch dialog to apply a RomDrop patch to a stock ROM."""
-        from src.ui.patch_dialog import PatchDialog
-
-        dialog = PatchDialog(self)
-        dialog.exec()
-
-    def _on_flash_rom(self):
-        """Launch RomDrop to flash the current ROM to the ECU."""
-        document = self.get_current_document()
-        if not document:
-            QMessageBox.warning(self, "No ROM", "No ROM file is currently loaded.")
-            return
-
-        # Check RomDrop path early before showing confirmation
-        romdrop_path = self.settings.get_romdrop_executable_path()
-        if not romdrop_path:
-            QMessageBox.warning(
-                self,
-                "RomDrop Not Configured",
-                "RomDrop executable path is not configured.\n\n"
-                "Go to Edit → Settings → Tools to set the path to romdrop.exe.",
-            )
-            return
-
-        romdrop_exe = Path(romdrop_path)
-        if not romdrop_exe.is_file():
-            QMessageBox.warning(
-                self,
-                "RomDrop Not Found",
-                f"RomDrop executable not found at:\n{romdrop_path}\n\n"
-                "Check the path in Edit → Settings → Tools.",
-            )
-            return
-
-        needs_save = document.is_modified()
-        title = "Save and Flash ROM" if needs_save else "Flash ROM to ECU"
-        action_label = "Save and Flash" if needs_save else "Flash"
-
-        warning_text = (
-            f"<b>WARNING — Read before proceeding</b><br><br>"
-            f"<ul>"
-            f"<li>The engine must be <b>OFF</b> — ignition key in the ON position only "
-            f"(dash lights on, engine not running)</li>"
-            f"<li>Ensure the car battery is healthy and fully charged</li>"
-            f"<li>Do not run resource-heavy applications during the flash</li>"
-            f"<li><b>Do NOT interrupt the flashing process once it has started</b></li>"
-            f"</ul>"
-            f"This launches RomDrop in <b>dynamic flash</b> mode only. "
-            f"Patching and full flash must be done separately in RomDrop before using this."
-            f"<br><br>Flashing: <b>{document.file_name}</b>"
-        )
-
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle(title)
-        msg_box.setIcon(QMessageBox.Warning)
-        msg_box.setText(warning_text)
-        flash_button = msg_box.addButton(action_label, QMessageBox.AcceptRole)
-        msg_box.addButton(QMessageBox.Cancel)
-        msg_box.setDefaultButton(QMessageBox.Cancel)
-        msg_box.exec()
-
-        if msg_box.clickedButton() != flash_button:
-            return
-
-        # Save if needed
-        if needs_save:
-            try:
-                document.save()
-                document.set_modified(False)
-                self._update_tab_title(document)
-                logger.info(f"Auto-saved ROM before flashing: {document.file_name}")
-            except Exception as e:
-                QMessageBox.warning(
-                    self,
-                    "Save Failed",
-                    f"Failed to save ROM before flashing:\n{e}\n\nFlash aborted.",
-                )
-                return
-
-        # Launch RomDrop as a fully detached process with focus
-        rom_file = str(Path(document.rom_path).resolve())
-        try:
-            if sys.platform == "win32":
-                # ShellExecuteW launches like a double-click:
-                # fully detached, own process group, and receives window focus
-                import ctypes
-
-                result = ctypes.windll.shell32.ShellExecuteW(
-                    None,
-                    "open",
-                    str(romdrop_exe),
-                    rom_file,
-                    str(romdrop_exe.parent),
-                    1,  # SW_SHOWNORMAL
-                )
-                if result <= 32:
-                    raise OSError(f"ShellExecute failed with code {result}")
-            else:
-                subprocess.Popen(
-                    [str(romdrop_exe), rom_file],
-                    cwd=str(romdrop_exe.parent),
-                    start_new_session=True,
-                    close_fds=True,
-                )
-            logger.info(f"Launched RomDrop with {rom_file}")
-            self.statusBar().showMessage(f"Launched RomDrop with {document.file_name}")
-        except OSError as e:
-            QMessageBox.warning(
-                self, "Launch Failed", f"Failed to launch RomDrop:\n{e}"
-            )
 
     # ========== Table Selection and Window Management ==========
 

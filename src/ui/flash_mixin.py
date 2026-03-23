@@ -172,7 +172,9 @@ class FlashMixin:
         return self.settings.get_j2534_dll_path() or DEFAULT_J2534_DLL
 
     def _on_flash_rom(self):
-        """Flash the current ROM to the ECU."""
+        """Flash the current ROM to the ECU via the setup dialog."""
+        from src.ui.flash_setup_dialog import FlashSetupDialog
+
         document = self.get_current_document()
         if not document:
             QMessageBox.warning(self, "No ROM", "No ROM file is currently loaded.")
@@ -188,38 +190,8 @@ class FlashMixin:
             )
             return
 
-        dll_path = self._get_j2534_dll_path()
-
-        needs_save = document.is_modified()
-        title = "Save and Flash ROM" if needs_save else "Flash ROM to ECU"
-        action_label = "Save and Flash" if needs_save else "Flash"
-
-        warning_text = (
-            "<b>WARNING \u2014 Read carefully before proceeding</b><br><br>"
-            "<ul>"
-            "<li>The engine must be <b>OFF</b> \u2014 ignition key in the ON position only "
-            "(dash lights on, engine not running)</li>"
-            "<li>Ensure the car battery is healthy and fully charged</li>"
-            "<li>Do not disconnect the OBD-II cable during the flash</li>"
-            "<li><b>Do NOT interrupt the flashing process once it has started</b></li>"
-            "</ul>"
-            f"Flashing: <b>{document.file_name}</b>"
-        )
-
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle(title)
-        msg_box.setIcon(QMessageBox.Warning)
-        msg_box.setText(warning_text)
-        flash_button = msg_box.addButton(action_label, QMessageBox.AcceptRole)
-        msg_box.addButton(QMessageBox.Cancel)
-        msg_box.setDefaultButton(QMessageBox.Cancel)
-        msg_box.exec()
-
-        if msg_box.clickedButton() != flash_button:
-            return
-
-        # Save if needed
-        if needs_save:
+        # Auto-save if modified
+        if document.is_modified():
             try:
                 document.save()
                 document.set_modified(False)
@@ -233,22 +205,42 @@ class FlashMixin:
                 )
                 return
 
-        # Load ROM data
         rom_path = Path(document.rom_path).resolve()
+        dll_path = self._get_j2534_dll_path()
+
+        # Show setup dialog (connects to ECU, lets user pick mode)
+        setup = FlashSetupDialog(document.file_name, rom_path, dll_path, self)
+        if setup.exec() != QDialog.Accepted or setup.selected_mode is None:
+            return
+
+        # Update ECU status indicator
+        if hasattr(self, "_ecu_status_label"):
+            self._ecu_status_label.setText("ECU: Connected")
+            self._ecu_status_label.setStyleSheet(
+                "color: #44aa44; font-size: 10px; padding: 0 6px;"
+            )
+
+        # Load ROM data
         try:
             rom_data = rom_path.read_bytes()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to read ROM file:\n{e}")
             return
 
-        # Archive path: same directory as the ROM file
         archive_path = str(rom_path.parent / ARCHIVE_FILENAME)
-
-        # Create flash manager and run
         manager = FlashManager(dll_path)
-        self._run_flash_operation(
-            manager, "flash", rom_data=rom_data, archive_path=archive_path
-        )
+
+        if setup.selected_mode == "dynamic":
+            self._run_flash_operation(
+                manager,
+                "dynamic_flash",
+                rom_data=rom_data,
+                archive_path=archive_path,
+            )
+        else:
+            self._run_flash_operation(
+                manager, "flash", rom_data=rom_data, archive_path=archive_path
+            )
 
     def _on_read_rom(self):
         """Read ROM from ECU and save to file."""
@@ -443,6 +435,65 @@ class FlashMixin:
 
         self.statusBar().showMessage(f"Patched ROM saved: {Path(save_path).name}")
         logger.info(f"Patch applied: {stock_path} + {patch_path} -> {save_path}")
+
+    def _on_ecu_info(self):
+        """Show ECU information (VIN, flash counter, ROM ID)."""
+        manager = FlashManager(self._get_j2534_dll_path())
+
+        try:
+            # Read VIN
+            from src.ecu.j2534 import J2534Device, setup_isotp_flow_control
+            from src.ecu.protocol import UDSConnection
+            from src.ecu.constants import (
+                J2534_PROTOCOL_ISO15765,
+                CAN_BAUDRATE,
+                ISO15765_BS,
+                ISO15765_STMIN,
+            )
+
+            with J2534Device(self._get_j2534_dll_path()) as device:
+                channel_id = device.connect(J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE)
+                device.set_config(channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0})
+                setup_isotp_flow_control(device, channel_id)
+
+                uds = UDSConnection(device, channel_id)
+                uds.tester_present()
+
+                vin_data = uds.read_vin_block()
+                rom_id = uds.read_rom_id()
+
+                dtcs = uds.read_dtc_status()
+                dtc_count = len(dtcs)
+
+            vin_str = (
+                vin_data.decode("ascii", errors="replace").rstrip("\x00")
+                if vin_data
+                else "N/A"
+            )
+
+            dtc_lines = ""
+            if dtc_count > 0:
+                dtc_lines = "\n".join(f"  {d.formatted}: {d.description}" for d in dtcs)
+                dtc_lines = f"\n\n{dtc_lines}"
+
+            QMessageBox.information(
+                self,
+                "ECU Info",
+                f"VIN: {vin_str}\n"
+                f"ROM ID: {rom_id or 'N/A'}\n"
+                f"DTCs: {dtc_count} stored{dtc_lines}",
+            )
+
+            if hasattr(self, "_ecu_status_label"):
+                self._ecu_status_label.setText("ECU: Connected")
+                self._ecu_status_label.setStyleSheet(
+                    "color: #44aa44; font-size: 10px; padding: 0 6px;"
+                )
+
+        except ECUError as e:
+            QMessageBox.critical(self, "ECU Error", f"Failed to read ECU info:\n{e}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to connect to ECU:\n{e}")
 
     def _run_flash_operation(self, manager: FlashManager, operation: str, **kwargs):
         """Run a flash operation with progress dialog."""
