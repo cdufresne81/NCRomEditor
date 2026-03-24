@@ -147,6 +147,20 @@ class FlashManager:
         self._channel_id = None
         self._filter_id = None
         self._uds = None
+        self._owns_connection = True  # False when using a borrowed session
+
+    def use_session(self, device, channel_id, filter_id, uds) -> None:
+        """
+        Borrow handles from an ECUSession instead of opening a new connection.
+
+        When using a borrowed session, _connect() is a no-op and _cleanup()
+        does NOT close the device/channel (the session owns those).
+        """
+        self._device = device
+        self._channel_id = channel_id
+        self._filter_id = filter_id
+        self._uds = uds
+        self._owns_connection = False
 
     @property
     def state(self) -> FlashState:
@@ -214,7 +228,19 @@ class FlashManager:
             logger.warning("Flash abort requested by user")
 
     def _cleanup(self) -> None:
-        """Clean up J2534 resources regardless of outcome."""
+        """Clean up J2534 resources regardless of outcome.
+
+        When using a borrowed session (_owns_connection=False), only clears
+        local references without closing the device/channel.
+        """
+        if not self._owns_connection:
+            # Session owns the resources — just drop our references
+            self._device = None
+            self._channel_id = None
+            self._filter_id = None
+            self._uds = None
+            return
+
         try:
             if self._filter_id is not None and self._device and self._channel_id:
                 try:
@@ -243,6 +269,13 @@ class FlashManager:
 
     def _connect(self, callback: Optional[ProgressCallback] = None) -> None:
         """Establish J2534 connection and setup ISO-TP filters."""
+        if not self._owns_connection:
+            # Using borrowed session — connection already established
+            self._set_state(FlashState.CONNECTING)
+            self._notify(callback, "Using existing ECU session", percent=5.0)
+            logger.info("Using borrowed ECU session")
+            return
+
         from .j2534 import J2534Device, setup_isotp_flow_control
 
         self._set_state(FlashState.CONNECTING)
@@ -661,26 +694,37 @@ class FlashManager:
         finally:
             self._cleanup()
 
-    def read_dtcs(self) -> list:
+    def read_dtcs(self, uds=None) -> list:
         """
         Read DTCs from the ECU.
+
+        Args:
+            uds: Optional UDSConnection from an active session.
+                 If None, opens a temporary connection.
 
         Returns:
             List of DTC objects
         """
-        from .j2534 import J2534Device, setup_isotp_flow_control
-        from .protocol import UDSConnection
-        from .constants import ISO15765_BS, ISO15765_STMIN
-
         try:
-            with J2534Device(self._dll_path) as device:
-                channel_id = device.connect(J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE)
-                device.set_config(channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0})
-                setup_isotp_flow_control(device, channel_id)
-
-                uds = UDSConnection(device, channel_id)
-                uds.tester_present()
+            if uds:
                 dtcs = uds.read_dtc_status()
+            else:
+                from .j2534 import J2534Device, setup_isotp_flow_control
+                from .protocol import UDSConnection
+                from .constants import ISO15765_BS, ISO15765_STMIN
+
+                with J2534Device(self._dll_path) as device:
+                    channel_id = device.connect(
+                        J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE
+                    )
+                    device.set_config(
+                        channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0}
+                    )
+                    setup_isotp_flow_control(device, channel_id)
+
+                    uds = UDSConnection(device, channel_id)
+                    uds.tester_present()
+                    dtcs = uds.read_dtc_status()
 
             seen = set()
             unique_dtcs = []
@@ -697,21 +741,32 @@ class FlashManager:
         except Exception as e:
             raise FlashError(f"Failed to read DTCs: {e}") from e
 
-    def clear_dtcs(self) -> None:
-        """Clear all DTCs from the ECU."""
-        from .j2534 import J2534Device, setup_isotp_flow_control
-        from .protocol import UDSConnection
-        from .constants import ISO15765_BS, ISO15765_STMIN
+    def clear_dtcs(self, uds=None) -> None:
+        """Clear all DTCs from the ECU.
 
+        Args:
+            uds: Optional UDSConnection from an active session.
+        """
         try:
-            with J2534Device(self._dll_path) as device:
-                channel_id = device.connect(J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE)
-                device.set_config(channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0})
-                setup_isotp_flow_control(device, channel_id)
-
-                uds = UDSConnection(device, channel_id)
-                uds.tester_present()
+            if uds:
                 uds.clear_dtc()
+            else:
+                from .j2534 import J2534Device, setup_isotp_flow_control
+                from .protocol import UDSConnection
+                from .constants import ISO15765_BS, ISO15765_STMIN
+
+                with J2534Device(self._dll_path) as device:
+                    channel_id = device.connect(
+                        J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE
+                    )
+                    device.set_config(
+                        channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0}
+                    )
+                    setup_isotp_flow_control(device, channel_id)
+
+                    uds_conn = UDSConnection(device, channel_id)
+                    uds_conn.tester_present()
+                    uds_conn.clear_dtc()
 
             logger.info("DTCs cleared successfully")
         except ECUError:
@@ -719,49 +774,79 @@ class FlashManager:
         except Exception as e:
             raise FlashError(f"Failed to clear DTCs: {e}") from e
 
-    def read_vin_block(self) -> bytes:
-        """Read VIN block from ECU and return raw data."""
-        from .j2534 import J2534Device, setup_isotp_flow_control
-        from .protocol import UDSConnection
-        from .constants import ISO15765_BS, ISO15765_STMIN
+    def read_vin_block(self, uds=None) -> bytes:
+        """Read VIN block from ECU and return raw data.
 
+        Args:
+            uds: Optional UDSConnection from an active session.
+        """
         try:
+            if uds:
+                return uds.read_vin_block()
+
+            from .j2534 import J2534Device, setup_isotp_flow_control
+            from .protocol import UDSConnection
+            from .constants import ISO15765_BS, ISO15765_STMIN
+
             with J2534Device(self._dll_path) as device:
-                channel_id = device.connect(J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE)
-                device.set_config(channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0})
+                channel_id = device.connect(
+                    J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE
+                )
+                device.set_config(
+                    channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0}
+                )
                 setup_isotp_flow_control(device, channel_id)
 
-                uds = UDSConnection(device, channel_id)
-                uds.tester_present()
-                return uds.read_vin_block()
+                uds_conn = UDSConnection(device, channel_id)
+                uds_conn.tester_present()
+                return uds_conn.read_vin_block()
         except ECUError:
             raise
         except Exception as e:
             raise FlashError(f"Failed to read VIN block: {e}") from e
 
-    def scan_ram(self, progress_cb=None) -> bytearray:
-        """Scan ECU RAM (0x0000-0xBFFF) and return contents."""
-        from .j2534 import J2534Device, setup_isotp_flow_control
-        from .protocol import UDSConnection
-        from .constants import ISO15765_BS, ISO15765_STMIN
+    def scan_ram(self, uds=None, progress_cb=None) -> bytearray:
+        """Scan ECU RAM (0x0000-0xBFFF) and return contents.
 
+        Args:
+            uds: Optional UDSConnection from an active session.
+                 Note: security access is still needed and will be
+                 performed on the provided connection.
+        """
         try:
-            with J2534Device(self._dll_path) as device:
-                channel_id = device.connect(J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE)
-                device.set_config(channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0})
-                setup_isotp_flow_control(device, channel_id)
-
-                uds = UDSConnection(device, channel_id)
-                uds.tester_present()
+            if uds:
                 uds.diagnostic_session()
                 seed = uds.security_access_request_seed()
-
                 if not SECURE_MODULE_AVAILABLE:
                     raise SecureModuleNotAvailable()
                 key = compute_security_key(seed)
                 uds.security_access_send_key(key)
-
                 return uds.scan_ram(progress_callback=progress_cb)
+
+            from .j2534 import J2534Device, setup_isotp_flow_control
+            from .protocol import UDSConnection
+            from .constants import ISO15765_BS, ISO15765_STMIN
+
+            with J2534Device(self._dll_path) as device:
+                channel_id = device.connect(
+                    J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE
+                )
+                device.set_config(
+                    channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0}
+                )
+                setup_isotp_flow_control(device, channel_id)
+
+                uds_conn = UDSConnection(device, channel_id)
+                uds_conn.tester_present()
+                uds_conn.diagnostic_session()
+                seed = uds_conn.security_access_request_seed()
+
+                if not SECURE_MODULE_AVAILABLE:
+                    raise SecureModuleNotAvailable()
+                key = compute_security_key(seed)
+                uds_conn.security_access_send_key(key)
+
+                return uds_conn.scan_ram(progress_callback=progress_cb)
         except ECUError:
             raise
         except Exception as e:

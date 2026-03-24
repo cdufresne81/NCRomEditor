@@ -33,32 +33,43 @@ class _ECUInfoWorker(QObject):
     finished = Signal(dict)  # {vin, rom_id, dtc_count, dtcs_text}
     error = Signal(str)
 
-    def __init__(self, dll_path: str):
+    def __init__(self, dll_path: str, session_uds=None):
         super().__init__()
         self._dll_path = dll_path
+        self._session_uds = session_uds
 
     def run(self):
         try:
-            from src.ecu.j2534 import J2534Device, setup_isotp_flow_control
-            from src.ecu.protocol import UDSConnection
-            from src.ecu.constants import (
-                J2534_PROTOCOL_ISO15765,
-                CAN_BAUDRATE,
-                ISO15765_BS,
-                ISO15765_STMIN,
-            )
-
-            with J2534Device(self._dll_path) as device:
-                channel_id = device.connect(J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE)
-                device.set_config(channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0})
-                setup_isotp_flow_control(device, channel_id)
-
-                uds = UDSConnection(device, channel_id)
-                uds.tester_present()
-
+            if self._session_uds:
+                uds = self._session_uds
                 vin_data = uds.read_vin_block()
                 rom_id = uds.read_rom_id()
                 dtcs = uds.read_dtc_status()
+            else:
+                from src.ecu.j2534 import J2534Device, setup_isotp_flow_control
+                from src.ecu.protocol import UDSConnection
+                from src.ecu.constants import (
+                    J2534_PROTOCOL_ISO15765,
+                    CAN_BAUDRATE,
+                    ISO15765_BS,
+                    ISO15765_STMIN,
+                )
+
+                with J2534Device(self._dll_path) as device:
+                    channel_id = device.connect(
+                        J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE
+                    )
+                    device.set_config(
+                        channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0}
+                    )
+                    setup_isotp_flow_control(device, channel_id)
+
+                    uds = UDSConnection(device, channel_id)
+                    uds.tester_present()
+
+                    vin_data = uds.read_vin_block()
+                    rom_id = uds.read_rom_id()
+                    dtcs = uds.read_dtc_status()
 
             vin_str = (
                 vin_data.decode("ascii", errors="replace").rstrip("\x00")
@@ -85,7 +96,7 @@ class _ECUInfoWorker(QObject):
 class FlashSetupDialog(QDialog):
     """Pre-flash setup dialog with ECU info and flash mode selection."""
 
-    def __init__(self, file_name: str, rom_path: Path, dll_path: str, parent=None):
+    def __init__(self, file_name: str, rom_path: Path, dll_path: str, parent=None, session_uds=None):
         super().__init__(parent)
         self.setWindowTitle("Flash ROM to ECU")
         self.setMinimumWidth(420)
@@ -205,7 +216,7 @@ class FlashSetupDialog(QDialog):
 
         # Start ECU info read in background
         self._thread = QThread()
-        self._worker = _ECUInfoWorker(dll_path)
+        self._worker = _ECUInfoWorker(dll_path, session_uds=session_uds)
         self._worker.moveToThread(self._thread)
         self._worker.finished.connect(self._on_ecu_info_loaded)
         self._worker.error.connect(self._on_ecu_info_error)

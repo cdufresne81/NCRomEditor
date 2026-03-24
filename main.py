@@ -186,6 +186,7 @@ class MainWindow(
         Mixin methods named closeEvent are shadowed by QWidget's C++ slot in the MRO,
         so this explicit override is required.
         """
+        self._cleanup_ecu_session()
         self._handle_close(event)
 
     def _deferred_init(self):
@@ -414,6 +415,15 @@ class MainWindow(
 
         # ECU menu (Alt+U)
         ecu_menu = menubar.addMenu("EC&U")
+
+        self.ecu_connect_action = ecu_menu.addAction("&Connect")
+        self.ecu_connect_action.triggered.connect(self._on_ecu_connect)
+
+        self.ecu_disconnect_action = ecu_menu.addAction("&Disconnect")
+        self.ecu_disconnect_action.triggered.connect(self._on_ecu_disconnect)
+        self.ecu_disconnect_action.setEnabled(False)
+
+        ecu_menu.addSeparator()
 
         self.ecu_flash_action = ecu_menu.addAction("&Flash ROM to ECU...")
         self.ecu_flash_action.setShortcut("Ctrl+Shift+F")

@@ -35,6 +35,7 @@ from src.ecu.flash_manager import (
     FlashProgress,
     SECURE_MODULE_AVAILABLE,
 )
+from src.ecu.session import ECUSession, ECUSessionState
 from src.ecu.exceptions import (
     ECUError,
     FlashAbortedError,
@@ -168,9 +169,77 @@ class FlashProgressDialog(QDialog):
 class FlashMixin:
     """Mixin providing ECU flash operations for MainWindow."""
 
+    _ecu_session: ECUSession | None = None
+
     def _get_j2534_dll_path(self) -> str:
         """Get J2534 DLL path: settings override, or default (op20pt32.dll)."""
         return self.settings.get_j2534_dll_path() or DEFAULT_J2534_DLL
+
+    # --- ECU Session Management ---
+
+    def _on_ecu_connect(self):
+        """ECU > Connect menu action."""
+        if self._ecu_session and self._ecu_session.is_connected:
+            return
+
+        dll_path = self._get_j2534_dll_path()
+        self._ecu_session = ECUSession(dll_path, parent=self)
+        self._ecu_session.state_changed.connect(self._on_ecu_state_changed)
+        self._ecu_session.connection_lost.connect(self._on_ecu_connection_lost)
+        self._ecu_session.connect_ecu()
+        self.statusBar().showMessage("Connecting to ECU...")
+
+    def _on_ecu_disconnect(self):
+        """ECU > Disconnect menu action."""
+        if self._ecu_session:
+            self._ecu_session.disconnect_ecu()
+
+    def _on_ecu_state_changed(self, state: str):
+        """Update status bar and menu actions based on session state."""
+        if state == ECUSessionState.CONNECTED.value:
+            self._ecu_status_label.setText("ECU: Connected")
+            self._ecu_status_label.setStyleSheet(
+                "color: #44aa44; font-size: 10px; padding: 0 6px;"
+            )
+            self.ecu_connect_action.setEnabled(False)
+            self.ecu_disconnect_action.setEnabled(True)
+            self.statusBar().showMessage("ECU connected", 3000)
+        elif state == ECUSessionState.CONNECTING.value:
+            self._ecu_status_label.setText("ECU: Connecting...")
+            self._ecu_status_label.setStyleSheet(
+                "color: #ccaa44; font-size: 10px; padding: 0 6px;"
+            )
+        elif state == ECUSessionState.BUSY.value:
+            self._ecu_status_label.setText("ECU: Busy")
+            self._ecu_status_label.setStyleSheet(
+                "color: #ccaa44; font-size: 10px; padding: 0 6px;"
+            )
+            self.ecu_disconnect_action.setEnabled(False)
+        else:
+            # DISCONNECTED or ERROR
+            self._ecu_status_label.setText("ECU: Not Connected")
+            self._ecu_status_label.setStyleSheet(
+                "color: gray; font-size: 10px; padding: 0 6px;"
+            )
+            self.ecu_connect_action.setEnabled(True)
+            self.ecu_disconnect_action.setEnabled(False)
+
+    def _on_ecu_connection_lost(self, reason: str):
+        """Handle unexpected connection loss."""
+        self.statusBar().showMessage(f"ECU connection lost: {reason}", 5000)
+        logger.warning("ECU connection lost: %s", reason)
+
+    def _cleanup_ecu_session(self):
+        """Clean up ECU session on app exit."""
+        if self._ecu_session:
+            self._ecu_session.cleanup()
+            self._ecu_session = None
+
+    def _get_session_uds(self):
+        """Return the session's UDS connection if connected, else None."""
+        if self._ecu_session and self._ecu_session.is_connected:
+            return self._ecu_session.uds
+        return None
 
     def _on_flash_rom(self):
         """Flash the current ROM to the ECU via the setup dialog."""
@@ -210,16 +279,12 @@ class FlashMixin:
         dll_path = self._get_j2534_dll_path()
 
         # Show setup dialog (connects to ECU, lets user pick mode)
-        setup = FlashSetupDialog(document.file_name, rom_path, dll_path, self)
+        session_uds = self._get_session_uds()
+        setup = FlashSetupDialog(
+            document.file_name, rom_path, dll_path, self, session_uds=session_uds
+        )
         if setup.exec() != QDialog.Accepted or setup.selected_mode is None:
             return
-
-        # Update ECU status indicator
-        if hasattr(self, "_ecu_status_label"):
-            self._ecu_status_label.setText("ECU: Connected")
-            self._ecu_status_label.setStyleSheet(
-                "color: #44aa44; font-size: 10px; padding: 0 6px;"
-            )
 
         # Load ROM data
         try:
@@ -231,17 +296,32 @@ class FlashMixin:
         archive_path = str(rom_path.parent / ARCHIVE_FILENAME)
         manager = FlashManager(dll_path)
 
-        if setup.selected_mode == "dynamic":
-            self._run_flash_operation(
-                manager,
-                "dynamic_flash",
-                rom_data=rom_data,
-                archive_path=archive_path,
-            )
-        else:
-            self._run_flash_operation(
-                manager, "flash", rom_data=rom_data, archive_path=archive_path
-            )
+        # Borrow session if connected (flash will acquire exclusive access)
+        session_acquired = False
+        if self._ecu_session and self._ecu_session.is_connected:
+            try:
+                device, channel_id, filter_id, uds = self._ecu_session.acquire()
+                manager.use_session(device, channel_id, filter_id, uds)
+                session_acquired = True
+            except RuntimeError:
+                pass  # Session not in right state, flash will open its own
+
+        try:
+            if setup.selected_mode == "dynamic":
+                self._run_flash_operation(
+                    manager,
+                    "dynamic_flash",
+                    rom_data=rom_data,
+                    archive_path=archive_path,
+                )
+            else:
+                self._run_flash_operation(
+                    manager, "flash", rom_data=rom_data, archive_path=archive_path
+                )
+        finally:
+            # Flash ends with ECU reset — connection is dead
+            if session_acquired and self._ecu_session:
+                self._ecu_session.release(connection_dead=True)
 
     def _on_read_rom(self):
         """Read ROM from ECU and save to file."""
@@ -255,6 +335,16 @@ class FlashMixin:
             return
 
         manager = FlashManager(self._get_j2534_dll_path())
+
+        # Borrow session if connected
+        session_acquired = False
+        if self._ecu_session and self._ecu_session.is_connected:
+            try:
+                device, channel_id, filter_id, uds = self._ecu_session.acquire()
+                manager.use_session(device, channel_id, filter_id, uds)
+                session_acquired = True
+            except RuntimeError:
+                pass
 
         dialog = FlashProgressDialog("Read ROM from ECU", self)
         worker = _FlashWorker(manager, "read")
@@ -271,9 +361,15 @@ class FlashMixin:
         )
         dialog.abort_button.clicked.connect(manager.abort)
 
+        def _on_read_thread_finished():
+            # Read ROM enters programming session — connection state unknown
+            if session_acquired and self._ecu_session:
+                self._ecu_session.release(connection_dead=True)
+
         thread.started.connect(worker.run)
         worker.finished.connect(thread.quit)
         worker.error.connect(thread.quit)
+        thread.finished.connect(_on_read_thread_finished)
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
 
@@ -311,9 +407,10 @@ class FlashMixin:
     def _on_clear_dtcs(self):
         """Read and clear DTCs from the ECU."""
         manager = FlashManager(self._get_j2534_dll_path())
+        session_uds = self._get_session_uds()
 
         try:
-            dtcs = manager.read_dtcs()
+            dtcs = manager.read_dtcs(uds=session_uds)
         except ECUError as e:
             QMessageBox.critical(self, "Error", f"Failed to read DTCs:\n{e}")
             return
@@ -341,7 +438,7 @@ class FlashMixin:
 
         if reply == QMessageBox.Yes:
             try:
-                manager.clear_dtcs()
+                manager.clear_dtcs(uds=session_uds)
                 QMessageBox.information(
                     self, "DTCs Cleared", "All DTCs have been cleared."
                 )
@@ -450,38 +547,47 @@ class FlashMixin:
 
     def _on_ecu_info(self):
         """Show ECU information (VIN, flash counter, ROM ID)."""
-        manager = FlashManager(self._get_j2534_dll_path())
+        session_uds = self._get_session_uds()
 
         try:
-            # Read VIN
-            from src.ecu.j2534 import J2534Device, setup_isotp_flow_control
-            from src.ecu.protocol import UDSConnection
-            from src.ecu.constants import (
-                J2534_PROTOCOL_ISO15765,
-                CAN_BAUDRATE,
-                ISO15765_BS,
-                ISO15765_STMIN,
-            )
+            if session_uds:
+                # Use existing session
+                vin_data = session_uds.read_vin_block()
+                rom_id = session_uds.read_rom_id()
+                dtcs = session_uds.read_dtc_status()
+            else:
+                # Open a temporary connection
+                from src.ecu.j2534 import J2534Device, setup_isotp_flow_control
+                from src.ecu.protocol import UDSConnection
+                from src.ecu.constants import (
+                    J2534_PROTOCOL_ISO15765,
+                    CAN_BAUDRATE,
+                    ISO15765_BS,
+                    ISO15765_STMIN,
+                )
 
-            with J2534Device(self._get_j2534_dll_path()) as device:
-                channel_id = device.connect(J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE)
-                device.set_config(channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0})
-                setup_isotp_flow_control(device, channel_id)
+                with J2534Device(self._get_j2534_dll_path()) as device:
+                    channel_id = device.connect(
+                        J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE
+                    )
+                    device.set_config(
+                        channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0}
+                    )
+                    setup_isotp_flow_control(device, channel_id)
 
-                uds = UDSConnection(device, channel_id)
-                uds.tester_present()
+                    uds = UDSConnection(device, channel_id)
+                    uds.tester_present()
 
-                vin_data = uds.read_vin_block()
-                rom_id = uds.read_rom_id()
-
-                dtcs = uds.read_dtc_status()
-                dtc_count = len(dtcs)
+                    vin_data = uds.read_vin_block()
+                    rom_id = uds.read_rom_id()
+                    dtcs = uds.read_dtc_status()
 
             # VIN is exactly 17 printable ASCII characters
             if vin_data:
                 raw = vin_data[:17] if len(vin_data) >= 17 else vin_data
                 vin_str = (
-                    "".join(chr(b) if 0x20 <= b <= 0x7E else "" for b in raw) or "N/A"
+                    "".join(chr(b) if 0x20 <= b <= 0x7E else "" for b in raw)
+                    or "N/A"
                 )
             else:
                 vin_str = "N/A"
@@ -509,12 +615,6 @@ class FlashMixin:
                 f"ROM ID: {rom_id or 'N/A'}\n"
                 f"DTCs: {dtc_count} stored{dtc_lines}",
             )
-
-            if hasattr(self, "_ecu_status_label"):
-                self._ecu_status_label.setText("ECU: Connected")
-                self._ecu_status_label.setStyleSheet(
-                    "color: #44aa44; font-size: 10px; padding: 0 6px;"
-                )
 
         except ECUError as e:
             QMessageBox.critical(self, "ECU Error", f"Failed to read ECU info:\n{e}")

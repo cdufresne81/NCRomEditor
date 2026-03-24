@@ -41,6 +41,13 @@ from .rom_utils import (
 from .dtc import get_dtc_description, get_dtc_prefix, format_dtc
 from .flash_manager import FlashManager, FlashState, SECURE_MODULE_AVAILABLE
 
+try:
+    from .session import ECUSession, ECUSessionState
+except ImportError:
+    # PySide6 not available (e.g., test environment)
+    ECUSession = None  # type: ignore[misc, assignment]
+    ECUSessionState = None  # type: ignore[misc, assignment]
+
 __all__ = [
     # Exceptions
     "ECUError",
@@ -81,4 +88,7 @@ __all__ = [
     "FlashManager",
     "FlashState",
     "SECURE_MODULE_AVAILABLE",
+    # Session
+    "ECUSession",
+    "ECUSessionState",
 ]
