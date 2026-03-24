@@ -14,12 +14,16 @@
 - **32-bit bridge**: Working. Bridge exe built via PyInstaller, bundled in main app. GitHub Actions CI updated.
 - **_secure module**: Purged from public repo history (git filter-branch). Lives only in private nc-flash-secure repo + local disk. .gitignore updated.
 
-## Recent Completed Work (Mar 24, 2026) - Session & UX Improvements
-- **ECU Connect/Disconnect** — Session-based connection management. ECUSession class holds J2534 device open, all operations reuse it. Connect verifies ECU with single Tester Present, no keepalive polling. Status bar reflects real state.
-- **UDS log direction prefixes** — `ECU >>` / `Tool >>` prefixes on protocol log messages for clarity
-- **DTC log deduplication** — Log now shows "Read 15 DTCs (7 unique)" and individual lines are deduplicated
-- **Window geometry persistence** — Saves/restores position and size via QSettings
-- **Tester Present log demoted to DEBUG** — Was flooding activity log at INFO level
+## Recent Completed Work (Mar 24, 2026) - ECU Programming Window
+- **ECU Programming window** — Dedicated window replacing scattered ECU menu items. Auto-connects, status cards (battery/engine/ECU), one-click dynamic flash, inline progress, auto-save ROM reads as `{ROM_ID}_{timestamp}.bin`
+- **OBD-II PID reading** — Battery voltage (PID 0x42) and engine RPM (PID 0x0C) confirmed working on NC2 ECU. Voltage is soft warning (12V threshold), engine running is hard block
+- **Checksum 67x faster** — struct.unpack batch decode replaces Python for-loop. Bounds checking added for invalid table entries
+- **Safety audit** — Fixed _ecu_busy stuck True, abort signal accumulation, missing __init__ attrs, _owns_connection reset, subprocess error handling, closeEvent thread cleanup
+- **Per-session logs** — `./logs/YYYY-MM-DD_HHMMSS.log` per app launch
+- **UDS log direction prefixes** — `ECU >>` / `Tool >>` on protocol messages
+- **DTC log deduplication** — "Read 15 DTCs (7 unique)"
+- **Window geometry persistence** — Saves/restores position and size
+- **Tester Present demoted to DEBUG**
 
 ## Recent Completed Work (Mar 24, 2026) - ECU Flash Module Hardening
 - **Security algorithm fix** — Seed-to-key was wrong: ECU sends 3-byte seed, must append 5-byte challenge constant "MazdA" to form 8-byte LFSR input. Found by tracing romdrop.exe binary at 0x0040587C. Verified against 2 known pairs from romdrop logs.
