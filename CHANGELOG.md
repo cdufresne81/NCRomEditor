@@ -6,8 +6,13 @@ All notable changes to NC Flash are documented here.
 
 ### Added
 - **Interleaved 3D table support** — TCM-style ROMs that store Y-axis values interleaved with data rows (`[M][N][X_axis][Y0 D0..DM-1][Y1 D1..DM-1]...`) are now fully supported. Read, bulk write, single-cell edit, and Y-axis edit all handle the interleaved layout. Enabled via `layout="interleaved"` attribute in XML definitions
+- **ECU Connect/Disconnect** — New menu actions in ECU menu to establish and hold a persistent J2534 connection. Operations reuse the open device instead of reconnecting each time. Status bar shows real connection state.
+- **UDS log direction prefixes** — Protocol log messages now show `ECU >>` or `Tool >>` to indicate who is speaking (e.g., `ECU >> Security access granted`)
+- **Window geometry persistence** — Main window remembers its position and size between sessions
 
 ### Fixed
+- **DTC count discrepancy** — Activity log showed raw DTC count (with duplicates) while UI showed deduplicated count. Log now shows both (e.g., "Read 15 DTCs (7 unique)") and individual DTC lines are deduplicated
+- **Tester Present log spam** — Keepalive messages demoted from INFO to DEBUG level
 - **Settings dialog crash on fresh install** — Clicking Settings did nothing on release builds because the ECU tab imported `src.ecu.flash_manager` which doesn't exist without the ECU module. The import now fails early and the ECU tab is gracefully skipped (#16)
 - **Version mismatch in About dialog** — Release builds showed `v2.0.0` regardless of the git tag. The release pipeline now stamps `APP_VERSION` from the tag before building (#16)
 
