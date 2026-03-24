@@ -239,6 +239,7 @@ class FlashManager:
             self._channel_id = None
             self._filter_id = None
             self._uds = None
+            self._owns_connection = True  # Reset for potential reuse
             return
 
         try:

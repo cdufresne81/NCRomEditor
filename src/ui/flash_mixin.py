@@ -195,34 +195,8 @@ class FlashMixin:
             self._ecu_session.disconnect_ecu()
 
     def _on_ecu_state_changed(self, state: str):
-        """Update status bar and menu actions based on session state."""
-        if state == ECUSessionState.CONNECTED.value:
-            self._ecu_status_label.setText("ECU: Connected")
-            self._ecu_status_label.setStyleSheet(
-                "color: #44aa44; font-size: 10px; padding: 0 6px;"
-            )
-            self.ecu_connect_action.setEnabled(False)
-            self.ecu_disconnect_action.setEnabled(True)
-            self.statusBar().showMessage("ECU connected", 3000)
-        elif state == ECUSessionState.CONNECTING.value:
-            self._ecu_status_label.setText("ECU: Connecting...")
-            self._ecu_status_label.setStyleSheet(
-                "color: #ccaa44; font-size: 10px; padding: 0 6px;"
-            )
-        elif state == ECUSessionState.BUSY.value:
-            self._ecu_status_label.setText("ECU: Busy")
-            self._ecu_status_label.setStyleSheet(
-                "color: #ccaa44; font-size: 10px; padding: 0 6px;"
-            )
-            self.ecu_disconnect_action.setEnabled(False)
-        else:
-            # DISCONNECTED or ERROR
-            self._ecu_status_label.setText("ECU: Not Connected")
-            self._ecu_status_label.setStyleSheet(
-                "color: gray; font-size: 10px; padding: 0 6px;"
-            )
-            self.ecu_connect_action.setEnabled(True)
-            self.ecu_disconnect_action.setEnabled(False)
+        """Update based on session state (legacy — ECU window handles its own)."""
+        pass
 
     def _on_ecu_connection_lost(self, reason: str):
         """Handle unexpected connection loss."""

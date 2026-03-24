@@ -162,6 +162,9 @@ class MainWindow(
         # Singleton comparison window reference
         self.compare_window = None
 
+        # Singleton ECU programming window
+        self.ecu_window = None
+
         # MCP server subprocess
         self._mcp_process = None
 
@@ -317,13 +320,6 @@ class MainWindow(
         # Matches longest table name width on left, rest for activity log
         main_splitter.setSizes([MAIN_SPLITTER_LEFT, MAIN_SPLITTER_RIGHT])
 
-        # ECU connection status indicator in status bar
-        self._ecu_status_label = QLabel("ECU: Not Connected")
-        self._ecu_status_label.setStyleSheet(
-            "color: gray; font-size: 10px; padding: 0 6px;"
-        )
-        self.statusBar().addPermanentWidget(self._ecu_status_label)
-
     def init_menu(self):
         """Initialize the menu bar"""
         menubar = self.menuBar()
@@ -413,35 +409,11 @@ class MainWindow(
         self.mcp_action.setCheckable(True)
         self.mcp_action.triggered.connect(self._toggle_mcp_server)
 
-        # ECU menu (Alt+U)
-        ecu_menu = menubar.addMenu("EC&U")
+        tools_menu.addSeparator()
 
-        self.ecu_connect_action = ecu_menu.addAction("&Connect")
-        self.ecu_connect_action.triggered.connect(self._on_ecu_connect)
-
-        self.ecu_disconnect_action = ecu_menu.addAction("&Disconnect")
-        self.ecu_disconnect_action.triggered.connect(self._on_ecu_disconnect)
-        self.ecu_disconnect_action.setEnabled(False)
-
-        ecu_menu.addSeparator()
-
-        self.ecu_flash_action = ecu_menu.addAction("&Flash ROM to ECU...")
-        self.ecu_flash_action.setShortcut("Ctrl+Shift+F")
-        self.ecu_flash_action.triggered.connect(self._on_flash_rom)
-        self.ecu_flash_action.setEnabled(False)
-
-        self.ecu_read_action = ecu_menu.addAction("&Read ROM from ECU...")
-        self.ecu_read_action.triggered.connect(self._on_read_rom)
-
-        ecu_menu.addSeparator()
-
-        self.ecu_read_dtcs_action = ecu_menu.addAction("Read &DTCs...")
-        self.ecu_read_dtcs_action.triggered.connect(self._on_clear_dtcs)
-
-        ecu_menu.addSeparator()
-
-        self.ecu_info_action = ecu_menu.addAction("ECU &Info...")
-        self.ecu_info_action.triggered.connect(self._on_ecu_info)
+        ecu_prog_action = tools_menu.addAction("ECU &Programming...")
+        ecu_prog_action.setShortcut("Ctrl+Shift+E")
+        ecu_prog_action.triggered.connect(self._on_open_ecu_window)
 
         # Help menu (Alt+H)
         help_menu = menubar.addMenu("&Help")
@@ -498,9 +470,8 @@ class MainWindow(
         self._toolbar_history = act
 
         act = tb.addAction(self._make_icon("flash"), "")
-        act.setToolTip("Flash ROM to ECU (Ctrl+Shift+F)")
-        act.triggered.connect(self._on_flash_rom)
-        act.setEnabled(False)
+        act.setToolTip("ECU Programming (Ctrl+Shift+E)")
+        act.triggered.connect(self._on_open_ecu_window)
         self._toolbar_flash = act
 
         tb.addSeparator()
@@ -1042,11 +1013,6 @@ class MainWindow(
         if hasattr(self, "_toolbar_compare"):
             self._toolbar_compare.setEnabled(compare_enabled)
 
-        flash_enabled = self.tab_widget.count() >= 1
-        self.ecu_flash_action.setEnabled(flash_enabled)
-        if hasattr(self, "_toolbar_flash"):
-            self._toolbar_flash.setEnabled(flash_enabled)
-
     def apply_compare_copy(
         self,
         dst_reader: "RomReader",
@@ -1355,6 +1321,21 @@ class MainWindow(
         logger.info(
             f"ROM comparison opened: {doc_a.file_name} vs {doc_b.file_name} ({n} tables differ)"
         )
+
+    def _on_open_ecu_window(self):
+        """Open the ECU Programming window (singleton)."""
+        from src.ui.ecu_window import ECUProgrammingWindow
+
+        if self.ecu_window is not None:
+            self.ecu_window.raise_()
+            self.ecu_window.activateWindow()
+            return
+
+        window = ECUProgrammingWindow(main_window=self, parent=self)
+        window.setAttribute(Qt.WA_DeleteOnClose)
+        window.destroyed.connect(lambda: setattr(self, "ecu_window", None))
+        self.ecu_window = window
+        window.show()
 
     # ========== Table Selection and Window Management ==========
 
@@ -1882,6 +1863,21 @@ def main():
     setup_logging(
         level=logging.INFO, log_file=str(log_file), console=True, detailed=False
     )
+
+    # Per-session log in ./logs/ directory
+    from datetime import datetime
+
+    session_log_dir = Path(__file__).parent / "logs"
+    session_log_dir.mkdir(exist_ok=True)
+    session_log_name = datetime.now().strftime("%Y-%m-%d_%H%M%S") + ".log"
+    session_handler = logging.FileHandler(
+        session_log_dir / session_log_name, encoding="utf-8"
+    )
+    session_handler.setLevel(logging.INFO)
+    session_handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    )
+    logging.getLogger().addHandler(session_handler)
 
     logger.info("=" * 60)
     logger.info(f"{APP_NAME} {APP_VERSION_STRING} starting")
