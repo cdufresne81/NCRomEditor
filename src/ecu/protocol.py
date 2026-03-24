@@ -194,7 +194,7 @@ class UDSConnection:
     def tester_present(self) -> None:
         """Send Tester Present to keep the session alive."""
         self.send_request(SID_TESTER_PRESENT, bytes([TESTER_PRESENT_SUB]))
-        logger.info("ECU >> Tester Present acknowledged")
+        logger.debug("ECU >> Tester Present acknowledged")
 
     def diagnostic_session(self, sub_function: int = DIAG_SESSION_PROGRAMMING) -> None:
         """
