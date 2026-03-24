@@ -2,13 +2,29 @@
 
 ## Next Tasks
 - Focus on the first value field of a table immediately after opening a table.
-- GitHub repo rename: user must go to https://github.com/cdufresne81/NCRomEditor/settings and change repo name to "nc-flash"
-
-## Pending — ECU Module (on funny-dhawan branch, NOT on master)
-- Private repo `cdufresne81/nc-flash-secure` created (seed-to-key + SBL data)
-- `src/ecu/` module + `src/ui/flash_mixin.py` + 81 tests — ready for testing
+- Investigate why CheckFlashCounter (SID 0xB1) returns NRC 0x22 — need Ghidra analysis of the full setup sequence in romdrop to find what we're missing before that call
+- ROM read save dialog may still have threading issue — QFileDialog after read complete needs testing
 - CI/release secure module checkout steps — needs `SECURE_MODULE_PAT` secret
-- Will merge to master after user testing
+- Full J2534/UDS mock test suite (identified in code review — significant effort)
+
+## Pending — ECU Module (on feature/ecu-flash-module branch)
+- **Read ROM**: Works end-to-end (authenticate → ReadMemByAddress blocks → ROM ID). Successfully read SW-LFDJEA000.HEX. Save dialog has a potential threading issue (QueuedConnection added but untested).
+- **Flash ROM**: Blocked by CheckFlashCounter NRC 0x22. The flash path needs: authenticate → CheckFlashCounter → SBL upload → ROM transfer. CheckFlashCounter is flash-only (confirmed via binary analysis). Something in the setup sequence before CheckFlashCounter differs from romdrop — user has a prompt for another Claude instance to investigate via Ghidra.
+- **Security algorithm**: Fixed. 3-byte seed + "MazdA" challenge → 8-byte LFSR input. Verified against 2 romdrop captures.
+- **32-bit bridge**: Working. Bridge exe built via PyInstaller, bundled in main app. GitHub Actions CI updated.
+- **_secure module**: Purged from public repo history (git filter-branch). Lives only in private nc-flash-secure repo + local disk. .gitignore updated.
+
+## Recent Completed Work (Mar 24, 2026) - ECU Flash Module Hardening
+- **Security algorithm fix** — Seed-to-key was wrong: ECU sends 3-byte seed, must append 5-byte challenge constant "MazdA" to form 8-byte LFSR input. Found by tracing romdrop.exe binary at 0x0040587C. Verified against 2 known pairs from romdrop logs.
+- **32-bit bridge exe** — Built j2534_bridge.py as standalone 32-bit PyInstaller exe. Updated NCFlash.spec to bundle it, build.bat to build it, release.yml for CI. j2534.py looks for exe first, falls back to py -3-32.
+- **ECU Info cleanup** — VIN strips non-printable bytes, ROM ID strips 2-byte echo prefix, DTCs deduplicated. Added P0F01, U3F01-U3F04, U3F21, U3FC1 to DTC table.
+- **CheckFlashCounter moved to flash-only** — Was in _authenticate(), bricked ECU when called during Read ROM. Binary analysis confirmed it's only in flash path (0x00404C72), never in read path.
+- **_secure module purged from public repo** — git filter-branch rewrote all 232 commits. .gitignore updated. Private repo nc-flash-secure updated with corrected algorithm.
+- **Thread safety fixes** — Qt.QueuedConnection on all worker→UI signals (was missing in flash path). Abort flag changed from bool to threading.Event.
+- **Error handling** — J2534Error now propagates instead of being masked as UDSTimeoutError. Bridge timeout overhead reduced from +5s to +2s.
+- **Removed redundant "Clear DTCs" menu item** — Read DTCs already offers clear.
+- **Bridge log levels** — Demoted bridge startup messages from INFO to DEBUG.
+- **Abort during read** — Enabled abort button during READING state (safe — no write transaction).
 
 ## Recent Completed Work (Mar 23, 2026) - Interleaved 3D Tables
 - **Interleaved 3D table support** — Added `TableLayout` enum (`CONTIGUOUS`/`INTERLEAVED`), `layout` attribute parsing in definition parser, and interleaved read/write/cell-edit/axis-edit in `RomReader`. 256 lines of tests in `test_interleaved_tables.py`. Enables TCM ROM support where Y-axis values are interleaved with data rows.
