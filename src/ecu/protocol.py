@@ -196,6 +196,59 @@ class UDSConnection:
         self.send_request(SID_TESTER_PRESENT, bytes([TESTER_PRESENT_SUB]))
         logger.debug("ECU >> Tester Present acknowledged")
 
+    # --- OBD-II Live Data ---
+
+    def read_obd_pid(self, pid: int) -> bytes:
+        """
+        Read a standard OBD-II PID via Service 0x01.
+
+        Args:
+            pid: OBD-II PID number (e.g., 0x0C for RPM, 0x42 for voltage)
+
+        Returns:
+            Raw PID data bytes (after the PID echo byte)
+        """
+        from .constants import SID_OBD_CURRENT_DATA
+
+        response = self.send_request(SID_OBD_CURRENT_DATA, bytes([pid]))
+        # Response: [pid_echo, data...] (send_request strips the 0x41 positive SID)
+        if not response or response[0] != pid:
+            from .exceptions import UDSError
+            raise UDSError(f"OBD PID 0x{pid:02X}: unexpected response format")
+        return response[1:]
+
+    def read_battery_voltage(self) -> float | None:
+        """Read control module voltage via OBD-II PID 0x42.
+
+        Returns voltage in volts, or None if unsupported/failed.
+        """
+        from .constants import OBD_PID_CONTROL_MODULE_VOLTAGE
+
+        try:
+            data = self.read_obd_pid(OBD_PID_CONTROL_MODULE_VOLTAGE)
+            if len(data) >= 2:
+                return ((data[0] << 8) | data[1]) / 1000.0
+        except Exception:
+            pass
+        return None
+
+    def read_engine_rpm(self) -> float | None:
+        """Read engine RPM via OBD-II PID 0x0C.
+
+        Returns RPM, or None if unsupported/failed.
+        """
+        from .constants import OBD_PID_ENGINE_RPM
+
+        try:
+            data = self.read_obd_pid(OBD_PID_ENGINE_RPM)
+            if len(data) >= 2:
+                return ((data[0] << 8) | data[1]) / 4.0
+        except Exception:
+            pass
+        return None
+
+    # --- Diagnostic Sessions ---
+
     def diagnostic_session(self, sub_function: int = DIAG_SESSION_PROGRAMMING) -> None:
         """
         Enter a diagnostic session.

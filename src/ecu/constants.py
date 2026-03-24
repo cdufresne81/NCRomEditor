@@ -39,6 +39,16 @@ DYNAMIC_ALIGN_SMALL = 0x1000  # alignment for regions < 0x8000
 DYNAMIC_ALIGN_LARGE = 0x20000  # alignment for regions >= 0x20000
 DYNAMIC_THRESHOLD = 0x8000
 
+# --- OBD-II Service IDs ---
+SID_OBD_CURRENT_DATA = 0x01  # Service 0x01: current data (PIDs)
+
+# Standard OBD-II PIDs
+OBD_PID_ENGINE_RPM = 0x0C  # 2 bytes, value/4 = RPM
+OBD_PID_CONTROL_MODULE_VOLTAGE = 0x42  # 2 bytes, value/1000 = volts
+
+# --- Safety Thresholds ---
+BATTERY_VOLTAGE_WARNING = 12.0  # volts — block flash below this
+
 # --- UDS Service IDs ---
 SID_DIAGNOSTIC_SESSION = 0x10
 SID_ECU_RESET = 0x11

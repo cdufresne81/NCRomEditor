@@ -23,10 +23,15 @@ def mazda_checksum(rom_data: bytes, start: int, end: int) -> int:
     CHECKSUM_MAGIC - total. The checksum table stores the expected
     value so that sum + stored_checksum == CHECKSUM_MAGIC.
     """
-    total = 0
-    for offset in range(start, end, 4):
-        word = int.from_bytes(rom_data[offset : offset + 4], "big")
-        total = (total + word) & 0xFFFFFFFF
+    rom_len = len(rom_data)
+    if end <= start or start >= rom_len:
+        return CHECKSUM_MAGIC
+    end = min(end, rom_len)
+    n_words = (end - start) // 4
+    if n_words == 0:
+        return CHECKSUM_MAGIC
+    words = struct.unpack(f">{n_words}I", rom_data[start : start + n_words * 4])
+    total = sum(words) & 0xFFFFFFFF
     return (CHECKSUM_MAGIC - total) & 0xFFFFFFFF
 
 

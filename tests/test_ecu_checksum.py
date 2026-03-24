@@ -39,6 +39,29 @@ class TestMazdaChecksum:
         # Range [8, 12) has one word = 5
         assert mazda_checksum(data, 8, 12) == (CHECKSUM_MAGIC - 5) & 0xFFFFFFFF
 
+    def test_end_before_start_returns_magic(self):
+        """Invalid range (end < start) returns CHECKSUM_MAGIC."""
+        data = b"\xff" * 16
+        assert mazda_checksum(data, 12, 4) == CHECKSUM_MAGIC
+
+    def test_start_beyond_rom_returns_magic(self):
+        """Start beyond ROM size returns CHECKSUM_MAGIC."""
+        data = b"\xff" * 16
+        assert mazda_checksum(data, 100, 200) == CHECKSUM_MAGIC
+
+    def test_end_clamped_to_rom_size(self):
+        """End beyond ROM is clamped — no crash."""
+        data = b"\x00\x00\x00\x01" * 4  # 16 bytes
+        # Request range [0, 1000) but ROM is only 16 bytes → clamp to [0, 16)
+        result = mazda_checksum(data, 0, 1000)
+        expected = mazda_checksum(data, 0, 16)
+        assert result == expected
+
+    def test_zero_size_range_returns_magic(self):
+        """Zero-size range returns CHECKSUM_MAGIC."""
+        data = b"\xff" * 16
+        assert mazda_checksum(data, 8, 8) == CHECKSUM_MAGIC
+
 
 class TestCorrectRomChecksums:
     """Test correct_rom_checksums() on a synthetic ROM."""
