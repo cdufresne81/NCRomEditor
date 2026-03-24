@@ -82,3 +82,9 @@ projects/*
 # Workspace state file (written by app, read by MCP server)
 workspace.json
 
+# Private security module (seed-to-key algorithm + SBL blobs)
+# Lives in separate private repo: nc-flash-secure
+src/ecu/_secure/_security.py
+src/ecu/_secure/_sbl.py
+src/ecu/_secure/__init__.py
+
