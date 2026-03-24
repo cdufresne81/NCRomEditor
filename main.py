@@ -101,9 +101,13 @@ class MainWindow(
     def __init__(self):
         super().__init__()
         self.setWindowTitle(APP_NAME)
-        self.setGeometry(
-            MAIN_WINDOW_X, MAIN_WINDOW_Y, MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT
-        )
+        saved_geometry = get_settings().get_window_geometry()
+        if saved_geometry:
+            self.restoreGeometry(saved_geometry)
+        else:
+            self.setGeometry(
+                MAIN_WINDOW_X, MAIN_WINDOW_Y, MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT
+            )
 
         logger.info("Initializing NC Flash")
 
