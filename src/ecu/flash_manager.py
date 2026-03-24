@@ -16,6 +16,7 @@ Safety principles:
 """
 
 import logging
+import threading
 import time
 from enum import Enum
 from typing import Callable, Optional
@@ -141,7 +142,7 @@ class FlashManager:
         """
         self._dll_path = dll_path
         self._state = FlashState.IDLE
-        self._abort_requested = False
+        self._abort_event = threading.Event()
         self._device = None
         self._channel_id = None
         self._filter_id = None
@@ -198,8 +199,8 @@ class FlashManager:
             )
 
     def _check_abort(self) -> bool:
-        """Check if abort has been requested."""
-        return self._abort_requested
+        """Check if abort has been requested. Thread-safe."""
+        return self._abort_event.is_set()
 
     def abort(self) -> None:
         """
@@ -209,7 +210,7 @@ class FlashManager:
         immediate — the current block will complete first.
         """
         if self.is_busy:
-            self._abort_requested = True
+            self._abort_event.set()
             logger.warning("Flash abort requested by user")
 
     def _cleanup(self) -> None:
@@ -349,7 +350,7 @@ class FlashManager:
         if self.is_busy:
             raise FlashError("Flash operation already in progress")
 
-        self._abort_requested = False
+        self._abort_event.clear()
         self._state = FlashState.IDLE
 
         try:
@@ -397,7 +398,7 @@ class FlashManager:
         if self.is_busy:
             raise FlashError("Flash operation already in progress")
 
-        self._abort_requested = False
+        self._abort_event.clear()
         self._state = FlashState.IDLE
 
         # Validate new ROM
@@ -605,7 +606,7 @@ class FlashManager:
         if self.is_busy:
             raise FlashError("Operation already in progress")
 
-        self._abort_requested = False
+        self._abort_event.clear()
         self._state = FlashState.IDLE
 
         try:

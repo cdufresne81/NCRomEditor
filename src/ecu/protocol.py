@@ -43,6 +43,7 @@ from .constants import (
     CAN_REQUEST_ID,
 )
 from .exceptions import (
+    J2534Error,
     UDSError,
     NegativeResponseError,
     SecurityAccessDenied,
@@ -128,6 +129,8 @@ class UDSConnection:
         while elapsed < TIMEOUT_RESPONSE_PENDING_MAX:
             try:
                 msgs = self._device.read_msgs(self._channel_id, 1, timeout)
+            except J2534Error:
+                raise  # Bridge/device errors should propagate as-is
             except Exception as e:
                 raise UDSTimeoutError(
                     f"No response from ECU for SID 0x{service_id:02X}: {e}"

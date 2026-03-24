@@ -145,7 +145,7 @@ def _find_bridge_exe() -> Optional[str]:
 
     for candidate in candidates:
         if candidate.is_file():
-            logger.info("Found bridge executable: %s", candidate)
+            logger.debug("Found bridge executable: %s", candidate)
             return str(candidate)
 
     return None
@@ -350,7 +350,7 @@ class J2534Device:
         except OSError as e:
             if getattr(e, "winerror", 0) == 193:
                 # WinError 193: bitness mismatch (e.g. 32-bit DLL in 64-bit Python)
-                logger.info(
+                logger.debug(
                     "DLL bitness mismatch for '%s', attempting bridge", resolved
                 )
                 self._start_bridge(resolved)
@@ -381,7 +381,7 @@ class J2534Device:
         bridge_exe = _find_bridge_exe()
         if bridge_exe:
             cmd = [bridge_exe, dll_path]
-            logger.info("Starting bridge via bundled exe: %s", bridge_exe)
+            logger.debug("Starting bridge via bundled exe: %s", bridge_exe)
         else:
             python_cmd = _find_matching_python()
             if python_cmd is None:
@@ -395,7 +395,7 @@ class J2534Device:
                 )
             bridge_script = str(Path(__file__).parent / "j2534_bridge.py")
             cmd = [*python_cmd, bridge_script, dll_path]
-            logger.info("Starting bridge via py launcher: %s", " ".join(cmd))
+            logger.debug("Starting bridge via py launcher: %s", " ".join(cmd))
 
         self._bridge = subprocess.Popen(
             cmd,
@@ -426,7 +426,7 @@ class J2534Device:
                 f"J2534 bridge: {resp.get('error', 'unknown error')}"
             )
 
-        logger.info("J2534 bridge started (PID=%d)", self._bridge.pid)
+        logger.debug("J2534 bridge started (PID=%d)", self._bridge.pid)
 
     def _bridge_alive(self) -> bool:
         """Check if the bridge subprocess is still running."""
@@ -777,7 +777,7 @@ class J2534Device:
 
         if self._bridge:
             # Bridge timeout: J2534 timeout (ms→s) + overhead for IPC
-            bridge_timeout = (timeout / 1000.0) + 5.0
+            bridge_timeout = (timeout / 1000.0) + 2.0
             resp = self._bridge_call(
                 "read_msgs",
                 timeout=bridge_timeout,
@@ -826,7 +826,7 @@ class J2534Device:
         self._ensure_dll()
 
         if self._bridge:
-            bridge_timeout = (timeout / 1000.0) + 5.0
+            bridge_timeout = (timeout / 1000.0) + 2.0
             self._bridge_call(
                 "write_msgs",
                 timeout=bridge_timeout,

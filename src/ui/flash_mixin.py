@@ -139,10 +139,11 @@ class FlashProgressDialog(QDialog):
         self.detail_label.setText(p.message)
         self.log_text.append(p.message)
 
-        # Only allow abort during transfer phases
+        # Allow abort during transfer and read phases
         can_abort = p.state in (
             FlashState.TRANSFERRING_SBL,
             FlashState.TRANSFERRING_PROGRAM,
+            FlashState.READING,
         )
         self.abort_button.setEnabled(can_abort)
 
@@ -260,11 +261,14 @@ class FlashMixin:
         thread = QThread()
         worker.moveToThread(thread)
 
-        worker.progress.connect(dialog.update_progress)
+        worker.progress.connect(dialog.update_progress, Qt.QueuedConnection)
         worker.finished.connect(
-            lambda: self._on_read_rom_finished(dialog, worker, manager)
+            lambda: self._on_read_rom_finished(dialog, worker, manager),
+            Qt.QueuedConnection,
         )
-        worker.error.connect(lambda msg: dialog.on_finished(False, msg))
+        worker.error.connect(
+            lambda msg: dialog.on_finished(False, msg), Qt.QueuedConnection
+        )
         dialog.abort_button.clicked.connect(manager.abort)
 
         thread.started.connect(worker.run)
@@ -528,9 +532,13 @@ class FlashMixin:
         thread = QThread()
         worker.moveToThread(thread)
 
-        worker.progress.connect(dialog.update_progress)
-        worker.finished.connect(lambda: dialog.on_finished(True))
-        worker.error.connect(lambda msg: dialog.on_finished(False, msg))
+        worker.progress.connect(dialog.update_progress, Qt.QueuedConnection)
+        worker.finished.connect(
+            lambda: dialog.on_finished(True), Qt.QueuedConnection
+        )
+        worker.error.connect(
+            lambda msg: dialog.on_finished(False, msg), Qt.QueuedConnection
+        )
         dialog.abort_button.clicked.connect(manager.abort)
 
         thread.started.connect(worker.run)
