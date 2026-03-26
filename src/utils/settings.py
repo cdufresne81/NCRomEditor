@@ -275,25 +275,6 @@ class AppSettings:
         """
         self.settings.setValue("display/toggle_categories", categories)
 
-    def get_romdrop_executable_path(self) -> str:
-        """
-        Get the configured RomDrop executable path
-
-        Returns:
-            str: Path to romdrop.exe, or empty string if not configured
-        """
-        path = self.settings.value("tools/romdrop_executable_path", "")
-        return os.path.normpath(path) if path else ""
-
-    def set_romdrop_executable_path(self, path: str):
-        """
-        Set the RomDrop executable path
-
-        Args:
-            path: Path to romdrop.exe
-        """
-        self.settings.setValue("tools/romdrop_executable_path", path)
-
     def get_j2534_dll_path(self) -> str:
         """
         Get the configured J2534 DLL path for ECU communication.

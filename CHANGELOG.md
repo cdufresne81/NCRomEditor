@@ -6,8 +6,26 @@ All notable changes to NC Flash are documented here.
 
 ### Added
 - **Interleaved 3D table support** — TCM-style ROMs that store Y-axis values interleaved with data rows (`[M][N][X_axis][Y0 D0..DM-1][Y1 D1..DM-1]...`) are now fully supported. Read, bulk write, single-cell edit, and Y-axis edit all handle the interleaved layout. Enabled via `layout="interleaved"` attribute in XML definitions
+- **ECU Programming window** — Dedicated window (Tools > ECU Programming) replacing scattered ECU menu items. Auto-connects, shows battery voltage/engine RPM/ECU info in status cards, one-click flash with dynamic/full auto-detection, inline progress, auto-save ROM reads
+- **ECU Connect/Disconnect** — New menu actions in ECU menu to establish and hold a persistent J2534 connection. Operations reuse the open device instead of reconnecting each time. Status bar shows real connection state.
+- **OBD-II PID reading** — Battery voltage (PID 0x42) and engine RPM (PID 0x0C) via standard OBD-II Service 0x01
+- **Per-session log files** — Each app launch saves a complete log to `./logs/` directory
+- **UDS log direction prefixes** — Protocol log messages now show `ECU >>` or `Tool >>` to indicate who is speaking (e.g., `ECU >> Security access granted`)
+- **Window geometry persistence** — Main window remembers its position and size between sessions
+- **CI: private _secure module** — CI and release workflows now pull the private `nc-flash-secure` repo so security tests run and release builds include the secure module
+
+### Changed
+- **Patch ROM dialog** — Replaced sequential file-dialog chain with a single all-in-one dialog showing stock ROM, patch file, and output path fields with inline results after patching
+- **Checksum optimization** — 67x faster ROM checksum calculation using struct.unpack batch decoding
+- **"ROMs are identical" is no longer an error** — Dynamic flash with no differences shows "Nothing to flash" in grey instead of a red error with traceback
 
 ### Fixed
+- **J2534 bridge not loading in built exe** — PyInstaller frozen builds threw a different OSError than expected, bypassing the 32-bit bridge fallback. The DLL loader now detects both native bitness mismatch and PyInstaller's frozen-app errors
+- **J2534 bridge exe not found in built app** — PyInstaller puts data files in `_internal/` (sys._MEIPASS) but bridge lookup only searched next to the exe
+- **J2534 bridge console window visible** — The 32-bit bridge subprocess no longer opens a visible cmd window on Windows
+- **DTC count discrepancy** — Activity log showed raw DTC count (with duplicates) while UI showed deduplicated count. Log now shows both (e.g., "Read 15 DTCs (7 unique)") and individual DTC lines are deduplicated
+- **Tester Present log spam** — Keepalive messages demoted from INFO to DEBUG level
+- **Checksum bounds checking** — Invalid checksum table entries (out-of-bounds addresses) no longer crash the flash process
 - **Settings dialog crash on fresh install** — Clicking Settings did nothing on release builds because the ECU tab imported `src.ecu.flash_manager` which doesn't exist without the ECU module. The import now fails early and the ECU tab is gracefully skipped (#16)
 - **Version mismatch in About dialog** — Release builds showed `v2.0.0` regardless of the git tag. The release pipeline now stamps `APP_VERSION` from the tag before building (#16)
 

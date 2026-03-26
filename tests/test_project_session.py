@@ -47,6 +47,7 @@ class _SessionHost(SessionMixin):
         self._delete_workspace_state = MagicMock()
         self._stop_mcp_server = MagicMock()
         self.statusBar = MagicMock()
+        self.saveGeometry = MagicMock()
 
 
 class _RecentHost(RecentFilesMixin):

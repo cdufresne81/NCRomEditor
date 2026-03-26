@@ -215,28 +215,11 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout()
         tab.setLayout(layout)
 
-        # RomDrop group
-        romdrop_group = QGroupBox("RomDrop")
-        romdrop_layout = QFormLayout()
-        romdrop_group.setLayout(romdrop_layout)
+        # ROM Definitions group
+        rom_def_group = QGroupBox("ROM Definitions")
+        rom_def_layout = QFormLayout()
+        rom_def_group.setLayout(rom_def_layout)
 
-        # RomDrop executable path
-        romdrop_path_layout = QHBoxLayout()
-        self.romdrop_path_edit = QLineEdit()
-        self.romdrop_path_edit.setPlaceholderText("Path to romdrop.exe")
-        romdrop_path_layout.addWidget(self.romdrop_path_edit)
-
-        browse_romdrop_button = QPushButton("Browse...")
-        browse_romdrop_button.clicked.connect(self.browse_romdrop_executable)
-        romdrop_path_layout.addWidget(browse_romdrop_button)
-
-        romdrop_layout.addRow("RomDrop executable:", romdrop_path_layout)
-
-        romdrop_help = QLabel("Path to romdrop.exe for one-click ECU flashing")
-        romdrop_help.setStyleSheet("color: gray; font-size: 10px;")
-        romdrop_layout.addRow("", romdrop_help)
-
-        # Metadata directory setting
         metadata_layout = QHBoxLayout()
         self.metadata_path_edit = QLineEdit()
         self.metadata_path_edit.setPlaceholderText("Path to ROM metadata XML files")
@@ -246,13 +229,13 @@ class SettingsDialog(QDialog):
         browse_metadata_button.clicked.connect(self.browse_metadata_directory)
         metadata_layout.addWidget(browse_metadata_button)
 
-        romdrop_layout.addRow("Metadata Directory:", metadata_layout)
+        rom_def_layout.addRow("Metadata Directory:", metadata_layout)
 
         metadata_help = QLabel("Location of ROM metadata XML files (e.g., lf9veb.xml)")
         metadata_help.setStyleSheet("color: gray; font-size: 10px;")
-        romdrop_layout.addRow("", metadata_help)
+        rom_def_layout.addRow("", metadata_help)
 
-        layout.addWidget(romdrop_group)
+        layout.addWidget(rom_def_group)
 
         # MCP Server group
         mcp_group = QGroupBox("MCP Server (AI Assistant Access)")
@@ -408,10 +391,6 @@ class SettingsDialog(QDialog):
         toggle_cats = self.settings.get_toggle_categories()
         self.dtc_toggle_checkbox.setChecked("DTC - Activation Flags" in toggle_cats)
 
-        # Load RomDrop executable path
-        romdrop_path = self.settings.get_romdrop_executable_path()
-        self.romdrop_path_edit.setText(romdrop_path)
-
         # Load MCP auto-start setting
         self.mcp_auto_start_checkbox.setChecked(self.settings.get_mcp_auto_start())
 
@@ -485,22 +464,6 @@ class SettingsDialog(QDialog):
         if directory:
             self.export_path_edit.setText(directory)
 
-    def browse_romdrop_executable(self):
-        """Open file browser for RomDrop executable"""
-        current_path = self.romdrop_path_edit.text()
-        if not current_path:
-            current_path = str(Path.cwd())
-
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select RomDrop Executable",
-            current_path,
-            "Executable Files (*.exe);;All Files (*)",
-        )
-
-        if file_path:
-            self.romdrop_path_edit.setText(file_path)
-
     def apply_settings(self):
         """Apply settings without closing the dialog"""
         # Save projects directory
@@ -535,10 +498,6 @@ class SettingsDialog(QDialog):
         if self.dtc_toggle_checkbox.isChecked():
             toggle_cats.append("DTC - Activation Flags")
         self.settings.set_toggle_categories(toggle_cats)
-
-        # Save RomDrop executable path
-        romdrop_path = self.romdrop_path_edit.text().strip()
-        self.settings.set_romdrop_executable_path(romdrop_path)
 
         # Save MCP auto-start setting
         self.settings.set_mcp_auto_start(self.mcp_auto_start_checkbox.isChecked())

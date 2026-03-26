@@ -108,7 +108,8 @@ class SessionMixin:
                 else:
                     open_files.append(document.rom_path)
 
-        # Save to settings
+        # Save window geometry and session
+        self.settings.set_window_geometry(self.saveGeometry())
         self.settings.set_session_files(open_files)
         logger.info(f"Session saved: {len(open_files)} file(s)")
 
