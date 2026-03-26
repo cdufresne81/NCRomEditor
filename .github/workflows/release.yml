@@ -96,7 +96,12 @@ jobs:
 
     - name: Build installer
       run: |
-        $env:APP_VERSION = "${{ github.ref_name }}".TrimStart("v")
+        $ref = "${{ github.ref_name }}"
+        if ($ref -match '^v') {
+          $env:APP_VERSION = $ref.TrimStart("v")
+        } else {
+          $env:APP_VERSION = "0.0.0-dev"
+        }
         & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging/installer.iss
       shell: pwsh
 
