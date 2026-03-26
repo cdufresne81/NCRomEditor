@@ -1,8 +1,11 @@
 # Session Notes
 
 ## Next Tasks
-- J2534/UDS mock test suite — no comprehensive mocking exists yet (only `test_ecu_obd.py` and `test_ecu_flash_manager.py` state transitions)
 - CI secret `SECURE_REPO_PAT` is configured and matches workflows. No graceful fallback if missing (CI hard-fails), but this is acceptable.
+- `examples/metadata/LFDJEA.xml` is untracked — may need committing
+
+## Recent Completed Work (Mar 26, 2026) - Build Fix
+- **J2534 bridge frozen-app fix** — PyInstaller builds failed to load 32-bit DLL because frozen ctypes raises a different OSError than native bitness mismatch. Bridge fallback now detects both.
 
 ## ECU Module Status (feature/ecu-flash-module branch)
 - **Read ROM**: Working end-to-end. Threading verified safe (explicit `Qt.QueuedConnection` on all worker signals).

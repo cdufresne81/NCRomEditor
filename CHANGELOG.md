@@ -21,6 +21,7 @@ All notable changes to NC Flash are documented here.
 - **Checksum optimization** — 67x faster ROM checksum calculation using struct.unpack batch decoding
 
 ### Fixed
+- **J2534 bridge not loading in built exe** — PyInstaller frozen builds threw a different OSError than expected, bypassing the 32-bit bridge fallback. The DLL loader now detects both native bitness mismatch and PyInstaller's frozen-app errors
 - **DTC count discrepancy** — Activity log showed raw DTC count (with duplicates) while UI showed deduplicated count. Log now shows both (e.g., "Read 15 DTCs (7 unique)") and individual DTC lines are deduplicated
 - **Tester Present log spam** — Keepalive messages demoted from INFO to DEBUG level
 - **Checksum bounds checking** — Invalid checksum table entries (out-of-bounds addresses) no longer crash the flash process
