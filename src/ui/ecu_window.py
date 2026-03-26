@@ -39,7 +39,7 @@ from src.ecu.flash_manager import (
     FlashProgress,
     SECURE_MODULE_AVAILABLE,
 )
-from src.ecu.exceptions import ECUError, FlashAbortedError
+from src.ecu.exceptions import ECUError, FlashAbortedError, ROMValidationError
 from src.ui.log_console import LogConsole
 
 logger = logging.getLogger(__name__)
@@ -90,6 +90,10 @@ class _FlashWorker(QObject):
             self.finished.emit()
         except FlashAbortedError:
             self.error.emit("Operation aborted by user")
+        except ROMValidationError as e:
+            # Not a real error — e.g. "ROMs are identical"
+            logger.info("Flash skipped: %s", e)
+            self.error.emit(str(e))
         except Exception as e:
             logger.error("Flash worker error: %s", e, exc_info=True)
             self.error.emit(str(e))
@@ -824,10 +828,18 @@ class ECUProgrammingWindow(QMainWindow):
                 self._progress_detail.setText("Flash complete! ECU is rebooting...")
                 QTimer.singleShot(3000, self._auto_reconnect)
         else:
-            self._progress_state.setText("Failed")
-            self._progress_state.setStyleSheet(
-                "font-weight: bold; font-size: 13px; color: #cc4444;"
-            )
+            # "ROMs are identical" is not a failure — show as info
+            is_info = "identical" in error_msg.lower()
+            if is_info:
+                self._progress_state.setText("Nothing to flash")
+                self._progress_state.setStyleSheet(
+                    "font-weight: bold; font-size: 13px; color: #aaaaaa;"
+                )
+            else:
+                self._progress_state.setText("Failed")
+                self._progress_state.setStyleSheet(
+                    "font-weight: bold; font-size: 13px; color: #cc4444;"
+                )
             self._progress_detail.setText(error_msg)
 
     @staticmethod
