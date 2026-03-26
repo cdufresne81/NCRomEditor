@@ -12,6 +12,10 @@ All notable changes to NC Flash are documented here.
 - **Per-session log files** — Each app launch saves a complete log to `./logs/` directory
 - **UDS log direction prefixes** — Protocol log messages now show `ECU >>` or `Tool >>` to indicate who is speaking (e.g., `ECU >> Security access granted`)
 - **Window geometry persistence** — Main window remembers its position and size between sessions
+- **CI: private _secure module** — CI and release workflows now pull the private `nc-flash-secure` repo so security tests run and release builds include the secure module
+
+### Changed
+- **Patch ROM dialog** — Replaced sequential file-dialog chain with a single all-in-one dialog showing stock ROM, patch file, and output path fields with inline results after patching
 
 ### Changed
 - **Checksum optimization** — 67x faster ROM checksum calculation using struct.unpack batch decoding

@@ -1,18 +1,15 @@
 # Session Notes
 
 ## Next Tasks
-- Focus on the first value field of a table immediately after opening a table.
-- Investigate why CheckFlashCounter (SID 0xB1) returns NRC 0x22 — need Ghidra analysis of the full setup sequence in romdrop to find what we're missing before that call
-- ROM read save dialog may still have threading issue — QFileDialog after read complete needs testing
-- CI/release secure module checkout steps — needs `SECURE_MODULE_PAT` secret
-- Full J2534/UDS mock test suite (identified in code review — significant effort)
+- J2534/UDS mock test suite — no comprehensive mocking exists yet (only `test_ecu_obd.py` and `test_ecu_flash_manager.py` state transitions)
+- CI secret `SECURE_REPO_PAT` is configured and matches workflows. No graceful fallback if missing (CI hard-fails), but this is acceptable.
 
-## Pending — ECU Module (on feature/ecu-flash-module branch)
-- **Read ROM**: Works end-to-end (authenticate → ReadMemByAddress blocks → ROM ID). Successfully read SW-LFDJEA000.HEX. Save dialog has a potential threading issue (QueuedConnection added but untested).
-- **Flash ROM**: Blocked by CheckFlashCounter NRC 0x22. The flash path needs: authenticate → CheckFlashCounter → SBL upload → ROM transfer. CheckFlashCounter is flash-only (confirmed via binary analysis). Something in the setup sequence before CheckFlashCounter differs from romdrop — user has a prompt for another Claude instance to investigate via Ghidra.
-- **Security algorithm**: Fixed. 3-byte seed + "MazdA" challenge → 8-byte LFSR input. Verified against 2 romdrop captures.
-- **32-bit bridge**: Working. Bridge exe built via PyInstaller, bundled in main app. GitHub Actions CI updated.
-- **_secure module**: Purged from public repo history (git filter-branch). Lives only in private nc-flash-secure repo + local disk. .gitignore updated.
+## ECU Module Status (feature/ecu-flash-module branch)
+- **Read ROM**: Working end-to-end. Threading verified safe (explicit `Qt.QueuedConnection` on all worker signals).
+- **Flash ROM**: Working. CheckFlashCounter resolved — moved from `_authenticate()` to flash-only path (`flash_manager.py:525-527`), matching romdrop binary analysis.
+- **Security algorithm**: Working (3-byte seed + "MazdA" → 8-byte LFSR)
+- **32-bit bridge**: Working. Auto-builds on first dev use via `packaging/build_bridge.py`
+- **_secure module**: Private repo only (nc-flash-secure). CI pulls via `secrets.SECURE_REPO_PAT` (not `SECURE_MODULE_PAT` as previously noted)
 
 ## Recent Completed Work (Mar 24, 2026) - ECU Programming Window
 - **ECU Programming window** — Dedicated window replacing scattered ECU menu items. Auto-connects, status cards (battery/engine/ECU), one-click dynamic flash, inline progress, auto-save ROM reads as `{ROM_ID}_{timestamp}.bin`
