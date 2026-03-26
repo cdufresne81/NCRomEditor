@@ -30,17 +30,17 @@ jobs:
         cp -r _secure_tmp/* src/ecu/_secure/
       shell: bash
 
-    - name: Set up Python (64-bit)
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-        architecture: 'x64'
-
     - name: Set up Python (32-bit, for J2534 bridge)
       uses: actions/setup-python@v5
       with:
         python-version: '3.12'
         architecture: 'x86'
+
+    - name: Set up Python (64-bit, must be last to stay on PATH)
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        architecture: 'x64'
 
     - name: Install dependencies (64-bit)
       run: |
