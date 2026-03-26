@@ -59,9 +59,7 @@ class _ECUInfoWorker(QObject):
                     channel_id = device.connect(
                         J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE
                     )
-                    device.set_config(
-                        channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0}
-                    )
+                    device.set_config(channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0})
                     setup_isotp_flow_control(device, channel_id)
 
                     uds = UDSConnection(device, channel_id)
@@ -96,7 +94,14 @@ class _ECUInfoWorker(QObject):
 class FlashSetupDialog(QDialog):
     """Pre-flash setup dialog with ECU info and flash mode selection."""
 
-    def __init__(self, file_name: str, rom_path: Path, dll_path: str, parent=None, session_uds=None):
+    def __init__(
+        self,
+        file_name: str,
+        rom_path: Path,
+        dll_path: str,
+        parent=None,
+        session_uds=None,
+    ):
         super().__init__(parent)
         self.setWindowTitle("Flash ROM to ECU")
         self.setMinimumWidth(420)

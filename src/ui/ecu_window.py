@@ -51,7 +51,6 @@ CONDITION_POLL_INTERVAL = 5000
 # --- Workers ---
 
 
-
 class _FlashWorker(QObject):
     """Worker for flash/read operations in background thread."""
 
@@ -125,9 +124,7 @@ class _StatusCard(QFrame):
         layout.addWidget(self._title)
 
         self._value = QLabel("—")
-        self._value.setStyleSheet(
-            "font-size: 15px; font-weight: bold; color: white;"
-        )
+        self._value.setStyleSheet("font-size: 15px; font-weight: bold; color: white;")
         layout.addWidget(self._value)
 
         self._subtitle = QLabel("")
@@ -145,9 +142,7 @@ class _StatusCard(QFrame):
 
     def set_subtitle(self, text: str, color: str = "#aaa"):
         self._subtitle.setText(text)
-        self._subtitle.setStyleSheet(
-            f"font-size: 10px; color: {color};"
-        )
+        self._subtitle.setStyleSheet(f"font-size: 10px; color: {color};")
 
 
 # --- Main Window ---
@@ -332,7 +327,10 @@ class ECUProgrammingWindow(QMainWindow):
             return
 
         # Disconnect main window session if active
-        if hasattr(self._main_window, "_ecu_session") and self._main_window._ecu_session:
+        if (
+            hasattr(self._main_window, "_ecu_session")
+            and self._main_window._ecu_session
+        ):
             if self._main_window._ecu_session.is_connected:
                 self._main_window._ecu_session.disconnect_ecu()
 
@@ -401,8 +399,7 @@ class ECUProgrammingWindow(QMainWindow):
             if vin_data:
                 raw = vin_data[:17] if len(vin_data) >= 17 else vin_data
                 data["vin"] = (
-                    "".join(chr(b) if 0x20 <= b <= 0x7E else "" for b in raw)
-                    or "N/A"
+                    "".join(chr(b) if 0x20 <= b <= 0x7E else "" for b in raw) or "N/A"
                 )
             else:
                 data["vin"] = "N/A"
@@ -474,12 +471,13 @@ class ECUProgrammingWindow(QMainWindow):
             if self._voltage is not None:
                 log_parts.append(f"Battery: {self._voltage:.1f}V")
             if self._rpm is not None:
-                log_parts.append(f"Engine: {'OFF' if self._rpm < 1 else f'{self._rpm:.0f} RPM'}")
+                log_parts.append(
+                    f"Engine: {'OFF' if self._rpm < 1 else f'{self._rpm:.0f} RPM'}"
+                )
             logger.info(" — ".join(log_parts))
 
         self._update_action_states()
         self._poll_timer.start()
-
 
     def _poll_conditions(self):
         """Periodic lightweight refresh of voltage + RPM (synchronous)."""
@@ -535,7 +533,9 @@ class ECUProgrammingWindow(QMainWindow):
 
     def _update_action_states(self):
         connected = self._session and self._session.is_connected
-        flash_running = self._flash_thread is not None and self._flash_thread.isRunning()
+        flash_running = (
+            self._flash_thread is not None and self._flash_thread.isRunning()
+        )
         busy = self._ecu_busy or flash_running
         engine_off = self._rpm is None or self._rpm < 1.0
         has_rom = self._get_current_rom_data() is not None
@@ -649,7 +649,9 @@ class ECUProgrammingWindow(QMainWindow):
             archive_path = str(rom_path.parent / ARCHIVE_FILENAME)
 
             if Path(archive_path).is_file():
-                self._start_flash("dynamic_flash", rom_data=rom_data, archive_path=archive_path)
+                self._start_flash(
+                    "dynamic_flash", rom_data=rom_data, archive_path=archive_path
+                )
             else:
                 self._start_flash("flash", rom_data=rom_data, archive_path=archive_path)
             started = True
@@ -775,7 +777,11 @@ class ECUProgrammingWindow(QMainWindow):
         if self._session_acquired and self._session:
             # Flash ends with ECU reset, read leaves ECU in programming session
             # Both require reconnect to get back to a clean default session
-            connection_dead = self._current_operation in ("flash", "dynamic_flash", "read")
+            connection_dead = self._current_operation in (
+                "flash",
+                "dynamic_flash",
+                "read",
+            )
             self._session.release(connection_dead=connection_dead)
 
         if success:
@@ -794,26 +800,28 @@ class ECUProgrammingWindow(QMainWindow):
                     # Open directory with file selected
                     try:
                         import subprocess
+
                         subprocess.Popen(["explorer", "/select,", str(saved_path)])
                     except Exception:
                         pass  # Non-critical — ROM is saved regardless
                     # Remind user to keep a backup
-                    QTimer.singleShot(500, lambda: QMessageBox.information(
-                        self,
-                        "ROM Read Complete",
-                        f"ROM saved to:\n{saved_path.name}\n\n"
-                        "Keep a copy of this file somewhere safe.\n"
-                        "This is your stock ROM backup — you will need it\n"
-                        "to revert to factory if anything goes wrong.",
-                    ))
+                    QTimer.singleShot(
+                        500,
+                        lambda: QMessageBox.information(
+                            self,
+                            "ROM Read Complete",
+                            f"ROM saved to:\n{saved_path.name}\n\n"
+                            "Keep a copy of this file somewhere safe.\n"
+                            "This is your stock ROM backup — you will need it\n"
+                            "to revert to factory if anything goes wrong.",
+                        ),
+                    )
                 else:
                     self._progress_detail.setText("ROM save failed. Reconnecting...")
                 # ECU is stuck in programming session — must reconnect
                 QTimer.singleShot(500, self._auto_reconnect)
             elif self._current_operation in ("flash", "dynamic_flash"):
-                self._progress_detail.setText(
-                    "Flash complete! ECU is rebooting..."
-                )
+                self._progress_detail.setText("Flash complete! ECU is rebooting...")
                 QTimer.singleShot(3000, self._auto_reconnect)
         else:
             self._progress_state.setText("Failed")
@@ -868,7 +876,6 @@ class ECUProgrammingWindow(QMainWindow):
         except Exception as e:
             logger.error("Failed to auto-save ROM: %s", e)
             return None
-
 
     # --- DTC Operations ---
 

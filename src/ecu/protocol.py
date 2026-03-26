@@ -214,6 +214,7 @@ class UDSConnection:
         # Response: [pid_echo, data...] (send_request strips the 0x41 positive SID)
         if not response or response[0] != pid:
             from .exceptions import UDSError
+
             raise UDSError(f"OBD PID 0x{pid:02X}: unexpected response format")
         return response[1:]
 
@@ -270,7 +271,9 @@ class UDSConnection:
             self.send_request(SID_ECU_RESET, bytes([reset_type]), timeout=TIMEOUT_RESET)
         except UDSTimeoutError:
             # ECU may reset before sending response - this is expected
-            logger.info("Tool >> ECU reset requested (no response - ECU likely resetting)")
+            logger.info(
+                "Tool >> ECU reset requested (no response - ECU likely resetting)"
+            )
             return
         logger.info(f"ECU >> Reset type 0x{reset_type:02X} acknowledged")
 

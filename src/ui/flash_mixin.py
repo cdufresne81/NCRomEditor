@@ -421,103 +421,11 @@ class FlashMixin:
                 QMessageBox.critical(self, "Error", f"Failed to clear DTCs:\n{e}")
 
     def _on_patch_rom(self):
-        """Apply an XOR patch to a stock ROM, producing a patched ROM."""
-        from src.ecu.rom_utils import patch_rom
-        from src.ecu.exceptions import ROMValidationError
+        """Apply an XOR patch to a stock ROM via the Patch ROM dialog."""
+        from src.ui.patch_dialog import PatchRomDialog
 
-        # Step 1: Select stock ROM
-        stock_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select Stock ROM",
-            "",
-            "ROM Files (*.bin);;All Files (*)",
-        )
-        if not stock_path:
-            return
-
-        # Step 2: Select patch file
-        patch_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select Patch File",
-            "",
-            "ROM Files (*.bin);;All Files (*)",
-        )
-        if not patch_path:
-            return
-
-        # Load both files
-        try:
-            stock_data = Path(stock_path).read_bytes()
-            patch_data = Path(patch_path).read_bytes()
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to read file:\n{e}")
-            return
-
-        # Apply patch
-        try:
-            result = patch_rom(stock_data, patch_data)
-        except ROMValidationError as e:
-            QMessageBox.warning(self, "Patch Failed", str(e))
-            return
-        except Exception as e:
-            QMessageBox.critical(
-                self, "Error", f"Unexpected error during patching:\n{e}"
-            )
-            return
-
-        # Step 3: Save result
-        suggested_name = result.suggested_filename()
-        save_dir = str(Path(stock_path).parent)
-
-        save_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save Patched ROM",
-            str(Path(save_dir) / suggested_name),
-            "ROM Files (*.bin);;All Files (*)",
-        )
-        if not save_path:
-            return
-
-        try:
-            Path(save_path).write_bytes(result.patched_rom)
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to save patched ROM:\n{e}")
-            return
-
-        cal_str = result.cal_id.decode("ascii", errors="replace").rstrip("\x00")
-
-        # Show verification result
-        if result.crc_verified:
-            verify_line = "CRC Verification: PASSED"
-            icon = QMessageBox.Information
-            title = "Patch Applied"
-        elif result.crc_warnings:
-            verify_line = "CRC Verification: WARNING\n" + "\n".join(
-                f"  - {w}" for w in result.crc_warnings
-            )
-            icon = QMessageBox.Warning
-            title = "Patch Applied (Unverified)"
-        else:
-            verify_line = "CRC Verification: skipped"
-            icon = QMessageBox.Information
-            title = "Patch Applied"
-
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle(title)
-        msg_box.setIcon(icon)
-        msg_box.setText(
-            f"Patched ROM saved successfully.\n\n"
-            f"Cal ID: {cal_str}\n"
-            f"ROM ID: {result.rom_id}\n"
-            f"Stock CRC: 0x{result.stock_crc:08X}\n"
-            f"Patch CRC: 0x{result.patch_crc:08X}\n"
-            f"Patched CRC: 0x{result.patched_crc:08X}\n\n"
-            f"{verify_line}"
-        )
-        msg_box.exec()
-
-        self.statusBar().showMessage(f"Patched ROM saved: {Path(save_path).name}")
-        logger.info(f"Patch applied: {stock_path} + {patch_path} -> {save_path}")
+        dlg = PatchRomDialog(parent=self)
+        dlg.exec()
 
     def _on_ecu_info(self):
         """Show ECU information (VIN, flash counter, ROM ID)."""
@@ -544,9 +452,7 @@ class FlashMixin:
                     channel_id = device.connect(
                         J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE
                     )
-                    device.set_config(
-                        channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0}
-                    )
+                    device.set_config(channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0})
                     setup_isotp_flow_control(device, channel_id)
 
                     uds = UDSConnection(device, channel_id)
@@ -560,8 +466,7 @@ class FlashMixin:
             if vin_data:
                 raw = vin_data[:17] if len(vin_data) >= 17 else vin_data
                 vin_str = (
-                    "".join(chr(b) if 0x20 <= b <= 0x7E else "" for b in raw)
-                    or "N/A"
+                    "".join(chr(b) if 0x20 <= b <= 0x7E else "" for b in raw) or "N/A"
                 )
             else:
                 vin_str = "N/A"
@@ -607,9 +512,7 @@ class FlashMixin:
         worker.moveToThread(thread)
 
         worker.progress.connect(dialog.update_progress, Qt.QueuedConnection)
-        worker.finished.connect(
-            lambda: dialog.on_finished(True), Qt.QueuedConnection
-        )
+        worker.finished.connect(lambda: dialog.on_finished(True), Qt.QueuedConnection)
         worker.error.connect(
             lambda msg: dialog.on_finished(False, msg), Qt.QueuedConnection
         )

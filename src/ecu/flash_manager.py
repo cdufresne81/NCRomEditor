@@ -718,9 +718,7 @@ class FlashManager:
                     channel_id = device.connect(
                         J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE
                     )
-                    device.set_config(
-                        channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0}
-                    )
+                    device.set_config(channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0})
                     setup_isotp_flow_control(device, channel_id)
 
                     uds = UDSConnection(device, channel_id)
@@ -760,9 +758,7 @@ class FlashManager:
                     channel_id = device.connect(
                         J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE
                     )
-                    device.set_config(
-                        channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0}
-                    )
+                    device.set_config(channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0})
                     setup_isotp_flow_control(device, channel_id)
 
                     uds_conn = UDSConnection(device, channel_id)
@@ -790,12 +786,8 @@ class FlashManager:
             from .constants import ISO15765_BS, ISO15765_STMIN
 
             with J2534Device(self._dll_path) as device:
-                channel_id = device.connect(
-                    J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE
-                )
-                device.set_config(
-                    channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0}
-                )
+                channel_id = device.connect(J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE)
+                device.set_config(channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0})
                 setup_isotp_flow_control(device, channel_id)
 
                 uds_conn = UDSConnection(device, channel_id)
@@ -829,12 +821,8 @@ class FlashManager:
             from .constants import ISO15765_BS, ISO15765_STMIN
 
             with J2534Device(self._dll_path) as device:
-                channel_id = device.connect(
-                    J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE
-                )
-                device.set_config(
-                    channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0}
-                )
+                channel_id = device.connect(J2534_PROTOCOL_ISO15765, 0, CAN_BAUDRATE)
+                device.set_config(channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0})
                 setup_isotp_flow_control(device, channel_id)
 
                 uds_conn = UDSConnection(device, channel_id)

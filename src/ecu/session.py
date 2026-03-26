@@ -110,9 +110,7 @@ class ECUSession(QObject):
             self._device.set_config(
                 self._channel_id, {ISO15765_BS: 0, ISO15765_STMIN: 0}
             )
-            self._filter_id = setup_isotp_flow_control(
-                self._device, self._channel_id
-            )
+            self._filter_id = setup_isotp_flow_control(self._device, self._channel_id)
             self._uds = UDSConnection(self._device, self._channel_id)
 
             # Single Tester Present to verify ECU is alive
@@ -141,9 +139,7 @@ class ECUSession(QObject):
         Caller must call release() when done.
         """
         if self._state != ECUSessionState.CONNECTED:
-            raise RuntimeError(
-                f"Cannot acquire session in state {self._state.value}"
-            )
+            raise RuntimeError(f"Cannot acquire session in state {self._state.value}")
         self._set_state(ECUSessionState.BUSY)
         return (self._device, self._channel_id, self._filter_id, self._uds)
 

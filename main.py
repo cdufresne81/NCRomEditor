@@ -400,7 +400,7 @@ class MainWindow(
         self.compare_action.triggered.connect(self._on_compare_roms)
         self.compare_action.setEnabled(False)
 
-        patch_action = tools_menu.addAction("Apply &Patch to Stock ROM...")
+        patch_action = tools_menu.addAction("&Patch ROM...")
         patch_action.triggered.connect(self._on_patch_rom)
 
         tools_menu.addSeparator()
