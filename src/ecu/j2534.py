@@ -382,10 +382,17 @@ class J2534Device:
                 # Non-Windows or WinDLL unavailable — fall back to CDLL
                 self._dll = ctypes.CDLL(resolved)
         except OSError as e:
-            if getattr(e, "winerror", 0) == 193:
-                # WinError 193: bitness mismatch (e.g. 32-bit DLL in 64-bit Python)
+            needs_bridge = (
+                getattr(e, "winerror", 0) == 193  # bitness mismatch
+                or (
+                    getattr(sys, "frozen", False)
+                    and "application was frozen" in str(e)
+                )
+            )
+            if needs_bridge:
                 logger.debug(
-                    "DLL bitness mismatch for '%s', attempting bridge", resolved
+                    "Cannot load DLL directly ('%s'), attempting bridge",
+                    resolved,
                 )
                 self._start_bridge(resolved)
                 return
