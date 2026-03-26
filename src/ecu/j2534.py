@@ -387,12 +387,8 @@ class J2534Device:
                 # Non-Windows or WinDLL unavailable — fall back to CDLL
                 self._dll = ctypes.CDLL(resolved)
         except OSError as e:
-            needs_bridge = (
-                getattr(e, "winerror", 0) == 193  # bitness mismatch
-                or (
-                    getattr(sys, "frozen", False)
-                    and "application was frozen" in str(e)
-                )
+            needs_bridge = getattr(e, "winerror", 0) == 193 or (  # bitness mismatch
+                getattr(sys, "frozen", False) and "application was frozen" in str(e)
             )
             if needs_bridge:
                 logger.debug(
@@ -447,7 +443,9 @@ class J2534Device:
 
         # Hide console window on Windows
         creationflags = (
-            subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+            subprocess.CREATE_NO_WINDOW
+            if hasattr(subprocess, "CREATE_NO_WINDOW")
+            else 0
         )
         self._bridge = subprocess.Popen(
             cmd,
