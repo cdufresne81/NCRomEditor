@@ -7,6 +7,11 @@ All notable changes to NC Flash are documented here.
 ### Fixed
 - **`Thinking-pad.md` still tracked** — Stash/pop cycle during rebase re-added the file; now properly removed from git tracking
 
+## [v2.3.1] - 2026-03-27
+
+### Fixed
+- **Battery voltage warning too severe for Read ROM** — Read ROM now shows a softer "communication timeouts" warning instead of the "bricking" language used for flash operations, since a failed read is safely retryable (#21)
+
 ## [v2.3.0] - 2026-03-26
 
 ### Added
@@ -27,7 +32,7 @@ All notable changes to NC Flash are documented here.
 - **"ROMs are identical" is no longer an error** — Dynamic flash with no differences shows "Nothing to flash" in grey instead of a red error with traceback
 
 ### Fixed
-- **J2534 bridge not loading in built exe** — PyInstaller frozen builds threw a different OSError than expected, bypassing the 32-bit bridge fallback
+- **J2534 bridge not loading in built exe** — PyInstaller frozen builds threw a different OSError than expected, bypassing the 32-bit bridge fallback. The DLL loader now detects both native bitness mismatch and PyInstaller's frozen-app errors
 - **J2534 bridge exe not found in built app** — PyInstaller puts data files in `_internal/` (sys._MEIPASS) but bridge lookup only searched next to the exe
 - **J2534 bridge console window visible** — The 32-bit bridge subprocess no longer opens a visible cmd window on Windows
 - **DTC count discrepancy** — Activity log showed raw DTC count (with duplicates) while UI showed deduplicated count. Log now shows both (e.g., "Read 15 DTCs (7 unique)")

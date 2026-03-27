@@ -610,16 +610,33 @@ class ECUProgrammingWindow(QMainWindow):
 
     # --- Flash Operations ---
 
-    def _check_voltage_warning(self) -> bool:
-        """Warn if battery voltage is low. Returns True if OK to proceed."""
+    def _check_voltage_warning(self, operation: str = "flash") -> bool:
+        """Warn if battery voltage is low. Returns True if OK to proceed.
+
+        Args:
+            operation: ``"flash"`` (default) shows a strong bricking warning;
+                       ``"read"`` shows a softer timeout-only warning.
+        """
         if self._voltage is not None and self._voltage < BATTERY_VOLTAGE_WARNING:
+            if operation == "read":
+                message = (
+                    f"Battery voltage is {self._voltage:.1f}V "
+                    f"(recommended: {BATTERY_VOLTAGE_WARNING}V+).\n\n"
+                    "Low voltage may cause communication timeouts.\n"
+                    "You can safely retry if the read fails.\n\n"
+                    "Proceed anyway?"
+                )
+            else:
+                message = (
+                    f"Battery voltage is {self._voltage:.1f}V "
+                    f"(recommended: {BATTERY_VOLTAGE_WARNING}V+).\n\n"
+                    "Low voltage risks bricking the ECU during flash.\n"
+                    "Proceed anyway?"
+                )
             reply = QMessageBox.warning(
                 self,
                 "Low Battery Voltage",
-                f"Battery voltage is {self._voltage:.1f}V "
-                f"(recommended: {BATTERY_VOLTAGE_WARNING}V+).\n\n"
-                "Low voltage risks bricking the ECU during flash/read.\n"
-                "Proceed anyway?",
+                message,
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
@@ -700,7 +717,7 @@ class ECUProgrammingWindow(QMainWindow):
     def _on_read_rom(self):
         self._ecu_busy = True
         self._update_action_states()
-        if not self._check_voltage_warning():
+        if not self._check_voltage_warning(operation="read"):
             self._ecu_busy = False
             self._update_action_states()
             return
