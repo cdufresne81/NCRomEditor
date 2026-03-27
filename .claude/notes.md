@@ -15,6 +15,9 @@
 - **Removed `Thinking-pad.md` from git** — Added to `.gitignore`, kept local file
 - **Branch `fix/house-cleaning`** created from `origin/master` with all changes staged
 
+## Recent Completed Work (Mar 27, 2026) - Drag-and-Drop
+- **Drag-and-drop ROM files** — Users can drag `.bin`/`.rom` files onto the main window to open them. Translucent blue overlay with dashed border shows during drag-over. Invalid file types show a descriptive error. Multiple files supported. Reuses existing open-file flow. 11 tests in `test_drag_drop.py`. (#20)
+
 ## Recent Completed Work (Mar 26, 2026) - Build Fix
 - **J2534 bridge frozen-app fix** — PyInstaller builds failed to load 32-bit DLL because frozen ctypes raises a different OSError than native bitness mismatch. Bridge fallback now detects both.
 

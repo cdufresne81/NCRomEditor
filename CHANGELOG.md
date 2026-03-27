@@ -11,6 +11,7 @@ All notable changes to NC Flash are documented here.
 
 ### Added
 - **Native ECU flashing** — Full J2534/UDS flash module replacing RomDrop integration. Read and write ECU ROMs directly via Tactrix OpenPort 2.0
+- **Drag-and-drop ROM files** — Drag `.bin` or `.rom` files onto the main window to open them. Visual overlay indicates the drop zone during drag-over. Invalid file types are rejected with a descriptive error message (#20)
 - **ECU Programming window** — Dedicated window (Tools > ECU Programming) replacing scattered ECU menu items. Auto-connects, shows battery voltage/engine RPM/ECU info in status cards, one-click flash with dynamic/full auto-detection, inline progress, auto-save ROM reads
 - **ECU Connect/Disconnect** — New menu actions in ECU menu to establish and hold a persistent J2534 connection. Operations reuse the open device instead of reconnecting each time. Status bar shows real connection state
 - **OBD-II PID reading** — Battery voltage (PID 0x42) and engine RPM (PID 0x0C) via standard OBD-II Service 0x01
