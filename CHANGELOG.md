@@ -4,19 +4,8 @@ All notable changes to NC Flash are documented here.
 
 ## [Unreleased]
 
-### Added
-- **Pre-commit validation** — PreToolUse hook blocks `git commit` if CHANGELOG.md is not staged. New `/precommit` skill runs quality gates (black, flake8, pytest) and validates changelog structure, content relevance, and formatting before committing
-
-### Changed
-- **README overhaul** — Updated version to v2.3.0, rewrote ECU Flashing section for native J2534 (was RomDrop), added missing features (Project Management, cross-definition compare, copy table, toolbars, setup wizard, scaling editor), corrected test coverage stats, fixed CI Python versions
-- **CHANGELOG restructured** — Split stale Unreleased into proper v2.3.0, v2.2.0, v2.1.1, v2.1.0 sections with correct dates
-- **Docs reorganized** — Moved internal docs to `docs/internal/`, removed obsolete files (code audits, mockups, error screenshots, EcuFlash examples, archived design docs)
-- **Gitignore updated** — Added personal notes files
-
-### Removed
-- **`run-dev.bat`** — Vestigial launcher from when projects were behind a feature flag; was identical to `run.bat` after the flag was removed
-- **`examples/LF5AEG*`** — Removed LF5AEG ROM and patch files from tracking
-- **Obsolete docs** — `CODE_AUDIT_REPORT.md`, `CODE_AUDIT_2026_03.md`, `docs/archive/`, `docs/ecuflash_examples/`, `docs/errors/`, `docs/mockups/`
+### Fixed
+- **`Thinking-pad.md` still tracked** — Stash/pop cycle during rebase re-added the file; now properly removed from git tracking
 
 ## [v2.3.0] - 2026-03-26
 
