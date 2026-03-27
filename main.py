@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QColorDialog,
 )
 from PySide6.QtCore import Qt, QTimer, QSize
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from src.ui.icons import make_icon
 
 from src.utils.logging_config import setup_logging, get_logger
@@ -91,6 +91,45 @@ def handle_rom_operation_error(parent, operation: str, exception: Exception):
     error_msg = f"Failed to {operation}:\n{str(exception)}"
     logger.error(error_msg.replace("\n", " "))
     QMessageBox.critical(parent, "Error", error_msg)
+
+
+class _DropOverlayWidget(QWidget):
+    """Translucent overlay shown while dragging files over the main window."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.setAutoFillBackground(False)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        # Semi-transparent background
+        painter.fillRect(self.rect(), QBrush(QColor(40, 120, 200, 60)))
+
+        # Dashed border
+        pen = QPen(QColor(40, 120, 200, 180), 3, Qt.DashLine)
+        painter.setPen(pen)
+        margin = 12
+        painter.drawRoundedRect(
+            margin,
+            margin,
+            self.width() - 2 * margin,
+            self.height() - 2 * margin,
+            12,
+            12,
+        )
+
+        # Centered text
+        painter.setPen(QColor(40, 120, 200, 220))
+        font = QFont()
+        font.setPointSize(18)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.drawText(self.rect(), Qt.AlignCenter, "Drop ROM file here")
+
+        painter.end()
 
 
 class MainWindow(
@@ -175,6 +214,10 @@ class MainWindow(
         self.init_ui()
         self.init_menu()
         self._create_toolbar()
+
+        # Enable drag-and-drop for ROM files
+        self.setAcceptDrops(True)
+        self._drop_overlay = None  # lazily created in dragEnterEvent
 
         # Defer heavy work to after the window is shown:
         # - metadata directory check + setup wizard (modal dialog)
@@ -726,6 +769,103 @@ class MainWindow(
             self.open_project_path(str(parent))
         else:
             self._open_rom_file(file_path)
+
+    # ------------------------------------------------------------------
+    # Drag-and-drop support
+    # ------------------------------------------------------------------
+
+    #: File extensions accepted via drag-and-drop (matches File > Open dialog)
+    _DROP_EXTENSIONS = {".bin", ".rom"}
+
+    def _get_drop_file_paths(self, mime_data):
+        """Extract file paths from drop MIME data, returning only valid ROM files.
+
+        Returns:
+            list[str]: Paths with valid ROM extensions, or empty list.
+        """
+        if not mime_data.hasUrls():
+            return []
+        paths = []
+        for url in mime_data.urls():
+            if url.isLocalFile():
+                path = url.toLocalFile()
+                if Path(path).suffix.lower() in self._DROP_EXTENSIONS:
+                    paths.append(path)
+        return paths
+
+    def dragEnterEvent(self, event):
+        """Accept the drag if it contains at least one valid ROM file."""
+        paths = self._get_drop_file_paths(event.mimeData())
+        if paths:
+            event.acceptProposedAction()
+            self._show_drop_overlay()
+        else:
+            # Check if the user is dragging files with invalid extensions
+            if event.mimeData().hasUrls():
+                event.ignore()
+            else:
+                event.ignore()
+
+    def dragMoveEvent(self, event):
+        """Continue accepting the drag while over the window."""
+        if self._get_drop_file_paths(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        """Remove visual feedback when drag leaves the window."""
+        self._hide_drop_overlay()
+        event.accept()
+
+    def dropEvent(self, event):
+        """Open dropped ROM files."""
+        self._hide_drop_overlay()
+
+        paths = self._get_drop_file_paths(event.mimeData())
+        if not paths:
+            # Files were dropped but none had valid extensions
+            if event.mimeData().hasUrls():
+                rejected = [
+                    url.toLocalFile()
+                    for url in event.mimeData().urls()
+                    if url.isLocalFile()
+                ]
+                ext_list = ", ".join(sorted(self._DROP_EXTENSIONS))
+                names = "\n".join(Path(p).name for p in rejected[:5])
+                if len(rejected) > 5:
+                    names += f"\n... and {len(rejected) - 5} more"
+                QMessageBox.warning(
+                    self,
+                    "Unsupported File Type",
+                    f"Cannot open the dropped file(s):\n\n{names}\n\n"
+                    f"Supported extensions: {ext_list}",
+                )
+            event.ignore()
+            return
+
+        event.acceptProposedAction()
+        logger.info(f"Drag-and-drop: opening {len(paths)} file(s)")
+
+        for file_path in paths:
+            parent = Path(file_path).parent
+            if ProjectManager.is_project_folder(str(parent)):
+                self.open_project_path(str(parent))
+            else:
+                self._open_rom_file(file_path)
+
+    def _show_drop_overlay(self):
+        """Show a translucent overlay indicating the drop zone is active."""
+        if self._drop_overlay is None:
+            self._drop_overlay = _DropOverlayWidget(self)
+        self._drop_overlay.setGeometry(self.centralWidget().geometry())
+        self._drop_overlay.show()
+        self._drop_overlay.raise_()
+
+    def _hide_drop_overlay(self):
+        """Hide the drop-zone overlay."""
+        if self._drop_overlay is not None:
+            self._drop_overlay.hide()
 
     def _write_workspace_state(self):
         """Write workspace.json listing all open ROMs for MCP server discovery.
