@@ -4,6 +4,10 @@ All notable changes to NC Flash are documented here.
 
 ## [Unreleased]
 
+### Added
+- **Round Selection (R key)** — New operation to round selected cells one decimal level coarser based on the scaling format. Press repeatedly: 12.11 → 12.1 → 12.0. Works on both data and axis cells
+- **Auto-round setting** — New checkbox in Settings > Editor to automatically round interpolation and smoothing results one decimal level coarser than the table's display format
+
 ## [v2.3.3] - 2026-03-28
 
 ### Fixed
