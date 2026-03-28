@@ -35,7 +35,8 @@ NRC_TABLE: dict[int, str] = {
 
 # --- Mazda NC Miata Diagnostic Trouble Codes ---
 # P-codes: category bits 0b00 (powertrain), raw value = numeric part
-# C-codes: category bits 0b01 (chassis), raw value = 0x4000 | numeric part
+# C-codes: Mazda NC encodes chassis codes with bits 15-14 = 0b11 (raw 0xCxxx),
+#   NOT the standard OBD-II 0b01 (0x4xxx). Keys here match actual ECU encoding.
 
 DTC_TABLE: dict[int, str] = {
     # CMP/CKP timing
@@ -196,11 +197,11 @@ DTC_TABLE: dict[int, str] = {
     0x2227: "P2227 - Barometric pressure sensor circuit range/performance",
     # ECM/PCM internal engine off timer
     0x2610: "P2610 - ECM/PCM internal engine off timer performance",
-    # --- Chassis codes (C-codes, category bits 0b01 = 0x4000) ---
-    0x4073: "C0073 - Control module communication bus off",
-    0x4101: "C0101 - CAN communication - signal from brake module lost",
-    0x4121: "C0121 - CAN communication - signal from ABS module lost",
-    0x4155: "C0155 - CAN communication - signal from stability control module lost",
+    # --- Chassis codes (C-codes, Mazda raw encoding 0xC0xx) ---
+    0xC073: "C0073 - Control module communication bus off",
+    0xC101: "C0101 - CAN communication - signal from brake module lost",
+    0xC121: "C0121 - CAN communication - signal from ABS module lost",
+    0xC155: "C0155 - CAN communication - signal from stability control module lost",
     # --- Powertrain codes (P0Fxx range) ---
     0x0F01: "P0F01 - Battery/charging system performance",
     # --- Network codes (U-codes, category bits 0b11 = 0xC000) ---
@@ -214,15 +215,39 @@ DTC_TABLE: dict[int, str] = {
 
 
 def get_dtc_prefix(code: int) -> str:
-    """Map DTC high bits to category letter (P/C/B/U)."""
-    category = (code >> 14) & 0x03
-    return {0: "P", 1: "C", 2: "B", 3: "U"}.get(category, "?")
+    """Map DTC high bits to category letter (P/C/B/U).
+
+    Mazda NC encodes chassis codes (C) with bits 15-14 = 0b11 and bit 13 = 0,
+    overlapping with the standard U-code range. We distinguish them by checking
+    the upper nibble: 0xC0-0xCF → C-codes, 0xD0-0xFF → U-codes.
+    """
+    upper_nibble = (code >> 12) & 0xF
+    if upper_nibble <= 0x3:
+        return "P"
+    elif upper_nibble <= 0x7:
+        return "C"
+    elif upper_nibble <= 0xB:
+        return "B"
+    elif upper_nibble == 0xC:
+        return "C"  # Mazda-specific: chassis codes in 0xCxxx range
+    else:
+        return "U"
 
 
 def format_dtc(code: int) -> str:
-    """Format a raw DTC code as standard OBD-II string (e.g., 'P0011')."""
+    """Format a raw DTC code as standard OBD-II string (e.g., 'P0011').
+
+    Handles Mazda NC's non-standard chassis code encoding where C-codes
+    use 0xCxxx raw values instead of the standard 0x4xxx.
+    """
     prefix = get_dtc_prefix(code)
-    numeric = code & 0x3FFF
+    upper_nibble = (code >> 12) & 0xF
+    if upper_nibble == 0xC:
+        # Mazda C-codes: strip 0xC000 prefix to get the numeric part
+        numeric = code & 0x0FFF
+    else:
+        # Standard OBD-II: strip top 2 category bits
+        numeric = code & 0x3FFF
     return f"{prefix}{numeric:04X}"
 
 

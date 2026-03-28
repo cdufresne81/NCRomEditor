@@ -490,8 +490,9 @@ class UDSConnection:
         )
 
         dtcs = []
-        # Response format: each DTC is 3 bytes (code_hi, code_lo, status)
-        offset = 0
+        # Response format: [countOfDTC, {code_hi, code_lo, status}...]
+        # Skip the first byte (KWP2000 countOfDTC header)
+        offset = 1
         while offset + 2 < len(response):
             code = (response[offset] << 8) | response[offset + 1]
             status = response[offset + 2] if offset + 2 < len(response) else 0
