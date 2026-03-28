@@ -7,6 +7,11 @@ All notable changes to NC Flash are documented here.
 ### Fixed
 - **`Thinking-pad.md` still tracked** — Stash/pop cycle during rebase re-added the file; now properly removed from git tracking
 
+## [v2.3.2] - 2026-03-28
+
+### Fixed
+- **PermissionError when installed for all users** — Session logs and auto-saved ROM reads were written to the app install directory (`Path(__file__).parent`), which is read-only under `C:\Program Files`. Both now write to `~/.nc-flash/` (logs → `~/.nc-flash/logs/`, reads → `~/.nc-flash/reads/`)
+
 ## [v2.3.1] - 2026-03-27
 
 ### Fixed
@@ -21,7 +26,7 @@ All notable changes to NC Flash are documented here.
 - **ECU Connect/Disconnect** — New menu actions in ECU menu to establish and hold a persistent J2534 connection. Operations reuse the open device instead of reconnecting each time. Status bar shows real connection state
 - **OBD-II PID reading** — Battery voltage (PID 0x42) and engine RPM (PID 0x0C) via standard OBD-II Service 0x01
 - **J2534 32-bit bridge** — Subprocess bridge for 64-bit Python to talk to 32-bit J2534 DLLs, with auto-build in dev mode
-- **Per-session log files** — Each app launch saves a complete log to `./logs/` directory
+- **Per-session log files** — Each app launch saves a complete log to `~/.nc-flash/logs/` directory
 - **UDS log direction prefixes** — Protocol log messages now show `ECU >>` or `Tool >>` to indicate who is speaking
 - **Window geometry persistence** — Main window remembers its position and size between sessions
 - **CI: private _secure module** — CI and release workflows now pull the private `nc-flash-secure` repo so security tests run and release builds include the secure module

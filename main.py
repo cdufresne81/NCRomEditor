@@ -2004,10 +2004,11 @@ def main():
         level=logging.INFO, log_file=str(log_file), console=True, detailed=False
     )
 
-    # Per-session log in ./logs/ directory
+    # Per-session log in user-writable directory
+    # (avoid Path(__file__).parent which is read-only under C:\Program Files)
     from datetime import datetime
 
-    session_log_dir = Path(__file__).parent / "logs"
+    session_log_dir = Path.home() / ".nc-flash" / "logs"
     session_log_dir.mkdir(exist_ok=True)
     session_log_name = datetime.now().strftime("%Y-%m-%d_%H%M%S") + ".log"
     session_handler = logging.FileHandler(

@@ -894,10 +894,11 @@ class ECUProgrammingWindow(QMainWindow):
         if rom_id.upper().endswith(".HEX"):
             rom_id = rom_id[:-4]
 
-        project_root = Path(__file__).resolve().parent.parent.parent
+        auto_save_dir = Path.home() / ".nc-flash" / "reads"
+        auto_save_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_name = f"{rom_id}_{timestamp}.bin"
-        save_path = project_root / file_name
+        save_path = auto_save_dir / file_name
         try:
             save_path.write_bytes(rom_data)
             logger.info("ROM auto-saved to %s", save_path)
