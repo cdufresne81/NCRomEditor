@@ -32,9 +32,14 @@ def printf_to_python_format(printf_format: str) -> str:
     return result
 
 
+_INT_SPECIFIERS = re.compile(r"[diouxX]$")
+
+
 def format_value(value: float, format_spec: str) -> str:
     """Format a value using a Python format spec with error handling."""
     try:
+        if _INT_SPECIFIERS.search(format_spec):
+            return f"{int(round(value)):{format_spec}}"
         return f"{value:{format_spec}}"
     except (ValueError, TypeError):
         return f"{value:.2f}"
