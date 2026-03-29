@@ -122,6 +122,51 @@ class TestCorrectRomChecksums:
         corrections = correct_rom_checksums(rom)
         assert len(corrections) == 2
 
+    def test_self_referencing_range_idempotent(self):
+        """Checksum entry whose range covers the checksum table itself.
+
+        This reproduces the P0601/P0606 bug: if the summed range includes
+        the checksum field, the algorithm must exclude the stored checksum
+        from the sum. Otherwise a correct checksum gets overwritten with 0.
+        """
+        # Entry range covers the entire ROM — includes the checksum table
+        rom = self._build_rom_with_checksum_table([(0x00000, ROM_SIZE)])
+
+        # First pass: correct the checksum
+        corrections = correct_rom_checksums(rom)
+        assert len(corrections) == 1
+        _, _, cksum_offset, _, new_val = corrections[0]
+        assert new_val != 0, "Checksum should not be zero for a non-trivial range"
+
+        # Second pass: must find NO corrections (idempotent)
+        corrections2 = correct_rom_checksums(rom)
+        assert len(corrections2) == 0, (
+            f"Checksum was re-corrected on second pass — "
+            f"self-referencing range bug! Stored value was overwritten."
+        )
+
+    def test_stock_rom_not_corrupted(self):
+        """Simulate a stock ROM with a pre-set correct checksum.
+
+        Verifies that correct_rom_checksums does not corrupt an already-
+        correct ROM where the checksum range spans the checksum table.
+        """
+        # Build ROM with entry covering the whole ROM
+        rom = self._build_rom_with_checksum_table([(0x00000, ROM_SIZE)])
+
+        # Correct it once to get the right value
+        correct_rom_checksums(rom)
+        cksum_offset = CHECKSUM_TABLE_OFFSET + 8
+        correct_value = int.from_bytes(rom[cksum_offset : cksum_offset + 4], "big")
+
+        # Now run correction again — it must NOT change the value
+        correct_rom_checksums(rom)
+        after_value = int.from_bytes(rom[cksum_offset : cksum_offset + 4], "big")
+        assert after_value == correct_value, (
+            f"Stock ROM checksum corrupted: was 0x{correct_value:08X}, "
+            f"now 0x{after_value:08X}"
+        )
+
 
 class TestCrc32:
     """Test CRC-32 wrapper."""

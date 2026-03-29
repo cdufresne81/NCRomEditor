@@ -15,13 +15,20 @@ def bswap32(value: int) -> int:
     return struct.unpack("<I", struct.pack(">I", value & 0xFFFFFFFF))[0]
 
 
-def mazda_checksum(rom_data: bytes, start: int, end: int) -> int:
+def mazda_checksum(
+    rom_data: bytes, start: int, end: int, exclude_offset: int = -1
+) -> int:
     """
     Calculate Mazda ECU checksum over a ROM range.
 
     Sums all big-endian 32-bit words in [start, end) and returns
     CHECKSUM_MAGIC - total. The checksum table stores the expected
     value so that sum + stored_checksum == CHECKSUM_MAGIC.
+
+    If exclude_offset is set (>= 0), the 4-byte word at that offset is
+    treated as zero during summation. This prevents the stored checksum
+    field from being included in its own calculation when the checksum
+    table falls within the summed range.
     """
     rom_len = len(rom_data)
     if end <= start or start >= rom_len:
@@ -32,6 +39,14 @@ def mazda_checksum(rom_data: bytes, start: int, end: int) -> int:
         return CHECKSUM_MAGIC
     words = struct.unpack(f">{n_words}I", rom_data[start : start + n_words * 4])
     total = sum(words) & 0xFFFFFFFF
+
+    # Subtract out the stored checksum word if it falls within the range
+    if start <= exclude_offset < start + n_words * 4:
+        excluded_word = int.from_bytes(
+            rom_data[exclude_offset : exclude_offset + 4], "big"
+        )
+        total = (total - excluded_word) & 0xFFFFFFFF
+
     return (CHECKSUM_MAGIC - total) & 0xFFFFFFFF
 
 
@@ -60,7 +75,7 @@ def correct_rom_checksums(rom_data: bytearray) -> list[tuple[int, int, int, int,
         old_value = int.from_bytes(
             rom_data[checksum_offset : checksum_offset + 4], "big"
         )
-        new_value = mazda_checksum(rom_data, start, end)
+        new_value = mazda_checksum(rom_data, start, end, exclude_offset=checksum_offset)
 
         if old_value != new_value:
             rom_data[checksum_offset : checksum_offset + 4] = new_value.to_bytes(
