@@ -230,3 +230,40 @@ def test_change_callbacks(tracker, sample_table):
 
     # Callback shouldn't be called after removal
     assert callback_count[0] == 1
+
+
+def test_rename_key(tracker, sample_table):
+    """Test that rename_key migrates pending changes to the new key"""
+    from src.core.table_undo_manager import make_table_key
+
+    old_rom_path = "C:/old/rom.bin"
+    new_rom_path = "C:/new/rom.bin"
+
+    tracker.record_pending_change(
+        table=sample_table,
+        row=0,
+        col=0,
+        old_value=10.0,
+        new_value=20.0,
+        old_raw=100,
+        new_raw=200,
+        rom_path=old_rom_path,
+    )
+
+    old_key = make_table_key(old_rom_path, sample_table.address)
+    new_key = make_table_key(new_rom_path, sample_table.address)
+
+    assert old_key in tracker._pending
+    assert new_key not in tracker._pending
+
+    tracker.rename_key(old_key, new_key)
+
+    assert old_key not in tracker._pending
+    assert new_key in tracker._pending
+    assert tracker._pending[new_key].has_changes()
+
+
+def test_rename_key_noop_if_missing(tracker):
+    """Test that rename_key is a no-op if old key doesn't exist"""
+    tracker.rename_key("nonexistent", "new_key")
+    assert "new_key" not in tracker._pending

@@ -103,9 +103,10 @@ class RomDocument(QWidget):
         save_path = file_path if file_path else self.rom_path
         self.rom_reader.save_rom(save_path)
 
-        # Update path if it changed
+        # Update path if it changed (Save As)
         if file_path:
             self.rom_path = file_path
             self.file_name = Path(file_path).name
+            self.rom_reader.rom_path = Path(file_path)
 
         self.set_modified(False)

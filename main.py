@@ -1111,8 +1111,36 @@ class MainWindow(
 
         if file_path:
             try:
+                # Capture old path before save updates it
+                old_rom_path = document.rom_reader.rom_path
+
                 document.save(file_path)
                 document.set_modified(False)
+
+                # Migrate tracking dicts from old path to new path
+                new_rom_path = document.rom_reader.rom_path
+                if old_rom_path != new_rom_path:
+                    for d in (
+                        self.modified_cells,
+                        self.original_table_values,
+                        self.rom_colors,
+                    ):
+                        if old_rom_path in d:
+                            d[new_rom_path] = d.pop(old_rom_path)
+
+                    # Update rom_path on any open table viewer windows
+                    for window in self.open_table_windows:
+                        if window.rom_path == old_rom_path:
+                            window.rom_path = new_rom_path
+
+                    # Migrate undo stacks and pending changes
+                    # (keyed by composite table keys)
+                    if document.rom_reader.definition:
+                        for table in document.rom_reader.definition.tables:
+                            old_key = make_table_key(old_rom_path, table.address)
+                            new_key = make_table_key(new_rom_path, table.address)
+                            self.table_undo_manager.rename_key(old_key, new_key)
+                            self.change_tracker.rename_key(old_key, new_key)
 
                 # Update tab title with new filename
                 self._update_tab_title(document)

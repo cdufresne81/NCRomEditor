@@ -173,6 +173,11 @@ class TableUndoManager:
         for key in list(keys):
             self.remove_stack(key)
 
+    def rename_key(self, old_key: str, new_key: str):
+        """Rename a stack key (e.g., after Save As changes the ROM path)."""
+        if old_key in self._stacks:
+            self._stacks[new_key] = self._stacks.pop(old_key)
+
     def clear_stack(self, table_key: str):
         """Clear the undo stack for a specific table."""
         if table_key in self._stacks:
