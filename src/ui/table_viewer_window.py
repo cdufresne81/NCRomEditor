@@ -647,45 +647,50 @@ class TableViewerWindow(QMainWindow):
         Uses Qt header.length() for reliable column/row totals.
         resize() sets the client area — the OS title bar sits outside it.
         """
-        table_widget = self.viewer.table_widget
-
-        # Total width/height of all table columns/rows (reliable Qt API)
-        table_w = table_widget.horizontalHeader().length()
-        table_h = table_widget.verticalHeader().length()
-
-        # Add visible header sizes
-        if table_widget.verticalHeader().isVisible():
-            table_w += table_widget.verticalHeader().width()
-        if table_widget.horizontalHeader().isVisible():
-            table_h += table_widget.horizontalHeader().height()
-
-        # Table frame border (e.g. 1px per side)
-        table_w += table_widget.frameWidth() * 2
-        table_h += table_widget.frameWidth() * 2
-
-        # Reserve space for scrollbars — they appear dynamically (AsNeeded
-        # policy) and eat into the viewport, which can cascade: a vertical
-        # scrollbar reduces viewport width, triggering a horizontal scrollbar
-        # that reduces viewport height, etc.  Always reserving avoids this.
-        table_w += table_widget.verticalScrollBar().sizeHint().width()
-        table_h += table_widget.horizontalScrollBar().sizeHint().height()
-
-        # Safety padding — scrollbar sizeHint() can underreport the actual
-        # rendered size (especially on high-DPI or themed systems).  Add
-        # one row/column as buffer so content is never clipped behind a
-        # scrollbar, preventing unnecessary scrollbar appearance.
-        if table_widget.rowCount() > 0:
-            table_h += table_widget.rowHeight(0) - 10
+        # Toggle mode: size for the toggle container, not the hidden table
+        if self.viewer.toggle_container.isVisible():
+            toggle_hint = self.viewer.toggle_container.sizeHint()
+            content_w = max(toggle_hint.width(), 120)
+            content_h = toggle_hint.height()
         else:
-            table_h += 14
-        if table_widget.columnCount() > 0:
-            table_w += table_widget.columnWidth(0) - 20
-        else:
-            table_w += 40
+            table_widget = self.viewer.table_widget
 
-        # Build client area from layout components
-        content_w = table_w
-        content_h = table_h
+            # Total width/height of all table columns/rows (reliable Qt API)
+            table_w = table_widget.horizontalHeader().length()
+            table_h = table_widget.verticalHeader().length()
+
+            # Add visible header sizes
+            if table_widget.verticalHeader().isVisible():
+                table_w += table_widget.verticalHeader().width()
+            if table_widget.horizontalHeader().isVisible():
+                table_h += table_widget.horizontalHeader().height()
+
+            # Table frame border (e.g. 1px per side)
+            table_w += table_widget.frameWidth() * 2
+            table_h += table_widget.frameWidth() * 2
+
+            # Reserve space for scrollbars — they appear dynamically (AsNeeded
+            # policy) and eat into the viewport, which can cascade: a vertical
+            # scrollbar reduces viewport width, triggering a horizontal scrollbar
+            # that reduces viewport height, etc.  Always reserving avoids this.
+            table_w += table_widget.verticalScrollBar().sizeHint().width()
+            table_h += table_widget.horizontalScrollBar().sizeHint().height()
+
+            # Safety padding — scrollbar sizeHint() can underreport the actual
+            # rendered size (especially on high-DPI or themed systems).  Add
+            # one row/column as buffer so content is never clipped behind a
+            # scrollbar, preventing unnecessary scrollbar appearance.
+            if table_widget.rowCount() > 0:
+                table_h += table_widget.rowHeight(0) - 10
+            else:
+                table_h += 14
+            if table_widget.columnCount() > 0:
+                table_w += table_widget.columnWidth(0) - 20
+            else:
+                table_w += 40
+
+            content_w = table_w
+            content_h = table_h
 
         # Y-axis label (left of table, in horizontal layout with 2px spacing)
         if self.viewer.y_axis_label.isVisible():

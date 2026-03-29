@@ -25,6 +25,7 @@ class ToggleSwitch(QAbstractButton):
         super().__init__(parent)
         self.setCheckable(True)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.setCursor(Qt.PointingHandCursor)
 
         self._handle_position = self._HANDLE_MARGIN
 
@@ -47,38 +48,41 @@ class ToggleSwitch(QAbstractButton):
 
     handle_position = Property(float, _get_handle_position, _set_handle_position)
 
-    def setChecked(self, checked):
-        super().setChecked(checked)
-        # Snap position immediately (no animation) when set programmatically
+    def _target_position(self, checked):
+        """Return the handle position for a given checked state"""
         if checked:
-            self._handle_position = (
-                self._TRACK_WIDTH - self._HANDLE_SIZE - self._HANDLE_MARGIN
-            )
-        else:
-            self._handle_position = self._HANDLE_MARGIN
+            return self._TRACK_WIDTH - self._HANDLE_SIZE - self._HANDLE_MARGIN
+        return self._HANDLE_MARGIN
+
+    def setChecked(self, checked):
+        """Set checked state and snap handle immediately (no animation)"""
+        self._animation.stop()
+        super().setChecked(checked)
+        self._handle_position = self._target_position(checked)
         self.update()
 
     def checkStateSet(self):
+        """Called by Qt when checked state changes via setChecked — no animation needed"""
         super().checkStateSet()
-        self._animate_toggle()
 
     def nextCheckState(self):
+        """Called by Qt on user click — animate the toggle"""
+        old_pos = self._handle_position
         super().nextCheckState()
-        self._animate_toggle()
-
-    def _animate_toggle(self):
+        # C++ setChecked() doesn't call our Python override, so compute
+        # the target from the new checked state directly
+        end_pos = self._target_position(self.isChecked())
         self._animation.stop()
-        if self.isChecked():
-            end = self._TRACK_WIDTH - self._HANDLE_SIZE - self._HANDLE_MARGIN
-        else:
-            end = self._HANDLE_MARGIN
-        self._animation.setStartValue(self._handle_position)
-        self._animation.setEndValue(end)
+        self._animation.setStartValue(old_pos)
+        self._animation.setEndValue(end_pos)
         self._animation.start()
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
+
+        # Clear background for consistent rendering across platforms
+        painter.eraseRect(self.rect())
 
         # Draw track
         if self.isChecked():

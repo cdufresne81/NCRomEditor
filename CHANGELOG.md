@@ -4,6 +4,14 @@ All notable changes to NC Flash are documented here.
 
 ## [Unreleased]
 
+### Fixed
+- **DTC toggle switch not showing on Windows 10 (#32)** — Window auto-sizing was based on the hidden table widget's tiny 1-cell dimensions, leaving no room for the toggle container. Now sizes from the toggle's own size hint when in toggle mode
+- **DTC toggle animates on window open** — Toggle switch now snaps to its initial position immediately instead of visually sliding into place when the window opens
+
+### Changed
+- Toggle switch shows a pointing-hand cursor on hover for better click affordance
+- Toggle switch clears its background before painting for consistent rendering across Windows versions
+
 ## [v2.4.1] - 2026-03-29
 
 ### Fixed
