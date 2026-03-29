@@ -423,6 +423,46 @@ class TestRomSaving:
 
         assert test_rom.exists()
 
+    def test_save_as_updates_rom_reader_path(
+        self, sample_rom_path, sample_xml_path, tmp_path
+    ):
+        """Test that RomDocument.save() updates rom_reader.rom_path on Save As"""
+        from src.ui.rom_document import RomDocument
+
+        # Copy ROM to tmp dir so we can modify it
+        test_rom = tmp_path / "original.bin"
+        test_rom.write_bytes(sample_rom_path.read_bytes())
+
+        definition = load_definition(str(sample_xml_path))
+        reader = RomReader(str(test_rom), definition)
+        doc = RomDocument(str(test_rom), definition, reader)
+
+        save_as_path = str(tmp_path / "saved_as.bin")
+        doc.save(save_as_path)
+
+        # rom_reader.rom_path should now point to the new file
+        assert reader.rom_path == Path(save_as_path)
+        assert doc.rom_path == save_as_path
+        assert doc.file_name == "saved_as.bin"
+
+    def test_save_without_path_keeps_rom_reader_path(
+        self, sample_rom_path, sample_xml_path, tmp_path
+    ):
+        """Test that RomDocument.save() without path keeps rom_reader.rom_path unchanged"""
+        from src.ui.rom_document import RomDocument
+
+        test_rom = tmp_path / "keep_path.bin"
+        test_rom.write_bytes(sample_rom_path.read_bytes())
+
+        definition = load_definition(str(sample_xml_path))
+        reader = RomReader(str(test_rom), definition)
+        doc = RomDocument(str(test_rom), definition, reader)
+
+        original_path = reader.rom_path
+        doc.save()  # Save without new path
+
+        assert reader.rom_path == original_path
+
 
 class TestDataIntegrity:
     """Test data integrity during read/write cycle"""

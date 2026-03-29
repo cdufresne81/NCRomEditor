@@ -399,6 +399,11 @@ class ChangeTracker:
         self._notify_change()
         logger.debug("Cleared pending changes")
 
+    def rename_key(self, old_key: str, new_key: str):
+        """Rename a pending-changes key (e.g., after Save As changes the ROM path)."""
+        if old_key in self._pending:
+            self._pending[new_key] = self._pending.pop(old_key)
+
     def clear_pending_for_keys(self, keys):
         """Clear pending changes for specific composite keys (e.g., when closing a ROM)."""
         removed = 0
