@@ -22,6 +22,65 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def compute_smoothed_values(
+    values,
+    selected_indices,
+    blend_factor=0.15,
+    auto_round=False,
+    fmt_precision=2,
+):
+    """Compute smoothed values using weighted neighbor averaging.
+
+    Args:
+        values: numpy array of current values (1D or 2D).
+        selected_indices: list of (data_row, data_col) tuples to smooth.
+        blend_factor: how much to blend toward neighbor average (0-1).
+        auto_round: whether to round results to fmt_precision decimals.
+        fmt_precision: number of decimal places for rounding.
+
+    Returns:
+        dict mapping (data_row, data_col) to smoothed value.
+    """
+    smoothed = {}
+
+    for data_row, data_col in selected_indices:
+        if values.ndim == 1:
+            neighbors = []
+            if data_row > 0:
+                neighbors.append(float(values[data_row - 1]))
+            if data_row < len(values) - 1:
+                neighbors.append(float(values[data_row + 1]))
+
+            if neighbors:
+                current = float(values[data_row])
+                neighbor_avg = sum(neighbors) / len(neighbors)
+                result = current + blend_factor * (neighbor_avg - current)
+                if auto_round:
+                    result = round(result, fmt_precision)
+                smoothed[(data_row, data_col)] = result
+        else:
+            neighbors = []
+            rows, cols = values.shape
+
+            for dr in [-1, 0, 1]:
+                for dc in [-1, 0, 1]:
+                    if dr == 0 and dc == 0:
+                        continue
+                    nr, nc = data_row + dr, data_col + dc
+                    if 0 <= nr < rows and 0 <= nc < cols:
+                        neighbors.append(float(values[nr, nc]))
+
+            if neighbors:
+                current = float(values[data_row, data_col])
+                neighbor_avg = sum(neighbors) / len(neighbors)
+                result = current + blend_factor * (neighbor_avg - current)
+                if auto_round:
+                    result = round(result, fmt_precision)
+                smoothed[(data_row, data_col)] = result
+
+    return smoothed
+
+
 class TableOperationsHelper:
     """Helper class for bulk data operations"""
 
@@ -518,53 +577,26 @@ class TableOperationsHelper:
 
         # Check auto-round setting
         from ...utils.settings import get_settings
-        from ...utils.formatting import round_one_level_coarser, get_scaling_format
+        from ...utils.formatting import get_scaling_format, _get_format_precision
 
         auto_round = get_settings().get_auto_round()
         if auto_round:
             data_fmt = get_scaling_format(
                 self.ctx.rom_definition, self.ctx.current_table.scaling
             )
+            fmt_precision = _get_format_precision(data_fmt)
 
         # Calculate smoothed values first (don't modify while iterating)
-        smoothed_values = {}
-
-        for ui_row, ui_col, data_row, data_col in selected_cells:
-            if values.ndim == 1:
-                # 2D table (1D array) - average with adjacent values
-                neighbors = []
-                if data_row > 0:
-                    neighbors.append(float(values[data_row - 1]))
-                if data_row < len(values) - 1:
-                    neighbors.append(float(values[data_row + 1]))
-
-                if neighbors:
-                    current = float(values[data_row])
-                    neighbor_avg = sum(neighbors) / len(neighbors)
-                    smoothed = current + blend_factor * (neighbor_avg - current)
-                    if auto_round:
-                        smoothed = round_one_level_coarser(smoothed, data_fmt)
-                    smoothed_values[(data_row, data_col)] = smoothed
-            else:
-                # 3D table (2D array) - average with all 8 neighbors
-                neighbors = []
-                rows, cols = values.shape
-
-                for dr in [-1, 0, 1]:
-                    for dc in [-1, 0, 1]:
-                        if dr == 0 and dc == 0:
-                            continue  # Skip self
-                        nr, nc = data_row + dr, data_col + dc
-                        if 0 <= nr < rows and 0 <= nc < cols:
-                            neighbors.append(float(values[nr, nc]))
-
-                if neighbors:
-                    current = float(values[data_row, data_col])
-                    neighbor_avg = sum(neighbors) / len(neighbors)
-                    smoothed = current + blend_factor * (neighbor_avg - current)
-                    if auto_round:
-                        smoothed = round_one_level_coarser(smoothed, data_fmt)
-                    smoothed_values[(data_row, data_col)] = smoothed
+        selected_data_indices = [
+            (data_row, data_col) for _, _, data_row, data_col in selected_cells
+        ]
+        smoothed_values = compute_smoothed_values(
+            values,
+            selected_data_indices,
+            blend_factor=blend_factor,
+            auto_round=auto_round,
+            fmt_precision=fmt_precision if auto_round else 2,
+        )
 
         if not smoothed_values:
             return
