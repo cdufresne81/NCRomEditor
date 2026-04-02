@@ -1,5 +1,10 @@
 # Session Notes
 
+## Recent Completed Work (Apr 2, 2026) - DTC NRC 0x22 Fix (#52)
+- **Handle NRC 0x22 gracefully in DTC reads** — `read_dtc_count()` and `read_dtc_status()` in protocol.py now catch NRC 0x22 and return 0/[] instead of raising. Defense-in-depth added in flash_manager.py `read_dtcs()`.
+- **Isolate DTC reads from VIN/ROM ID** — In flash_setup_dialog.py and flash_mixin.py, DTC read is now wrapped in its own try/except so failures don't discard already-read VIN and ROM ID.
+- **Fix PassThruMsg struct for Linux 64-bit** — Changed `c_ulong` to `c_uint32` in j2534.py struct definitions. Fixes CI failure on ubuntu runners where c_ulong is 8 bytes.
+
 ## Next Tasks
 - CI secret `SECURE_REPO_PAT` is configured and matches workflows. No graceful fallback if missing (CI hard-fails), but this is acceptable.
 - `examples/metadata/LFDJEA.xml` is untracked — may need committing

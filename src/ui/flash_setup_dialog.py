@@ -44,7 +44,11 @@ class _ECUInfoWorker(QObject):
                 uds = self._session_uds
                 vin_data = uds.read_vin_block()
                 rom_id = uds.read_rom_id()
-                dtcs = uds.read_dtc_status()
+                dtcs = []
+                try:
+                    dtcs = uds.read_dtc_status()
+                except Exception:
+                    logger.info("DTC read failed in ECU info worker (non-critical)")
             else:
                 from src.ecu.j2534 import J2534Device, setup_isotp_flow_control
                 from src.ecu.protocol import UDSConnection
@@ -67,7 +71,11 @@ class _ECUInfoWorker(QObject):
 
                     vin_data = uds.read_vin_block()
                     rom_id = uds.read_rom_id()
-                    dtcs = uds.read_dtc_status()
+                    dtcs = []
+                    try:
+                        dtcs = uds.read_dtc_status()
+                    except Exception:
+                        logger.info("DTC read failed in ECU info worker (non-critical)")
 
             vin_str = (
                 vin_data.decode("ascii", errors="replace").rstrip("\x00")

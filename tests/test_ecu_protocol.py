@@ -19,8 +19,11 @@ from src.ecu.constants import (
     SID_TRANSFER_EXIT,
     SID_TESTER_PRESENT,
     SID_READ_MEM_BY_ADDR,
+    SID_READ_DTC_COUNT,
+    SID_READ_DTC_STATUS,
     SECURITY_REQUEST_SEED,
     SECURITY_SEND_KEY,
+    NRC_CONDITIONS_NOT_CORRECT,
     NRC_RESPONSE_PENDING,
     TIMEOUT_RESPONSE_PENDING_MAX,
     PASSTHRU_MSG_DATA_SIZE,
@@ -302,6 +305,55 @@ class TestTransferData:
 # -----------------------------------------------------------------------
 # Read Memory By Address
 # -----------------------------------------------------------------------
+
+
+# -----------------------------------------------------------------------
+# DTC Read — NRC 0x22 Handling
+# -----------------------------------------------------------------------
+
+
+class TestReadDtcNrc0x22:
+    """NRC 0x22 (conditions not correct) on DTC reads returns empty results."""
+
+    def test_read_dtc_count_nrc_0x22_returns_zero(self, mock_uds, mock_j2534_device):
+        """read_dtc_count() returns 0 on NRC 0x22."""
+        mock_j2534_device.read_msgs.return_value = [
+            build_negative_response(SID_READ_DTC_COUNT, NRC_CONDITIONS_NOT_CORRECT)
+        ]
+        result = mock_uds.read_dtc_count()
+        assert result == 0
+
+    def test_read_dtc_status_nrc_0x22_returns_empty(self, mock_uds, mock_j2534_device):
+        """read_dtc_status() returns [] when ReadDTCByStatus gets NRC 0x22."""
+        # First call: read_dtc_count returns count=1
+        # Second call: ReadDTCByStatus (SID 0x18) gets NRC 0x22
+        mock_j2534_device.read_msgs.side_effect = [
+            [build_positive_response(SID_READ_DTC_COUNT, bytes([0x02, 0x00, 0x01]))],
+            [build_negative_response(SID_READ_DTC_STATUS, NRC_CONDITIONS_NOT_CORRECT)],
+        ]
+        result = mock_uds.read_dtc_status()
+        assert result == []
+
+    def test_read_dtc_count_other_nrc_raises(self, mock_uds, mock_j2534_device):
+        """read_dtc_count() re-raises NRCs other than 0x22."""
+        mock_j2534_device.read_msgs.return_value = [
+            build_negative_response(SID_READ_DTC_COUNT, 0x31)  # request out of range
+        ]
+        with pytest.raises(NegativeResponseError) as exc_info:
+            mock_uds.read_dtc_count()
+        assert exc_info.value.nrc == 0x31
+
+    def test_read_dtc_status_other_nrc_raises(self, mock_uds, mock_j2534_device):
+        """read_dtc_status() re-raises NRCs other than 0x22."""
+        # First call: read_dtc_count returns count=1
+        # Second call: ReadDTCByStatus gets NRC 0x10 (general reject)
+        mock_j2534_device.read_msgs.side_effect = [
+            [build_positive_response(SID_READ_DTC_COUNT, bytes([0x02, 0x00, 0x01]))],
+            [build_negative_response(SID_READ_DTC_STATUS, 0x10)],
+        ]
+        with pytest.raises(NegativeResponseError) as exc_info:
+            mock_uds.read_dtc_status()
+        assert exc_info.value.nrc == 0x10
 
 
 class TestReadMemoryByAddress:
