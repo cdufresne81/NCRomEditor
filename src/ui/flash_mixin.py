@@ -442,7 +442,11 @@ class FlashMixin:
                 # Use existing session
                 vin_data = session_uds.read_vin_block()
                 rom_id = session_uds.read_rom_id()
-                dtcs = session_uds.read_dtc_status()
+                dtcs = []
+                try:
+                    dtcs = session_uds.read_dtc_status()
+                except Exception:
+                    logger.info("DTC read failed in ECU info (non-critical)")
             else:
                 # Open a temporary connection
                 from src.ecu.j2534 import J2534Device, setup_isotp_flow_control
@@ -466,7 +470,11 @@ class FlashMixin:
 
                     vin_data = uds.read_vin_block()
                     rom_id = uds.read_rom_id()
-                    dtcs = uds.read_dtc_status()
+                    dtcs = []
+                    try:
+                        dtcs = uds.read_dtc_status()
+                    except Exception:
+                        logger.info("DTC read failed in ECU info (non-critical)")
 
             # VIN is exactly 17 printable ASCII characters
             if vin_data:

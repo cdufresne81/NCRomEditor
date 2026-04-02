@@ -283,7 +283,12 @@ _ERROR_DESCRIPTIONS = {
 
 
 class PassThruMsg(Structure):
-    """J2534 PASSTHRU_MSG structure for CAN/ISO-15765 message exchange."""
+    """J2534 PASSTHRU_MSG structure for CAN/ISO-15765 message exchange.
+
+    Uses c_uint32 (not c_ulong) because the J2534 spec defines ULONG as
+    32-bit.  On Windows c_ulong is already 32-bit, but on Linux 64-bit
+    c_ulong is 64-bit which would break the struct layout.
+    """
 
     _fields_ = [
         ("ProtocolID", c_uint32),

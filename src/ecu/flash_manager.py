@@ -29,14 +29,15 @@ from .constants import (
     CAN_BAUDRATE,
     J2534_PROTOCOL_ISO15765,
     DEFAULT_J2534_DLL,
+    NRC_CONDITIONS_NOT_CORRECT,
 )
 from .exceptions import (
     ECUError,
     FlashError,
     FlashAbortedError,
+    NegativeResponseError,
     ROMValidationError,
     ChecksumError,
-    NegativeResponseError,
     J2534Error,
     UDSError,
     SecureModuleNotAvailable,
@@ -698,6 +699,7 @@ class FlashManager:
             rom = bytearray(ROM_SIZE)
             block_size = BLOCK_SIZE
             offset = 0
+            read_start = time.monotonic()
 
             while offset < ROM_SIZE:
                 if self._check_abort():
@@ -709,18 +711,26 @@ class FlashManager:
                 offset += read_size
 
                 pct = 20.0 + (offset / ROM_SIZE) * 75.0
+                elapsed = time.monotonic() - read_start
+                speed = offset / elapsed if elapsed > 0 else 0
                 if progress_cb:
                     self._notify(
                         progress_cb,
-                        f"Reading: {offset}/{ROM_SIZE} bytes",
+                        f"Reading: {offset}/{ROM_SIZE} bytes ({speed / 1024:.1f} KB/s)",
                         percent=pct,
                         bytes_sent=offset,
                         bytes_total=ROM_SIZE,
                     )
 
+            read_elapsed = time.monotonic() - read_start
+            logger.info(
+                f"ROM read complete: {ROM_SIZE} bytes in {read_elapsed:.1f}s "
+                f"({ROM_SIZE / read_elapsed / 1024:.1f} KB/s)"
+            )
+
             # Read ROM ID
             rom_id = self._uds.read_rom_id()
-            logger.info(f"ROM read complete, ROM ID: {rom_id}")
+            logger.info(f"ROM ID: {rom_id}")
 
             self._set_state(FlashState.COMPLETE)
             self._notify(
@@ -779,6 +789,14 @@ class FlashManager:
             for dtc in unique_dtcs:
                 logger.info("  %s: %s", dtc.formatted, dtc.description)
             return dtcs
+        except NegativeResponseError as e:
+            if e.nrc == NRC_CONDITIONS_NOT_CORRECT:
+                logger.info(
+                    "DTC read: conditions not correct (NRC 0x22) — "
+                    "returning empty list"
+                )
+                return []
+            raise
         except ECUError:
             raise
         except Exception as e:

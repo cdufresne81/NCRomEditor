@@ -29,6 +29,7 @@ from .constants import (
     SECURITY_REQUEST_SEED,
     SECURITY_SEND_KEY,
     TESTER_PRESENT_SUB,
+    NRC_CONDITIONS_NOT_CORRECT,
     NRC_RESPONSE_PENDING,
     DOWNLOAD_ADDR,
     DOWNLOAD_SIZE,
@@ -484,7 +485,16 @@ class UDSConnection:
         Returns:
             Number of DTCs
         """
-        response = self.send_request(SID_READ_DTC_COUNT, bytes([0x02, 0x00]))
+        try:
+            response = self.send_request(SID_READ_DTC_COUNT, bytes([0x02, 0x00]))
+        except NegativeResponseError as e:
+            if e.nrc == NRC_CONDITIONS_NOT_CORRECT:
+                logger.info(
+                    "ECU >> ReadDTCCount: conditions not correct "
+                    "(NRC 0x22) — returning 0"
+                )
+                return 0
+            raise
         if len(response) >= 3:
             return response[2]
         return 0
@@ -501,10 +511,19 @@ class UDSConnection:
             return []
 
         # ReadDTCByStatus: status mask = 0x00FF00
-        response = self.send_request(
-            SID_READ_DTC_STATUS,
-            bytes([0x00, 0xFF, 0x00]),
-        )
+        try:
+            response = self.send_request(
+                SID_READ_DTC_STATUS,
+                bytes([0x00, 0xFF, 0x00]),
+            )
+        except NegativeResponseError as e:
+            if e.nrc == NRC_CONDITIONS_NOT_CORRECT:
+                logger.info(
+                    "ECU >> ReadDTCByStatus: conditions not correct "
+                    "(NRC 0x22) — returning empty DTC list"
+                )
+                return []
+            raise
 
         dtcs = []
         # Response format: [countOfDTC, {code_hi, code_lo, status}...]
