@@ -117,20 +117,10 @@ class HighlightDelegate(QStyledItemDelegate):
                 )
                 painter.fillRect(highlight_rect, self.highlight_color)
 
-                # Draw match text (with bold if not selected)
-                if not (option.state & QStyle.State_Selected):
-                    font = painter.font()
-                    font.setBold(True)
-                    painter.setFont(font)
-                    painter.drawText(
-                        x_offset, y_pos + font_metrics.ascent() // 2, match_text
-                    )
-                    font.setBold(False)
-                    painter.setFont(font)
-                else:
-                    painter.drawText(
-                        x_offset, y_pos + font_metrics.ascent() // 2, match_text
-                    )
+                # Draw match text
+                painter.drawText(
+                    x_offset, y_pos + font_metrics.ascent() // 2, match_text
+                )
 
                 x_offset += match_width
                 pos = match_pos + search_len

@@ -10,6 +10,7 @@ All notable changes to NC Flash are documented here.
 - **Flash abort scenario tests (#56)** — 14 tests covering abort during SBL upload, ROM transfer, pre-transfer phase, connection drops, and cleanup failures
 
 ### Fixed
+- **Search highlight bold causes text overlap in table browser** — Removed bold font from search match highlighting; the yellow background is sufficient and bold caused width miscalculation that squashed adjacent characters
 - **DTC read failure crashes ECU info worker (#52)** — ReadDTCByStatus (SID 0x18) NRC 0x22 "Conditions not correct" now returns empty results gracefully instead of raising. DTC read failures no longer discard already-read VIN and ROM ID in the flash setup dialog and ECU info view
 - **Smoothing snaps values to coarse increments** — Smoothing used `round_one_level_coarser` which reduced precision by one decimal level (e.g. 2.03 → 2.0 for `.2f` tables). Now rounds to the format's native precision instead
 - **Interleaved 3D read has no bounds checking (#57)** — `_read_interleaved_3d()` now validates M/N are non-zero and total table footprint fits in ROM before any data access. Corrupt ROMs raise `RomReadError` with clear diagnostics instead of crashing
