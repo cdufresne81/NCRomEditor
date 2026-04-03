@@ -4,6 +4,9 @@ All notable changes to NC Flash are documented here.
 
 ## [Unreleased]
 
+### Changed
+- **`.gitignore` cleanup** — Added `tests/gui/debug_*.txt` pattern and lowercase `thinking-pad.md` to `.gitignore`; removed 6 one-off debug GUI test scripts
+
 ### Removed
 - **Dead `GraphViewer` class** — Standalone graph window class in `graph_viewer.py` was never imported; removed along with its `matplotlib.pyplot` import and `APP_NAME` constant
 - **Dead `_apply_table_style` method** — Unused delegation method in `table_viewer.py` that was superseded by `_apply_table_style_internal`
