@@ -458,6 +458,12 @@ class MainWindow(
         ecu_prog_action.setShortcut("Ctrl+Shift+E")
         ecu_prog_action.triggered.connect(self._on_open_ecu_window)
 
+        tools_menu.addSeparator()
+
+        screenshot_action = tools_menu.addAction("&Screenshot")
+        screenshot_action.setShortcut("F12")
+        screenshot_action.triggered.connect(self._take_screenshot)
+
         # Help menu (Alt+H)
         help_menu = menubar.addMenu("&Help")
 
@@ -471,7 +477,8 @@ class MainWindow(
         tb.setMovable(False)
         tb.setFloatable(False)
         tb.setIconSize(QSize(20, 20))
-        tb.setStyleSheet("""
+        tb.setStyleSheet(
+            """
             QToolBar {
                 spacing: 1px;
                 padding: 1px 4px;
@@ -489,7 +496,8 @@ class MainWindow(
             QToolButton:pressed {
                 background: rgba(128, 128, 128, 0.3);
             }
-        """)
+        """
+        )
 
         act = tb.addAction(self._make_icon("open"), "")
         act.setToolTip("Open  (Ctrl+O)")
@@ -526,6 +534,39 @@ class MainWindow(
         act = tb.addAction(self._make_icon("settings"), "")
         act.setToolTip("Settings")
         act.triggered.connect(self.show_settings)
+
+        tb.addSeparator()
+
+        act = tb.addAction(self._make_icon("screenshot"), "")
+        act.setToolTip("Screenshot  (F12)")
+        act.triggered.connect(self._take_screenshot)
+
+    def _take_screenshot(self):
+        """Capture a screenshot of the main window and save to user-chosen location."""
+        document = self.get_current_document()
+        if document and document.file_name:
+            stem = Path(document.file_name).stem
+        else:
+            stem = "nc-flash"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_name = f"{stem}_{timestamp}.png"
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Screenshot",
+            default_name,
+            "PNG Images (*.png);;All Files (*)",
+        )
+        if not file_path:
+            return
+
+        pixmap = self.grab()
+        if pixmap.save(file_path):
+            self.statusBar().showMessage(f"Screenshot saved: {file_path}")
+        else:
+            QMessageBox.critical(
+                self, "Error", f"Failed to save screenshot to:\n{file_path}"
+            )
 
     def _make_icon(self, name: str) -> QIcon:
         """Create a crisp toolbar icon by name using QPainter."""

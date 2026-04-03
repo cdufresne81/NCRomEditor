@@ -263,6 +263,21 @@ def _draw_round(p, c):
     p.drawEllipse(QPointF(17, 4), 1.5, 1.5)
 
 
+def _draw_screenshot(p, c):
+    """Camera icon for screenshot action."""
+    pen = QPen(c, 1.6, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    # Camera body
+    p.drawRoundedRect(2, 7, 16, 11, 2, 2)
+    # Viewfinder bump on top
+    p.drawLine(7, 7, 7, 5)
+    p.drawLine(7, 5, 13, 5)
+    p.drawLine(13, 5, 13, 7)
+    # Lens circle
+    p.drawEllipse(QPointF(10, 12.5), 3.5, 3.5)
+
+
 # Dispatch table
 _ICON_DRAWERS = {
     # Main window
@@ -288,4 +303,6 @@ _ICON_DRAWERS = {
     "smooth": _draw_smooth,
     "round": _draw_round,
     "graph": _draw_graph,
+    # Shared
+    "screenshot": _draw_screenshot,
 }
