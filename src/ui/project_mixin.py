@@ -12,7 +12,8 @@ This is a mixin class — it has no __init__ and relies on MainWindow providing:
 - self._open_rom_file(path) method
 - self._update_project_ui() method
 - self.open_table_windows (list)
-- self.tab_widget (QTabWidget)
+- self.tab_bar (QTabBar)
+- self.rom_stack (QStackedWidget)
 - self.statusBar() method
 """
 
@@ -89,7 +90,7 @@ class ProjectMixin:
         # Prevent opening the same project twice
         existing = self._find_open_tab(project_path=project_path)
         if existing >= 0:
-            self.tab_widget.setCurrentIndex(existing)
+            self.tab_bar.setCurrentIndex(existing)
             QMessageBox.information(
                 self,
                 "Already Open",
@@ -123,10 +124,11 @@ class ProjectMixin:
                 self._assign_rom_color(rom_path)
 
                 tab_title = f"[P] {project.name}"
-                tab_index = self.tab_widget.addTab(rom_document, tab_title)
-                self.tab_widget.setTabToolTip(tab_index, project.project_path)
+                tab_index = self.tab_bar.addTab(tab_title)
+                self.rom_stack.addWidget(rom_document)
+                self.tab_bar.setTabToolTip(tab_index, project.project_path)
                 self._create_tab_color_button(rom_path, tab_index)
-                self.tab_widget.setCurrentIndex(tab_index)
+                self.tab_bar.setCurrentIndex(tab_index)
 
                 # Add to recent files
                 self.settings.add_recent_file(f"project:{project.project_path}")

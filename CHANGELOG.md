@@ -15,6 +15,7 @@ All notable changes to NC Flash are documented here.
 - **Command-line file argument** — `NCFlash.exe file.bin` opens the specified ROM on launch
 
 ### Changed
+- **Tab bar spans full window width** — ROM tabs now sit above the splitter instead of inside the left pane, giving long filenames room to display without truncation. Tabs no longer elide text; scroll buttons appear when tabs exceed window width
 - **Table browser columns auto-sized** — Type and Address columns are now fixed-width (compact), Name column stretches to fill available space. Resizing the splitter automatically adjusts the Name column width
 - **Splitter position persisted** — The main splitter between table browser and activity log now saves/restores its position across sessions
 

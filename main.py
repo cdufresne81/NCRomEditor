@@ -16,13 +16,13 @@ from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
     QWidget,
-    QHBoxLayout,
     QVBoxLayout,
     QLabel,
     QSplitter,
     QFileDialog,
     QMessageBox,
-    QTabWidget,
+    QTabBar,
+    QStackedWidget,
     QToolButton,
     QColorDialog,
 )
@@ -344,21 +344,31 @@ class MainWindow(
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        layout = QHBoxLayout()
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         central_widget.setLayout(layout)
 
-        # Main splitter (tabs on left, activity log on right)
+        # Tab bar for switching between open ROMs (spans full window width)
+        self.tab_bar = QTabBar()
+        self.tab_bar.setTabsClosable(True)
+        self.tab_bar.setMovable(True)
+        self.tab_bar.setElideMode(Qt.ElideNone)
+        self.tab_bar.setExpanding(False)
+        self.tab_bar.setDocumentMode(True)
+        self.tab_bar.setDrawBase(False)
+        self.tab_bar.tabCloseRequested.connect(self.close_tab)
+        self.tab_bar.currentChanged.connect(self.on_tab_changed)
+        layout.addWidget(self.tab_bar)
+
+        # Main splitter (ROM content on left, activity log on right)
         self.main_splitter = QSplitter(Qt.Horizontal)
         layout.addWidget(self.main_splitter)
 
-        # Tab widget for multiple ROM documents
-        self.tab_widget = QTabWidget()
-        self.tab_widget.setTabsClosable(True)
-        self.tab_widget.setMovable(True)
-        self.tab_widget.tabBar().setElideMode(Qt.ElideNone)
-        self.tab_widget.tabCloseRequested.connect(self.close_tab)
-        self.tab_widget.currentChanged.connect(self.on_tab_changed)
-        self.main_splitter.addWidget(self.tab_widget)
+        # Stacked widget for ROM document content (synced with tab bar)
+        self.rom_stack = QStackedWidget()
+        self.rom_stack.setFrameShape(QStackedWidget.Shape.StyledPanel)
+        self.main_splitter.addWidget(self.rom_stack)
 
         # Shared activity log on the right (always visible)
         self.log_console = LogConsole()
@@ -585,7 +595,7 @@ class MainWindow(
 
     def update_window_title(self):
         """Update window title based on tab count"""
-        if self.tab_widget.count() == 0:
+        if self.tab_bar.count() == 0:
             self.setWindowTitle(APP_NAME)
 
     def get_current_document(self):
@@ -595,9 +605,9 @@ class MainWindow(
         Returns:
             RomDocument or None: Current document or None if no tabs
         """
-        current_index = self.tab_widget.currentIndex()
+        current_index = self.tab_bar.currentIndex()
         if current_index >= 0:
-            return self.tab_widget.widget(current_index)
+            return self.rom_stack.widget(current_index)
         return None
 
     def _find_document_by_rom_path(self, rom_path):
@@ -609,8 +619,8 @@ class MainWindow(
         from pathlib import Path as _Path
 
         target = _Path(rom_path)
-        for i in range(self.tab_widget.count()):
-            doc = self.tab_widget.widget(i)
+        for i in range(self.rom_stack.count()):
+            doc = self.rom_stack.widget(i)
             if hasattr(doc, "rom_path") and _Path(doc.rom_path) == target:
                 return doc
         logger.warning(f"No document found for rom_path={rom_path}")
@@ -621,8 +631,8 @@ class MainWindow(
 
         Returns the tab index, or -1 if not found.
         """
-        for i in range(self.tab_widget.count()):
-            doc = self.tab_widget.widget(i)
+        for i in range(self.rom_stack.count()):
+            doc = self.rom_stack.widget(i)
             if not hasattr(doc, "rom_path"):
                 continue
             if rom_path and Path(doc.rom_path) == Path(rom_path):
@@ -642,10 +652,10 @@ class MainWindow(
         Args:
             index: Tab index to close
         """
-        if index < 0 or index >= self.tab_widget.count():
+        if index < 0 or index >= self.tab_bar.count():
             return
 
-        document = self.tab_widget.widget(index)
+        document = self.rom_stack.widget(index)
         if document and document.is_modified():
             response = QMessageBox.question(
                 self,
@@ -699,8 +709,9 @@ class MainWindow(
                 self.rom_colors.pop(rom_path, None)
 
         # Remove the tab and schedule widget cleanup
-        self.tab_widget.removeTab(index)
+        self.tab_bar.removeTab(index)
         if document:
+            self.rom_stack.removeWidget(document)
             document.deleteLater()
         self.update_window_title()
 
@@ -710,14 +721,15 @@ class MainWindow(
 
     def close_current_tab(self):
         """Close the currently active tab"""
-        current_index = self.tab_widget.currentIndex()
+        current_index = self.tab_bar.currentIndex()
         if current_index >= 0:
             self.close_tab(current_index)
 
     def on_tab_changed(self, index: int):
         """Handle tab change"""
+        self.rom_stack.setCurrentIndex(index)
         if index >= 0:
-            document = self.tab_widget.widget(index)
+            document = self.rom_stack.widget(index)
             if document:
                 self.setWindowTitle(f"{APP_NAME} - {document.get_tab_title()}")
                 logger.info(f"Switched to ROM: {document.file_name}")
@@ -747,9 +759,7 @@ class MainWindow(
         btn.setAutoRaise(True)
         self._style_color_button(btn, color)
         btn.clicked.connect(lambda: self._pick_rom_color(rom_path))
-        self.tab_widget.tabBar().setTabButton(
-            tab_index, self.tab_widget.tabBar().ButtonPosition.LeftSide, btn
-        )
+        self.tab_bar.setTabButton(tab_index, QTabBar.ButtonPosition.LeftSide, btn)
 
     def _style_color_button(self, btn, color):
         """Apply color swatch styling to a tab button."""
@@ -775,17 +785,15 @@ class MainWindow(
         self.rom_colors[rom_path] = color
 
         # Update the tab color button
-        for i in range(self.tab_widget.count()):
-            doc = self.tab_widget.widget(i)
+        for i in range(self.rom_stack.count()):
+            doc = self.rom_stack.widget(i)
             if (
                 doc
                 and hasattr(doc, "rom_reader")
                 and doc.rom_reader
                 and doc.rom_reader.rom_path == rom_path
             ):
-                btn = self.tab_widget.tabBar().tabButton(
-                    i, self.tab_widget.tabBar().ButtonPosition.LeftSide
-                )
+                btn = self.tab_bar.tabButton(i, QTabBar.ButtonPosition.LeftSide)
                 if btn:
                     self._style_color_button(btn, color)
                 break
@@ -797,12 +805,12 @@ class MainWindow(
 
     def _update_tab_title(self, document):
         """Update tab title to show modified state"""
-        tab_index = self.tab_widget.indexOf(document)
+        tab_index = self.rom_stack.indexOf(document)
         if tab_index >= 0:
             title = document.file_name
             if document.is_modified():
                 title = f"*{title}"
-            self.tab_widget.setTabText(tab_index, title)
+            self.tab_bar.setTabText(tab_index, title)
 
     # ========== ROM I/O ==========
 
@@ -925,16 +933,16 @@ class MainWindow(
         """
         try:
             workspace_path = get_app_root() / "workspace.json"
-            if self.tab_widget.count() == 0:
+            if self.tab_bar.count() == 0:
                 workspace_path.unlink(missing_ok=True)
                 return
 
-            active_index = self.tab_widget.currentIndex()
+            active_index = self.tab_bar.currentIndex()
             active_rom = None
             open_roms = []
 
-            for i in range(self.tab_widget.count()):
-                doc = self.tab_widget.widget(i)
+            for i in range(self.rom_stack.count()):
+                doc = self.rom_stack.widget(i)
                 if not hasattr(doc, "rom_path"):
                     continue
                 romid = doc.rom_definition.romid
@@ -986,7 +994,7 @@ class MainWindow(
         # Prevent opening the same ROM twice
         existing = self._find_open_tab(rom_path=file_path)
         if existing >= 0:
-            self.tab_widget.setCurrentIndex(existing)
+            self.tab_bar.setCurrentIndex(existing)
             QMessageBox.information(
                 self,
                 "Already Open",
@@ -1057,10 +1065,11 @@ class MainWindow(
 
             # Add as new tab with color swatch
             file_name = Path(file_path).name
-            tab_index = self.tab_widget.addTab(rom_document, file_name)
-            self.tab_widget.setTabToolTip(tab_index, file_path)
+            tab_index = self.tab_bar.addTab(file_name)
+            self.rom_stack.addWidget(rom_document)
+            self.tab_bar.setTabToolTip(tab_index, file_path)
             self._create_tab_color_button(rom_path, tab_index)
-            self.tab_widget.setCurrentIndex(tab_index)
+            self.tab_bar.setCurrentIndex(tab_index)
 
             # Add to recent files list
             self.settings.add_recent_file(file_path)
@@ -1194,8 +1203,8 @@ class MainWindow(
 
                 # Update tab title with new filename
                 self._update_tab_title(document)
-                current_index = self.tab_widget.indexOf(document)
-                self.tab_widget.setTabToolTip(current_index, file_path)
+                current_index = self.rom_stack.indexOf(document)
+                self.tab_bar.setTabToolTip(current_index, file_path)
 
                 # Log to console
                 logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -1226,7 +1235,7 @@ class MainWindow(
 
     def _update_compare_action(self):
         """Enable/disable the Compare and Flash actions based on open ROM count."""
-        compare_enabled = self.tab_widget.count() >= 2
+        compare_enabled = self.tab_bar.count() >= 2
         self.compare_action.setEnabled(compare_enabled)
         if hasattr(self, "_toolbar_compare"):
             self._toolbar_compare.setEnabled(compare_enabled)
@@ -1457,7 +1466,7 @@ class MainWindow(
         """Open the ROM comparison window."""
         from src.ui.compare_window import CompareWindow
 
-        count = self.tab_widget.count()
+        count = self.tab_bar.count()
         if count < 2:
             QMessageBox.information(
                 self, "Compare", "Open at least two ROM files to compare."
@@ -1470,13 +1479,13 @@ class MainWindow(
             self.compare_window = None
 
         if count == 2:
-            doc_a = self.tab_widget.widget(0)
-            doc_b = self.tab_widget.widget(1)
+            doc_a = self.rom_stack.widget(0)
+            doc_b = self.rom_stack.widget(1)
         else:
             # Let user pick which two ROMs to compare
             rom_names = []
             for i in range(count):
-                doc = self.tab_widget.widget(i)
+                doc = self.rom_stack.widget(i)
                 rom_names.append(doc.file_name)
 
             from PySide6.QtWidgets import QInputDialog
@@ -1496,8 +1505,8 @@ class MainWindow(
                 return
             idx_b = rom_names.index(name_b)
 
-            doc_a = self.tab_widget.widget(idx_a)
-            doc_b = self.tab_widget.widget(idx_b)
+            doc_a = self.rom_stack.widget(idx_a)
+            doc_b = self.rom_stack.widget(idx_b)
 
         # Get ROM colors
         color_a = self.rom_colors.get(doc_a.rom_reader.rom_path)
@@ -1870,7 +1879,7 @@ class MainWindow(
             project = self.project_manager.current_project
             modified_marker = "*" if has_changes else ""
             self.setWindowTitle(f"{APP_NAME} - {project.name}{modified_marker}")
-        elif self.tab_widget.currentIndex() >= 0:
+        elif self.tab_bar.currentIndex() >= 0:
             document = self.get_current_document()
             if document:
                 self.setWindowTitle(f"{APP_NAME} - {document.get_tab_title()}")
@@ -1883,8 +1892,8 @@ class MainWindow(
     def _update_modified_table_colors(self):
         """Update table browser to show modified tables in pink (per-ROM filtering)"""
         # Update each ROM document's table browser with only its own modified addresses
-        for i in range(self.tab_widget.count()):
-            document = self.tab_widget.widget(i)
+        for i in range(self.rom_stack.count()):
+            document = self.rom_stack.widget(i)
             if (
                 hasattr(document, "table_browser")
                 and hasattr(document, "rom_reader")

@@ -7,7 +7,8 @@ on close, checking for unsaved changes, and settings/about dialogs.
 This is a mixin class — it has no __init__ and relies on MainWindow providing:
 - self.settings (Settings instance)
 - self.rom_detector (RomDetector instance, may be None)
-- self.tab_widget (QTabWidget)
+- self.tab_bar (QTabBar)
+- self.rom_stack (QStackedWidget)
 - self._open_rom_file(path) method
 - self.open_project_path(path) method
 - self.statusBar() method
@@ -79,8 +80,8 @@ class SessionMixin:
         that delegates here.
         """
         # Check each open tab for unsaved changes
-        for i in range(self.tab_widget.count()):
-            document = self.tab_widget.widget(i)
+        for i in range(self.rom_stack.count()):
+            document = self.rom_stack.widget(i)
             if document and document.is_modified():
                 response = QMessageBox.question(
                     self,
@@ -99,8 +100,8 @@ class SessionMixin:
         # Collect paths of all open ROM documents
         # For project tabs, save as "project:<path>" so restore reopens the project
         open_files = []
-        for i in range(self.tab_widget.count()):
-            document = self.tab_widget.widget(i)
+        for i in range(self.rom_stack.count()):
+            document = self.rom_stack.widget(i)
             if document and hasattr(document, "rom_path"):
                 project_path = getattr(document, "project_path", None)
                 if project_path:
@@ -152,8 +153,8 @@ class SessionMixin:
             )
 
         # Apply table browser column visibility to all open tabs
-        for i in range(self.tab_widget.count()):
-            document = self.tab_widget.widget(i)
+        for i in range(self.rom_stack.count()):
+            document = self.rom_stack.widget(i)
             if document and hasattr(document, "table_browser"):
                 document.table_browser.apply_column_visibility()
 

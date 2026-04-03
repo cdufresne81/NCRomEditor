@@ -38,10 +38,10 @@ class _SessionHost(SessionMixin):
     def __init__(self, documents=None, session_files=None):
         self.settings = MagicMock()
         self.settings.get_session_files.return_value = session_files or []
-        self.tab_widget = MagicMock()
+        self.rom_stack = MagicMock()
         docs = documents or []
-        self.tab_widget.count.return_value = len(docs)
-        self.tab_widget.widget.side_effect = lambda i: docs[i]
+        self.rom_stack.count.return_value = len(docs)
+        self.rom_stack.widget.side_effect = lambda i: docs[i]
         self.open_project_path = MagicMock()
         self._open_rom_file = MagicMock()
         self._delete_workspace_state = MagicMock()
