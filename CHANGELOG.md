@@ -4,6 +4,8 @@ All notable changes to NC Flash are documented here.
 
 ## [Unreleased]
 
+## [v2.6.0] - 2026-04-03
+
 ### Added
 - **Table browser column visibility setting** — New checkboxes in Settings > Appearance > Table Browser to show/hide the Type and Address columns (both shown by default)
 - **Screenshot buttons (F12)** — Camera toolbar button and menu entry in both the main window (Tools > Screenshot) and table viewer window (File > Screenshot). Captures the window as PNG via save dialog with auto-generated filename
