@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QWidget,
     QApplication,
+    QFileDialog,
     QSplitter,
     QMessageBox,
     QToolBar,
@@ -250,6 +251,10 @@ class TableViewerWindow(QMainWindow):
         export_csv_action.setShortcut("Ctrl+E")
         export_csv_action.triggered.connect(self._export_to_csv)
 
+        screenshot_action = file_menu.addAction("Screenshot")
+        screenshot_action.setShortcut("F12")
+        screenshot_action.triggered.connect(self._take_screenshot)
+
         # Edit menu (Alt+E)
         edit_menu = menubar.addMenu("&Edit")
 
@@ -343,7 +348,8 @@ class TableViewerWindow(QMainWindow):
         tb.setMovable(False)
         tb.setFloatable(False)
         tb.setIconSize(QSize(20, 20))
-        tb.setStyleSheet("""
+        tb.setStyleSheet(
+            """
             QToolBar {
                 spacing: 1px;
                 padding: 1px 4px;
@@ -365,7 +371,8 @@ class TableViewerWindow(QMainWindow):
                 background: rgba(0, 120, 215, 0.15);
                 border: 1px solid rgba(0, 120, 215, 0.4);
             }
-        """)
+        """
+        )
         self._toolbar = tb
 
         # --- File actions ---
@@ -451,6 +458,12 @@ class TableViewerWindow(QMainWindow):
         else:
             self._tb_graph_action = None
 
+        tb.addSeparator()
+
+        act = tb.addAction(self._make_toolbar_icon("screenshot"), "")
+        act.setToolTip("Screenshot  (F12)")
+        act.triggered.connect(self._take_screenshot)
+
     def _make_toolbar_icon(self, name: str):
         """Create a crisp toolbar icon by name using QPainter."""
         from .icons import make_icon
@@ -496,6 +509,30 @@ class TableViewerWindow(QMainWindow):
     def _export_to_csv(self):
         """Export table to CSV and open with default application"""
         self.viewer.export_to_csv(self.rom_path)
+
+    def _take_screenshot(self):
+        """Capture a screenshot of this table viewer window and save to user-chosen location."""
+        from datetime import datetime
+
+        table_name = self.table.name.replace(" ", "_").replace("/", "-")
+        rom_stem = Path(self.rom_path).stem if self.rom_path else "table"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_name = f"{rom_stem}_{table_name}_{timestamp}.png"
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Screenshot",
+            default_name,
+            "PNG Images (*.png);;All Files (*)",
+        )
+        if not file_path:
+            return
+
+        pixmap = self.grab()
+        if not pixmap.save(file_path):
+            QMessageBox.critical(
+                self, "Error", f"Failed to save screenshot to:\n{file_path}"
+            )
 
     def _toggle_graph(self):
         """Toggle graph panel visibility"""

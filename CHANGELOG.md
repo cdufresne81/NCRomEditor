@@ -5,6 +5,7 @@ All notable changes to NC Flash are documented here.
 ## [Unreleased]
 
 ### Added
+- **Screenshot buttons (F12)** — Camera toolbar button and menu entry in both the main window (Tools > Screenshot) and table viewer window (File > Screenshot). Captures the window as PNG via save dialog with auto-generated filename
 - **J2534 device layer tests (#54)** — 53 tests covering message construction, all 26 error codes, ISO-TP filter setup, read/write, open/close, and connect/disconnect
 - **Security stub tests (#55)** — 5 always-run CI tests verifying stub raises `SecureModuleNotAvailable` and flash operations are blocked when the private module is absent
 - **Flash abort scenario tests (#56)** — 14 tests covering abort during SBL upload, ROM transfer, pre-transfer phase, connection drops, and cleanup failures
