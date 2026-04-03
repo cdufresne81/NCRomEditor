@@ -4,6 +4,9 @@ All notable changes to NC Flash are documented here.
 
 ## [Unreleased]
 
+### Fixed
+- **Deduplicate `handle_rom_operation_error`** — Extracted the duplicated error handler from `main.py` and `project_mixin.py` into a shared `src/ui/error_helpers.py` module, eliminating code duplication
+
 ## [v2.6.1] - 2026-04-03
 
 ### Added
