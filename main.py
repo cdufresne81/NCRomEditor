@@ -205,6 +205,9 @@ class MainWindow(
         # Singleton ECU programming window
         self.ecu_window = None
 
+        # Singleton CAN listener window
+        self.can_listener_window = None
+
         # MCP server subprocess
         self._mcp_process = None
 
@@ -477,6 +480,10 @@ class MainWindow(
         ecu_prog_action.setShortcut("Ctrl+Shift+E")
         ecu_prog_action.triggered.connect(self._on_open_ecu_window)
 
+        can_listener_action = tools_menu.addAction("CAN Bus &Listener...")
+        can_listener_action.setShortcut("Ctrl+Shift+L")
+        can_listener_action.triggered.connect(self._on_open_can_listener_window)
+
         tools_menu.addSeparator()
 
         screenshot_action = tools_menu.addAction("&Screenshot")
@@ -541,6 +548,10 @@ class MainWindow(
         act.setToolTip("ECU Programming (Ctrl+Shift+E)")
         act.triggered.connect(self._on_open_ecu_window)
         self._toolbar_flash = act
+
+        act = tb.addAction(self._make_icon("can_bus"), "")
+        act.setToolTip("CAN Bus Listener (Ctrl+Shift+L)")
+        act.triggered.connect(self._on_open_can_listener_window)
 
         tb.addSeparator()
 
@@ -1560,6 +1571,21 @@ class MainWindow(
         window.setAttribute(Qt.WA_DeleteOnClose)
         window.destroyed.connect(lambda: setattr(self, "ecu_window", None))
         self.ecu_window = window
+        window.show()
+
+    def _on_open_can_listener_window(self):
+        """Open the CAN Bus Listener window (singleton)."""
+        from src.ui.can_listener_window import CANListenerWindow
+
+        if self.can_listener_window is not None:
+            self.can_listener_window.raise_()
+            self.can_listener_window.activateWindow()
+            return
+
+        window = CANListenerWindow(main_window=self, parent=self)
+        window.setAttribute(Qt.WA_DeleteOnClose)
+        window.destroyed.connect(lambda: setattr(self, "can_listener_window", None))
+        self.can_listener_window = window
         window.show()
 
     # ========== Table Selection and Window Management ==========

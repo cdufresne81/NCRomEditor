@@ -263,6 +263,23 @@ def _draw_round(p, c):
     p.drawEllipse(QPointF(17, 4), 1.5, 1.5)
 
 
+def _draw_can_bus(p, c):
+    """CAN bus waveform icon."""
+    path = QPainterPath()
+    path.moveTo(2, 10)
+    path.lineTo(5, 10)
+    path.lineTo(5, 4)
+    path.lineTo(9, 4)
+    path.lineTo(9, 10)
+    path.lineTo(11, 10)
+    path.lineTo(11, 16)
+    path.lineTo(15, 16)
+    path.lineTo(15, 10)
+    path.lineTo(18, 10)
+    p.setBrush(Qt.NoBrush)
+    p.drawPath(path)
+
+
 def _draw_screenshot(p, c):
     """Camera icon for screenshot action."""
     pen = QPen(c, 1.6, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
@@ -285,6 +302,7 @@ _ICON_DRAWERS = {
     "save": _draw_save,
     "compare": _draw_compare,
     "flash": _draw_flash,
+    "can_bus": _draw_can_bus,
     "settings": _draw_settings,
     "history": _draw_history,
     "mcp_on": _draw_mcp_on,

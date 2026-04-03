@@ -339,6 +339,20 @@ class ECUProgrammingWindow(QMainWindow):
         if self._session and self._session.is_connected:
             return
 
+        # Check if CAN listener is active
+        if (
+            hasattr(self._main_window, "can_listener_window")
+            and self._main_window.can_listener_window
+            and self._main_window.can_listener_window.is_listening
+        ):
+            QMessageBox.warning(
+                self,
+                "Device Busy",
+                "Cannot connect to ECU while CAN Bus Listener is active.\n\n"
+                "Stop the CAN Bus Listener first.",
+            )
+            return
+
         # Disconnect main window session if active
         if (
             hasattr(self._main_window, "_ecu_session")

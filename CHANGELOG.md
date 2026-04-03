@@ -4,6 +4,9 @@ All notable changes to NC Flash are documented here.
 
 ## [Unreleased]
 
+### Added
+- **CAN Bus Listener** -- Real-time CAN bus monitoring via Tactrix OpenPort 2.0. Opens a raw CAN channel (J2534 Protocol ID 5), displays frames in a scrollable table with timestamp, CAN ID, DLC, and data columns. Supports DBC file loading for automatic signal decoding, CAN ID filtering, pause/resume, CSV export, and auto-scroll. Mutual exclusion prevents simultaneous use with ECU Programming
+
 ## [v2.6.1] - 2026-04-03
 
 ### Added

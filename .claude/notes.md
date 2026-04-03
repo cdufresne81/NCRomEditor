@@ -1,5 +1,14 @@
 # Session Notes
 
+## Recent Completed Work (Apr 3, 2026) - CAN Bus Listener Feature
+- **CAN Bus Listener** -- New `src/ecu/can_listener.py` backend (CANListener, CANFrame, parse_can_msg) for raw CAN channel via J2534 Protocol ID 5
+- **CAN Signal Decoder** -- New `src/ecu/can_decoder.py` (CANDecoder) for DBC-based signal decoding using cantools library
+- **CAN Listener Window** -- New `src/ui/can_listener_window.py` (CANListenerWindow) with real-time frame table, DBC loading, CAN ID filtering, pause/resume, CSV export, auto-scroll
+- **Main window integration** -- Singleton window, Tools menu entry (Ctrl+Shift+L), toolbar button with CAN bus waveform icon
+- **Mutual exclusion** -- CAN Listener and ECU Programming cannot use the J2534 device simultaneously; both sides check and warn
+- **11 backend tests** -- parse_can_msg, listener start/stop/poll, error handling, decoder no-DBC/nonexistent
+- Added `cantools>=39.0.0,<41.0.0` to requirements.txt and `J2534_PROTOCOL_CAN`/`CAN_ID_BOTH` constants
+
 ## Recent Completed Work (Apr 3, 2026) - Table Browser Columns & Splitter Persistence
 - **Table browser columns auto-sized** — Type column: Fixed 40px, Address column: Fixed 75px, Name column: Stretch (fills remaining space). Removed `TABLE_BROWSER_COLUMN_WIDTH` constant.
 - **Column visibility settings** — New `show_type_column` / `show_address_column` boolean settings in AppSettings, with checkboxes in Settings > Appearance > Table Browser group. Changes apply immediately to all open tabs.

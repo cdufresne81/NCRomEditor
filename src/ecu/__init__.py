@@ -40,6 +40,8 @@ from .rom_utils import (
 )
 from .dtc import get_dtc_description, get_dtc_prefix, format_dtc
 from .flash_manager import FlashManager, FlashState, SECURE_MODULE_AVAILABLE
+from .can_listener import CANListener, CANFrame, parse_can_msg
+from .can_decoder import CANDecoder
 
 try:
     from .session import ECUSession, ECUSessionState
@@ -91,4 +93,9 @@ __all__ = [
     # Session
     "ECUSession",
     "ECUSessionState",
+    # CAN Listener
+    "CANListener",
+    "CANFrame",
+    "parse_can_msg",
+    "CANDecoder",
 ]
