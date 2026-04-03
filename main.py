@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QColorDialog,
 )
 from PySide6.QtCore import Qt, QTimer, QSize
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from src.ui.icons import make_icon
 
@@ -209,6 +210,9 @@ class MainWindow(
 
         # Command API server (HTTP bridge for MCP → Qt main thread)
         self._command_server = None
+
+        # Single-instance IPC server
+        self._ipc_server = None
 
         # Initialize UI (lightweight widget creation)
         self.init_ui()
@@ -2063,6 +2067,55 @@ class MainWindow(
         if document and hasattr(document, "table_browser"):
             document.table_browser.select_table_by_address(table_address)
 
+    # ── Single-instance IPC ──────────────────────────────────────────
+
+    def start_ipc_server(self, server_name=None):
+        """Start a local IPC server to receive file paths from other instances."""
+        self._ipc_server_name = server_name or APP_NAME
+        self._ipc_server = QLocalServer(self)
+        self._ipc_server.newConnection.connect(self._on_ipc_connection)
+        # Remove stale socket from a previous crash
+        QLocalServer.removeServer(self._ipc_server_name)
+        if not self._ipc_server.listen(self._ipc_server_name):
+            logger.warning(
+                f"IPC server failed to start: {self._ipc_server.errorString()}"
+            )
+
+    def _on_ipc_connection(self):
+        """Handle incoming connection from another instance."""
+        conn = self._ipc_server.nextPendingConnection()
+        if not conn:
+            return
+        conn.waitForReadyRead(1000)
+        data = conn.readAll().data().decode("utf-8").strip()
+        conn.disconnectFromServer()
+        if data and os.path.isfile(data):
+            logger.info(f"IPC: opening file from another instance: {data}")
+            self._open_rom_file(data)
+            # Bring window to front
+            self.setWindowState(
+                self.windowState() & ~Qt.WindowMinimized | Qt.WindowActive
+            )
+            self.raise_()
+            self.activateWindow()
+
+
+def _try_send_to_running_instance(file_path: str, server_name=None) -> bool:
+    """Try to send a file path to an already-running NC Flash instance.
+
+    Returns True if the message was sent (caller should exit),
+    False if no running instance was found.
+    """
+    socket = QLocalSocket()
+    socket.connectToServer(server_name or APP_NAME)
+    if socket.waitForConnected(500):
+        socket.write(file_path.encode("utf-8"))
+        socket.flush()
+        socket.waitForBytesWritten(1000)
+        socket.disconnectFromServer()
+        return True
+    return False
+
 
 def main():
     """Application entry point"""
@@ -2105,8 +2158,26 @@ def main():
     app.styleHints().setColorScheme(Qt.ColorScheme.Light)
     app.setApplicationName(APP_NAME)
 
+    # Determine if a file was passed on the command line
+    args = app.arguments()
+    file_arg = None
+    if len(args) > 1 and os.path.isfile(args[-1]):
+        file_arg = os.path.abspath(args[-1])
+
+    # Single-instance check: if another instance is running, hand off the
+    # file path and exit instead of opening a second window.
+    if file_arg and _try_send_to_running_instance(file_arg):
+        logger.info(f"Handed off file to running instance: {file_arg}")
+        sys.exit(0)
+
     window = MainWindow()
+    window.start_ipc_server()
     window.show()
+
+    # Open file passed as command-line argument (e.g. from file association)
+    if file_arg:
+        logger.info(f"Opening file from command line: {file_arg}")
+        QTimer.singleShot(0, lambda: window._open_rom_file(file_arg))
 
     logger.info("Application window displayed")
     exit_code = app.exec()
