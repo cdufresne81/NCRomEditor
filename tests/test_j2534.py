@@ -28,7 +28,6 @@ from src.ecu.constants import (
 )
 from src.ecu.exceptions import J2534Error, J2534ConnectionError
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -64,13 +63,13 @@ class TestBuildIsotpMsg:
 
     def test_default_tx_id(self):
         """Default CAN ID (0x7E0) is packed big-endian in Data[0:4]."""
-        msg = build_isotp_msg(b"\x3E\x01")
-        assert _get_data_bytes(msg, 4) == b"\x00\x00\x07\xE0"
+        msg = build_isotp_msg(b"\x3e\x01")
+        assert _get_data_bytes(msg, 4) == b"\x00\x00\x07\xe0"
 
     def test_payload_at_offset_4(self):
         """Payload bytes start at Data[4]."""
-        msg = build_isotp_msg(b"\x3E\x01")
-        assert _get_data_bytes(msg, 6)[4:] == b"\x3E\x01"
+        msg = build_isotp_msg(b"\x3e\x01")
+        assert _get_data_bytes(msg, 6)[4:] == b"\x3e\x01"
 
     def test_data_size_includes_can_id(self):
         """DataSize = 4 (CAN ID) + payload length."""
@@ -80,7 +79,7 @@ class TestBuildIsotpMsg:
     def test_custom_tx_id(self):
         """Custom CAN ID is packed correctly."""
         msg = build_isotp_msg(b"\x01", tx_id=0x7DF)
-        assert _get_data_bytes(msg, 4) == b"\x00\x00\x07\xDF"
+        assert _get_data_bytes(msg, 4) == b"\x00\x00\x07\xdf"
 
     def test_empty_payload(self):
         """Empty payload: DataSize = 4 (CAN ID only)."""
@@ -111,7 +110,7 @@ class TestBuildCanIdMsg:
     def test_can_id_big_endian(self):
         """CAN ID 0x7E8 packed as big-endian bytes."""
         msg = _build_can_id_msg(J2534_PROTOCOL_ISO15765, 0x7E8)
-        assert _get_data_bytes(msg, 4) == b"\x00\x00\x07\xE8"
+        assert _get_data_bytes(msg, 4) == b"\x00\x00\x07\xe8"
 
     def test_data_size_is_4(self):
         """DataSize is always 4 (just the CAN ID)."""
@@ -121,7 +120,7 @@ class TestBuildCanIdMsg:
     def test_mask_all_ones(self):
         """0xFFFFFFFF mask packs correctly."""
         msg = _build_can_id_msg(J2534_PROTOCOL_ISO15765, 0xFFFFFFFF)
-        assert _get_data_bytes(msg, 4) == b"\xFF\xFF\xFF\xFF"
+        assert _get_data_bytes(msg, 4) == b"\xff\xff\xff\xff"
 
     def test_protocol_set(self):
         """Protocol ID passed through to message."""
@@ -212,7 +211,7 @@ class TestSetupIsotpFlowControl:
         setup_isotp_flow_control(mock_dev, 1)
 
         mask_msg = mock_dev.start_msg_filter.call_args[0][2]
-        assert _get_data_bytes(mask_msg, 4) == b"\xFF\xFF\xFF\xFF"
+        assert _get_data_bytes(mask_msg, 4) == b"\xff\xff\xff\xff"
 
     def test_pattern_is_response_id(self):
         """Pattern message has CAN_RESPONSE_ID (0x7E8)."""
@@ -307,7 +306,7 @@ class TestWriteMsgs:
         dev._device_id = 1
         dev._funcs["PassThruWriteMsgs"] = MagicMock(return_value=0x07)
 
-        msg = build_isotp_msg(b"\x3E\x01")
+        msg = build_isotp_msg(b"\x3e\x01")
         with pytest.raises(J2534Error, match="ERR_FAILED"):
             dev.write_msgs(channel_id=1, msgs=[msg], timeout=100)
 
@@ -317,7 +316,7 @@ class TestWriteMsgs:
         dev._device_id = 1
         dev._funcs["PassThruWriteMsgs"] = MagicMock(return_value=0)
 
-        msg = build_isotp_msg(b"\x3E\x01")
+        msg = build_isotp_msg(b"\x3e\x01")
         dev.write_msgs(channel_id=1, msgs=[msg], timeout=100)
 
 

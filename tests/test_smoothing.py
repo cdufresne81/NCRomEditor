@@ -10,7 +10,6 @@ import pytest
 
 from src.ui.table_viewer_helpers.operations import compute_smoothed_values
 
-
 BLEND_FACTOR = 0.15
 
 

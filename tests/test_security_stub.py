@@ -25,7 +25,7 @@ class TestSecureStubFunctions:
     def test_compute_security_key_raises(self):
         """Stub compute_security_key always raises SecureModuleNotAvailable."""
         with pytest.raises(SecureModuleNotAvailable):
-            stub_compute_key(b"\xAA\xBB\xCC")
+            stub_compute_key(b"\xaa\xbb\xcc")
 
     def test_get_sbl_data_raises(self):
         """Stub get_sbl_data always raises SecureModuleNotAvailable."""

@@ -4,6 +4,9 @@ All notable changes to NC Flash are documented here.
 
 ## [Unreleased]
 
+### Fixed
+- **CI pipeline failures** — Added missing `pytest-qt` dependency to `requirements-dev.txt` (single-instance IPC tests use `qtbot` fixture) and reformatted 12 files with black
+
 ## [v2.6.0] - 2026-04-03
 
 ### Added

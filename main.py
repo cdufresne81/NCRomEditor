@@ -496,8 +496,7 @@ class MainWindow(
         tb.setMovable(False)
         tb.setFloatable(False)
         tb.setIconSize(QSize(20, 20))
-        tb.setStyleSheet(
-            """
+        tb.setStyleSheet("""
             QToolBar {
                 spacing: 1px;
                 padding: 1px 4px;
@@ -515,8 +514,7 @@ class MainWindow(
             QToolButton:pressed {
                 background: rgba(128, 128, 128, 0.3);
             }
-        """
-        )
+        """)
 
         act = tb.addAction(self._make_icon("open"), "")
         act.setToolTip("Open  (Ctrl+O)")

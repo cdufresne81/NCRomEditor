@@ -521,7 +521,7 @@ class TestAtomicWrites:
         commit_v1 = pm.commit_changes(message="v1", changes=changes, version_name="a")
         # Modify the working ROM
         working_path = project_dir / pm.current_project.working_rom
-        working_path.write_bytes(b"\xFF" * 1024)
+        working_path.write_bytes(b"\xff" * 1024)
         # Commit v2 with modified data
         commit_v2 = pm.commit_changes(message="v2", changes=changes, version_name="b")
         # Read v1 snapshot content
