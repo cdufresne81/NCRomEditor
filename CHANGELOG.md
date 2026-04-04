@@ -5,6 +5,10 @@ All notable changes to NC Flash are documented here.
 ## [Unreleased]
 
 ### Added
+- **Comparison Copy All** — Two new buttons in the compare window table headers (`→→|` and `|←←`) copy all eligible differing tables between ROMs in one operation, with confirmation dialog, progress bar, and cancellation support
+- **Workspace directory** — Single configurable root directory for all user content (ROMs, projects, metadata, exports, screenshots, colormaps, ECU reads). All path settings derive defaults from the workspace root, with individual overrides still supported. First-run migration copies bundled metadata and colormaps into the workspace.
+- **Settings dialog redesign** — Replaced tab-based settings with tree sidebar navigation, stacked pages, and instant search with highlighted results. Data-driven `SettingDescriptor` registry makes adding new settings a one-line change.
+- **New path settings** — `ROMs Directory`, `Screenshots Directory`, and `Reads Directory` settings with workspace-derived defaults. File dialogs (Open ROM, Save As, Screenshot, Project Wizard) now default to the appropriate workspace subdirectory.
 - **Code audit documentation** — `docs/internal/CODE_AUDIT.md` captures full codebase audit findings (bugs, dead code, duplication, test gaps) from the v2.6.1 audit pass
 - **UI test coverage** — 70 new tests covering compare_window diff computation, table_browser filtering/search/selection, graph_viewer color calculations, and table_viewer_window signal forwarding and coordinate extraction
 
@@ -13,6 +17,8 @@ All notable changes to NC Flash are documented here.
 - **Coverage is now opt-in** — Removed `--cov` flags from `pytest.ini` addopts so test runs are faster by default. Run `pytest --cov=src --cov-report=term-missing` when coverage is needed
 - **Interpolation log level reduced** — Interpolation success messages (horizontal, vertical, 2D bilinear) downgraded from `info` to `debug` to reduce log noise during normal editing
 - **README feature list updated** — Added interleaved 3D tables, column visibility, round key, ECU Programming window, and other v2.6.1 features to the README
+- **ECU reads path now configurable** — Replaced hardcoded `~/.nc-flash/reads/` in ECU window with settings-based `get_reads_directory()`, defaulting to workspace/reads
+- **Settings path getters deduplicated** — Extracted `_get_workspace_path()` helper in `AppSettings`, eliminating 7 near-identical getter methods with inline imports
 
 ### Fixed
 - **Stale README version and project structure** — Updated version from v2.3.0 to v2.6.1, added missing `src/ecu/` module tree (13 files) and new UI files (`ecu_window.py`, `flash_mixin.py`, `flash_setup_dialog.py`, `patch_dialog.py`), and refreshed the development status description

@@ -434,3 +434,132 @@ class TestComputeDiffs:
             {"BothNan": {"values": nan_data["values"].copy()}},
         )
         assert len(diffs) == 0
+
+
+# ---------------------------------------------------------------------------
+# Tests for Copy All eligibility logic
+# ---------------------------------------------------------------------------
+
+
+class TestGetEligibleEntries:
+    """Test _get_eligible_entries filtering logic."""
+
+    @staticmethod
+    def _get_eligible(entries, direction):
+        from src.ui.compare_window import CompareWindow
+
+        win = CompareWindow.__new__(CompareWindow)
+        win._modified_tables = entries
+        return win._get_eligible_entries(direction)
+
+    def _make_entry(self, **overrides):
+        entry = {
+            "table_a": "ta",
+            "table_b": "tb",
+            "name": "Test",
+            "category": "Cat",
+            "data_a": {"values": np.array([1.0])},
+            "data_b": {"values": np.array([2.0])},
+            "changed_cells": {(0, 0)},
+            "changed_axes": {},
+            "change_count": 1,
+            "shape_mismatch": False,
+            "a_only": False,
+            "b_only": False,
+        }
+        entry.update(overrides)
+        return entry
+
+    def test_normal_entry_is_eligible(self):
+        entry = self._make_entry()
+        eligible = self._get_eligible([entry], "a_to_b")
+        assert len(eligible) == 1
+        assert eligible[0] == (0, entry)
+
+    def test_shape_mismatch_excluded(self):
+        entry = self._make_entry(shape_mismatch=True)
+        assert len(self._get_eligible([entry], "a_to_b")) == 0
+
+    def test_a_only_excluded(self):
+        entry = self._make_entry(a_only=True, table_b=None)
+        assert len(self._get_eligible([entry], "a_to_b")) == 0
+
+    def test_b_only_excluded(self):
+        entry = self._make_entry(b_only=True, table_a=None)
+        assert len(self._get_eligible([entry], "b_to_a")) == 0
+
+    def test_identical_excluded(self):
+        entry = self._make_entry(change_count=0, changed_cells=set())
+        assert len(self._get_eligible([entry], "a_to_b")) == 0
+
+    def test_missing_source_data_excluded(self):
+        entry = self._make_entry(data_a=None)
+        assert len(self._get_eligible([entry], "a_to_b")) == 0
+
+    def test_mixed_entries_filters_correctly(self):
+        entries = [
+            self._make_entry(name="Good1"),
+            self._make_entry(name="ShapeBad", shape_mismatch=True),
+            self._make_entry(name="Good2"),
+            self._make_entry(name="Identical", change_count=0, changed_cells=set()),
+        ]
+        eligible = self._get_eligible(entries, "a_to_b")
+        assert len(eligible) == 2
+        assert eligible[0][1]["name"] == "Good1"
+        assert eligible[1][1]["name"] == "Good2"
+
+
+class TestUpdateSidebarLabels:
+    """Test _update_sidebar_labels formatting logic."""
+
+    @staticmethod
+    def _update_labels(entries, tree_items):
+        from src.ui.compare_window import CompareWindow
+
+        win = CompareWindow.__new__(CompareWindow)
+        win._modified_tables = entries
+        win._tree_items = tree_items
+        win._update_sidebar_labels()
+
+    def test_identical_label(self):
+        from PySide6.QtWidgets import QTreeWidgetItem
+
+        entry = {
+            "name": "TestTable",
+            "change_count": 0,
+            "a_only": False,
+            "b_only": False,
+            "shape_mismatch": False,
+        }
+        item = QTreeWidgetItem(["old text"])
+        self._update_labels([entry], {0: item})
+        assert "identical" in item.text(0)
+
+    def test_single_cell_label(self):
+        from PySide6.QtWidgets import QTreeWidgetItem
+
+        entry = {
+            "name": "TestTable",
+            "change_count": 1,
+            "a_only": False,
+            "b_only": False,
+            "shape_mismatch": False,
+        }
+        item = QTreeWidgetItem(["old text"])
+        self._update_labels([entry], {0: item})
+        assert "1 cell" in item.text(0)
+        assert "cells" not in item.text(0)
+
+    def test_multiple_cells_label(self):
+        from PySide6.QtWidgets import QTreeWidgetItem
+
+        entry = {
+            "name": "TestTable",
+            "change_count": 5,
+            "a_only": False,
+            "b_only": False,
+            "shape_mismatch": False,
+        }
+        item = QTreeWidgetItem(["old text"])
+        self._update_labels([entry], {0: item})
+        assert "5 cells" in item.text(0)

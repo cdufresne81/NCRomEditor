@@ -1,384 +1,872 @@
 """
 Settings Dialog
 
-Configuration window for application settings.
+Configuration window with tree navigation and search.
 """
 
+import re
+from dataclasses import dataclass, field
 from pathlib import Path
-from PySide6.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QFormLayout,
-    QTabWidget,
-    QWidget,
-    QLabel,
-    QPushButton,
-    QDialogButtonBox,
-    QLineEdit,
-    QFileDialog,
-    QGroupBox,
-    QComboBox,
-    QSpinBox,
-    QCheckBox,
-)
+from typing import Optional
+
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QShortcut, QKeySequence
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QScrollArea,
+    QSpinBox,
+    QSplitter,
+    QStackedWidget,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 from ..utils.settings import get_settings
 from ..utils.colormap import reload_colormap
 
+# ---------------------------------------------------------------------------
+# Settings Registry
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class SettingDescriptor:
+    """Describes a single user-configurable setting."""
+
+    key: str
+    label: str
+    description: str
+    category: str
+    subcategory: str
+    widget_type: (
+        str  # path_dir, path_file, spinbox, combobox, checkbox, button, readonly
+    )
+    getter: str
+    setter: Optional[str] = None
+    widget_options: dict = field(default_factory=dict)
+    keywords: list = field(default_factory=list)
+
+
+SETTINGS_REGISTRY = [
+    # -- General > Paths --
+    # Ordered: workspace root, then inputs (ROMs, metadata), working (projects),
+    # outputs (exports, screenshots)
+    SettingDescriptor(
+        key="general.paths.workspace_dir",
+        label="Workspace Directory",
+        description=(
+            "Root directory for all user content. Subdirectories (projects, exports, "
+            "metadata, etc.) are created automatically. Individual paths below can override."
+        ),
+        category="General",
+        subcategory="Paths",
+        widget_type="path_dir",
+        getter="get_workspace_directory",
+        setter="set_workspace_directory",
+        widget_options={"placeholder": "Root folder for all user content"},
+        keywords=["workspace", "root", "home", "folder", "base"],
+    ),
+    SettingDescriptor(
+        key="general.paths.roms_dir",
+        label="ROMs Directory",
+        description="Default folder shown in the ROM open/save dialogs",
+        category="General",
+        subcategory="Paths",
+        widget_type="path_dir",
+        getter="get_roms_directory",
+        setter="set_roms_directory",
+        widget_options={"placeholder": "Folder for ROM binary files"},
+        keywords=["rom", "bin", "binary", "open"],
+    ),
+    SettingDescriptor(
+        key="general.paths.metadata_dir",
+        label="Metadata Directory",
+        description=(
+            "Location of ROM metadata XML files (e.g., lf9veb.xml). "
+            "These define the table layouts for each calibration ID."
+        ),
+        category="General",
+        subcategory="Paths",
+        widget_type="path_dir",
+        getter="get_metadata_directory",
+        setter="set_metadata_directory",
+        widget_options={"placeholder": "Path to ROM metadata XML files"},
+        keywords=["metadata", "xml", "rom", "definition", "calibration"],
+    ),
+    SettingDescriptor(
+        key="general.paths.projects_dir",
+        label="Projects Directory",
+        description="Location where ROM tuning projects are stored",
+        category="General",
+        subcategory="Paths",
+        widget_type="path_dir",
+        getter="get_projects_directory",
+        setter="set_projects_directory",
+        widget_options={"placeholder": "Path to store ROM projects"},
+        keywords=["folder", "project", "location"],
+    ),
+    SettingDescriptor(
+        key="general.paths.export_dir",
+        label="Export Directory",
+        description="Default folder for CSV exports (Ctrl+E)",
+        category="General",
+        subcategory="Paths",
+        widget_type="path_dir",
+        getter="get_export_directory",
+        setter="set_export_directory",
+        widget_options={"placeholder": "Folder for CSV exports"},
+        keywords=["csv", "export", "folder"],
+    ),
+    SettingDescriptor(
+        key="general.paths.screenshots_dir",
+        label="Screenshots Directory",
+        description="Default folder for screenshots",
+        category="General",
+        subcategory="Paths",
+        widget_type="path_dir",
+        getter="get_screenshots_directory",
+        setter="set_screenshots_directory",
+        widget_options={"placeholder": "Folder for screenshots"},
+        keywords=["screenshot", "capture", "image", "png"],
+    ),
+    # -- Appearance > Table Display --
+    SettingDescriptor(
+        key="appearance.table_display.font_size",
+        label="Table font size",
+        description=(
+            "Font size in pixels for table cell values. "
+            "Changes take effect on newly opened tables."
+        ),
+        category="Appearance",
+        subcategory="Table Display",
+        widget_type="spinbox",
+        getter="get_table_font_size",
+        setter="set_table_font_size",
+        widget_options={"min": 6, "max": 16, "suffix": " px"},
+        keywords=["font", "text", "size", "pixels"],
+    ),
+    SettingDescriptor(
+        key="appearance.table_display.gradient_mode",
+        label="Cell gradient coloring",
+        description=(
+            "How cell background colors are calculated. 'Min/Max' uses the table's "
+            "global range; 'Neighbors' uses local surrounding values."
+        ),
+        category="Appearance",
+        subcategory="Table Display",
+        widget_type="combobox",
+        getter="get_gradient_mode",
+        setter="set_gradient_mode",
+        widget_options={
+            "items": [
+                ("Min/Max of table", "minmax"),
+                ("Relative to neighbors", "neighbors"),
+            ]
+        },
+        keywords=["color", "gradient", "heat", "map"],
+    ),
+    # -- Appearance > Color Map --
+    SettingDescriptor(
+        key="appearance.colormap.path",
+        label="Color map file",
+        description="256-entry RGB color map file (.map format)",
+        category="Appearance",
+        subcategory="Color Map",
+        widget_type="path_file",
+        getter="get_colormap_path",
+        setter="set_colormap_path",
+        widget_options={
+            "filter": "Color Map Files (*.map);;All Files (*)",
+            "placeholder": "Path to .map file (or empty for built-in)",
+        },
+        keywords=["color", "gradient", "palette", "map"],
+    ),
+    # -- Appearance > Table Browser --
+    SettingDescriptor(
+        key="appearance.browser.show_type",
+        label="Show Type column",
+        description="Display the Type column (1D, 2D, 3D) in the table browser sidebar",
+        category="Appearance",
+        subcategory="Table Browser",
+        widget_type="checkbox",
+        getter="get_show_type_column",
+        setter="set_show_type_column",
+        keywords=["column", "browser", "type", "table"],
+    ),
+    SettingDescriptor(
+        key="appearance.browser.show_address",
+        label="Show Address column",
+        description="Display the hex Address column in the table browser sidebar",
+        category="Appearance",
+        subcategory="Table Browser",
+        widget_type="checkbox",
+        getter="get_show_address_column",
+        setter="set_show_address_column",
+        keywords=["column", "browser", "address", "hex"],
+    ),
+    # -- Editor > Toggle Display --
+    SettingDescriptor(
+        key="editor.toggle.dtc_flags",
+        label="Use toggle switches for DTC Activation Flags",
+        description=(
+            "When enabled, DTC Activation Flag tables show an ON/OFF toggle "
+            "instead of a numeric cell (0 = OFF, non-zero = ON)"
+        ),
+        category="Editor",
+        subcategory="Toggle Display",
+        widget_type="checkbox",
+        getter="get_toggle_categories",
+        setter="set_toggle_categories",
+        keywords=["toggle", "dtc", "switch", "on", "off", "activation"],
+    ),
+    # -- Editor > Rounding --
+    SettingDescriptor(
+        key="editor.rounding.auto_round",
+        label="Auto-round after interpolation and smoothing",
+        description=(
+            "When enabled, interpolation and smoothing results are automatically "
+            "rounded one decimal level coarser than the table\u2019s display format "
+            "(e.g. 12.11 \u2192 12.1 for %0.2f)"
+        ),
+        category="Editor",
+        subcategory="Rounding",
+        widget_type="checkbox",
+        getter="get_auto_round",
+        setter="set_auto_round",
+        keywords=["round", "decimal", "interpolation", "smooth", "precision"],
+    ),
+    # -- Tools > MCP Server --
+    SettingDescriptor(
+        key="tools.mcp.auto_start",
+        label="Start MCP server automatically on app launch",
+        description=(
+            "Enables AI assistants (Claude, ChatGPT, etc.) to read your open ROMs "
+            "via the Model Context Protocol"
+        ),
+        category="Tools",
+        subcategory="MCP Server",
+        widget_type="checkbox",
+        getter="get_mcp_auto_start",
+        setter="set_mcp_auto_start",
+        keywords=["mcp", "ai", "server", "claude", "assistant", "model context"],
+    ),
+    # -- ECU > J2534 --
+    SettingDescriptor(
+        key="ecu.j2534.dll_path",
+        label="J2534 DLL override",
+        description=(
+            "Leave empty for Tactrix OpenPort 2.0 (op20pt32.dll is found automatically). "
+            "Only set this if you use a different J2534 adapter."
+        ),
+        category="ECU",
+        subcategory="J2534",
+        widget_type="path_file",
+        getter="get_j2534_dll_path",
+        setter="set_j2534_dll_path",
+        widget_options={
+            "filter": "DLL Files (*.dll);;All Files (*)",
+            "placeholder": "op20pt32.dll (auto-detected)",
+        },
+        keywords=["j2534", "dll", "passthru", "adapter", "tactrix", "openport"],
+    ),
+    SettingDescriptor(
+        key="ecu.j2534.test_connection",
+        label="Test Connection",
+        description="Attempts to connect to the J2534 device to verify it is available",
+        category="ECU",
+        subcategory="J2534",
+        widget_type="button",
+        getter="",
+        setter=None,
+        widget_options={
+            "text": "Test Connection",
+            "callback_name": "_test_j2534_connection",
+        },
+        keywords=["test", "connection", "j2534", "device"],
+    ),
+    # -- ECU > Flash Security --
+    SettingDescriptor(
+        key="ecu.security.status",
+        label="Flash Security Module",
+        description="Shows whether the security module required for ECU flash operations is installed",
+        category="ECU",
+        subcategory="Flash Security",
+        widget_type="readonly",
+        getter="",
+        setter=None,
+        keywords=["security", "flash", "module", "installed"],
+    ),
+]
+
+# Ordered list of categories for deterministic tree building
+_CATEGORY_ORDER = ["General", "Appearance", "Editor", "Tools", "ECU"]
+
+
+# ---------------------------------------------------------------------------
+# Settings Dialog
+# ---------------------------------------------------------------------------
+
 
 class SettingsDialog(QDialog):
-    """Application settings dialog"""
+    """Application settings dialog with tree navigation and search."""
 
-    # Signal emitted when settings are applied
     settings_changed = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Settings")
-        self.setMinimumSize(600, 400)
+        self.setMinimumSize(720, 560)
+        self.resize(820, 700)
+
         self.settings = get_settings()
-        self.init_ui()
+        self._widgets = {}  # key -> input widget
+        self._page_indices = {}  # (category, subcategory) -> stack index
+        self._tree_sub_items = {}  # (category, subcategory) -> QTreeWidgetItem
+        self._ecu_available = False
+        self._secure_module_available = False
+
+        self._active_registry = self._build_active_registry()
+        self._init_ui()
+        self._setup_shortcuts()
         self.load_settings()
 
-    def init_ui(self):
-        """Initialize the user interface"""
-        layout = QVBoxLayout()
-        self.setLayout(layout)
+        # Select the first subcategory
+        self._select_first_item()
 
-        # Tab widget for different settings categories
-        self.tabs = QTabWidget()
-        layout.addWidget(self.tabs)
+    # ------------------------------------------------------------------ #
+    # Registry
+    # ------------------------------------------------------------------ #
 
-        # Create placeholder tabs
-        self.create_general_tab()
-        self.create_appearance_tab()
-        self.create_editor_tab()
-        self.create_tools_tab()
+    def _build_active_registry(self):
+        """Build the settings registry, conditionally including ECU entries."""
+        registry = [d for d in SETTINGS_REGISTRY if d.category != "ECU"]
         try:
-            self.create_ecu_tab()
+            from src.ecu.flash_manager import SECURE_MODULE_AVAILABLE
+
+            registry.extend(d for d in SETTINGS_REGISTRY if d.category == "ECU")
+            self._ecu_available = True
+            self._secure_module_available = SECURE_MODULE_AVAILABLE
         except ImportError:
             pass
+        return registry
 
-        # Dialog buttons (OK, Cancel, Apply)
-        button_box = QDialogButtonBox(
+    # ------------------------------------------------------------------ #
+    # UI construction
+    # ------------------------------------------------------------------ #
+
+    def _init_ui(self):
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(8, 8, 8, 8)
+        outer.setSpacing(6)
+
+        # --- Search bar ---
+        search_row = QHBoxLayout()
+        search_row.setContentsMargins(0, 0, 0, 0)
+        search_icon = QLabel("\U0001f50d")
+        search_icon.setFixedWidth(24)
+        search_icon.setStyleSheet("font-size: 14px;")
+        search_row.addWidget(search_icon)
+
+        self._search_edit = QLineEdit()
+        self._search_edit.setPlaceholderText("Search settings\u2026")
+        self._search_edit.setClearButtonEnabled(True)
+        self._search_edit.setStyleSheet(
+            "QLineEdit { padding: 5px 8px; border: 1px solid #ccc; "
+            "border-radius: 4px; font-size: 12px; }"
+            "QLineEdit:focus { border-color: #5b9bd5; }"
+        )
+        self._search_edit.textChanged.connect(self._on_search_changed)
+        search_row.addWidget(self._search_edit)
+        outer.addLayout(search_row)
+
+        # --- Splitter: tree | content ---
+        self._splitter = QSplitter(Qt.Horizontal)
+
+        # Tree sidebar
+        self._tree = QTreeWidget()
+        self._tree.setHeaderHidden(True)
+        self._tree.setRootIsDecorated(True)
+        self._tree.setIndentation(16)
+        self._tree.setMinimumWidth(170)
+        self._tree.setMaximumWidth(280)
+        self._tree.setStyleSheet(
+            "QTreeWidget { border: none; border-right: 1px solid #d0d0d0; "
+            "outline: none; font-size: 12px; background: #fafafa; }"
+            "QTreeWidget::item { padding: 3px 8px; border-radius: 3px; margin: 1px 4px; }"
+            "QTreeWidget::item:selected { background: #e0ecf8; color: black; }"
+            "QTreeWidget::item:hover:!selected { background: rgba(128,128,128,0.10); }"
+        )
+        self._tree.currentItemChanged.connect(self._on_tree_item_changed)
+        self._splitter.addWidget(self._tree)
+
+        # Content area
+        content_wrapper = QWidget()
+        content_layout = QVBoxLayout(content_wrapper)
+        content_layout.setContentsMargins(16, 8, 8, 0)
+        content_layout.setSpacing(4)
+
+        self._page_title = QLabel()
+        self._page_title.setStyleSheet(
+            "font-size: 14px; font-weight: 600; padding-bottom: 6px; "
+            "border-bottom: 1px solid #e0e0e0; margin-bottom: 4px;"
+        )
+        content_layout.addWidget(self._page_title)
+
+        self._stack = QStackedWidget()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(scroll.Shape.NoFrame)
+        scroll.setWidget(self._stack)
+        content_layout.addWidget(scroll)
+
+        self._splitter.addWidget(content_wrapper)
+        self._splitter.setSizes([200, 620])
+        self._splitter.setStretchFactor(0, 0)
+        self._splitter.setStretchFactor(1, 1)
+        outer.addWidget(self._splitter)
+
+        # Build tree and pages from registry
+        self._build_tree_and_pages()
+
+        # Search results page (added last to the stack)
+        self._search_page = QWidget()
+        self._search_layout = QVBoxLayout(self._search_page)
+        self._search_layout.setContentsMargins(4, 4, 4, 4)
+        self._search_page_index = self._stack.addWidget(self._search_page)
+
+        # --- Button box ---
+        btn_box = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.Apply
         )
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        button_box.button(QDialogButtonBox.Apply).clicked.connect(self.apply_settings)
-        layout.addWidget(button_box)
+        btn_box.accepted.connect(self.accept)
+        btn_box.rejected.connect(self.reject)
+        btn_box.button(QDialogButtonBox.Apply).clicked.connect(self.apply_settings)
+        outer.addWidget(btn_box)
 
-    def create_general_tab(self):
-        """Create the General settings tab"""
-        tab = QWidget()
-        layout = QVBoxLayout()
-        tab.setLayout(layout)
+    def _build_tree_and_pages(self):
+        """Populate the nav tree and stacked pages from the active registry."""
+        # Collect (category, subcategory) pairs in order
+        seen = set()
+        ordered_pairs = []
+        for desc in self._active_registry:
+            pair = (desc.category, desc.subcategory)
+            if pair not in seen:
+                seen.add(pair)
+                ordered_pairs.append(pair)
 
-        # Paths group
-        paths_group = QGroupBox("Paths")
-        paths_layout = QFormLayout()
-        paths_group.setLayout(paths_layout)
+        # Create a stacked page for each subcategory
+        for cat, sub in ordered_pairs:
+            page = self._build_page(cat, sub)
+            idx = self._stack.addWidget(page)
+            self._page_indices[(cat, sub)] = idx
 
-        # Projects directory setting
-        projects_layout = QHBoxLayout()
-        self.projects_path_edit = QLineEdit()
-        self.projects_path_edit.setPlaceholderText("Path to store ROM projects")
-        projects_layout.addWidget(self.projects_path_edit)
+        # Build tree items
+        cat_items = {}  # category -> QTreeWidgetItem
+        for cat in _CATEGORY_ORDER:
+            subs = [s for c, s in ordered_pairs if c == cat]
+            if not subs:
+                continue
+            cat_item = QTreeWidgetItem([cat])
+            cat_item.setData(0, Qt.UserRole, None)
+            cat_item.setFlags(cat_item.flags() & ~Qt.ItemFlag.ItemIsSelectable)
+            self._tree.addTopLevelItem(cat_item)
+            cat_items[cat] = cat_item
 
-        browse_projects_button = QPushButton("Browse...")
-        browse_projects_button.clicked.connect(self.browse_projects_directory)
-        projects_layout.addWidget(browse_projects_button)
+            for sub in subs:
+                sub_item = QTreeWidgetItem([sub])
+                sub_item.setData(0, Qt.UserRole, (cat, sub))
+                cat_item.addChild(sub_item)
+                self._tree_sub_items[(cat, sub)] = sub_item
 
-        paths_layout.addRow("Projects Directory:", projects_layout)
+            cat_item.setExpanded(True)
 
-        # Add help text for projects
-        projects_help = QLabel("Location where ROM tuning projects are stored")
-        projects_help.setStyleSheet("color: gray; font-size: 10px;")
-        paths_layout.addRow("", projects_help)
+    def _build_page(self, category: str, subcategory: str) -> QWidget:
+        """Build a single settings page for a category/subcategory pair."""
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(4, 8, 4, 8)
+        layout.setSpacing(2)
 
-        # Export directory setting
-        export_layout = QHBoxLayout()
-        self.export_path_edit = QLineEdit()
-        self.export_path_edit.setPlaceholderText("Folder for CSV exports")
-        export_layout.addWidget(self.export_path_edit)
+        descs = [
+            d
+            for d in self._active_registry
+            if d.category == category and d.subcategory == subcategory
+        ]
 
-        browse_export_button = QPushButton("Browse...")
-        browse_export_button.clicked.connect(self.browse_export_directory)
-        export_layout.addWidget(browse_export_button)
+        for desc in descs:
+            # Label (skip for checkbox/button/readonly which embed their own)
+            if desc.widget_type not in ("checkbox", "button", "readonly"):
+                lbl = QLabel(desc.label)
+                lbl.setStyleSheet("font-weight: 600; font-size: 12px;")
+                layout.addWidget(lbl)
 
-        paths_layout.addRow("Export Directory:", export_layout)
-
-        # Add help text for export
-        export_help = QLabel("Default folder for CSV exports (Ctrl+E)")
-        export_help.setStyleSheet("color: gray; font-size: 10px;")
-        paths_layout.addRow("", export_help)
-
-        layout.addWidget(paths_group)
-        layout.addStretch()
-
-        self.tabs.addTab(tab, "General")
-
-    def create_appearance_tab(self):
-        """Create the Appearance settings tab"""
-        tab = QWidget()
-        layout = QVBoxLayout()
-        tab.setLayout(layout)
-
-        # Table display group
-        table_group = QGroupBox("Table Display")
-        table_layout = QFormLayout()
-        table_group.setLayout(table_layout)
-
-        # Font size setting
-        self.font_size_spin = QSpinBox()
-        self.font_size_spin.setRange(6, 16)
-        self.font_size_spin.setSuffix(" px")
-        table_layout.addRow("Table font size:", self.font_size_spin)
-
-        # Gradient mode setting
-        self.gradient_mode_combo = QComboBox()
-        self.gradient_mode_combo.addItem("Min/Max of table", "minmax")
-        self.gradient_mode_combo.addItem("Relative to neighbors", "neighbors")
-        table_layout.addRow("Cell gradient coloring:", self.gradient_mode_combo)
-
-        layout.addWidget(table_group)
-
-        # Color map group
-        colormap_group = QGroupBox("Color Map")
-        colormap_layout = QFormLayout()
-        colormap_group.setLayout(colormap_layout)
-
-        # Color map file selection
-        colormap_file_layout = QHBoxLayout()
-        self.colormap_path_edit = QLineEdit()
-        self.colormap_path_edit.setPlaceholderText(
-            "Path to .map file (or empty for built-in)"
-        )
-        colormap_file_layout.addWidget(self.colormap_path_edit)
-
-        browse_colormap_button = QPushButton("Browse...")
-        browse_colormap_button.clicked.connect(self.browse_colormap_file)
-        colormap_file_layout.addWidget(browse_colormap_button)
-
-        colormap_layout.addRow("Color map file:", colormap_file_layout)
-
-        # Help text for colormap
-        colormap_help = QLabel("256-entry RGB color map file (.map format)")
-        colormap_help.setStyleSheet("color: gray; font-size: 10px;")
-        colormap_layout.addRow("", colormap_help)
-
-        layout.addWidget(colormap_group)
-
-        # Table browser group
-        browser_group = QGroupBox("Table Browser")
-        browser_layout = QVBoxLayout()
-        browser_group.setLayout(browser_layout)
-
-        self.show_type_column_checkbox = QCheckBox("Show Type column")
-        browser_layout.addWidget(self.show_type_column_checkbox)
-
-        self.show_address_column_checkbox = QCheckBox("Show Address column")
-        browser_layout.addWidget(self.show_address_column_checkbox)
-
-        layout.addWidget(browser_group)
-
-        # Help text
-        help_label = QLabel(
-            "Note: Table display changes take effect on newly opened tables"
-        )
-        help_label.setStyleSheet("color: gray; font-size: 10px;")
-        layout.addWidget(help_label)
+            widget = self._create_setting_widget(desc)
+            layout.addWidget(widget)
+            layout.addSpacing(6)
 
         layout.addStretch()
+        return page
 
-        self.tabs.addTab(tab, "Appearance")
+    # ------------------------------------------------------------------ #
+    # Widget factory
+    # ------------------------------------------------------------------ #
 
-    def create_editor_tab(self):
-        """Create the Editor settings tab"""
-        tab = QWidget()
-        layout = QVBoxLayout()
-        tab.setLayout(layout)
+    def _create_setting_widget(self, desc: SettingDescriptor) -> QWidget:
+        """Create the input widget for a setting descriptor."""
+        container = QWidget()
+        lo = QVBoxLayout(container)
+        lo.setContentsMargins(0, 0, 0, 4)
+        lo.setSpacing(2)
 
-        # Toggle display group
-        toggle_group = QGroupBox("Toggle Display")
-        toggle_layout = QVBoxLayout()
-        toggle_group.setLayout(toggle_layout)
+        wtype = desc.widget_type
 
-        self.dtc_toggle_checkbox = QCheckBox(
-            "Use toggle switches for DTC Activation Flags"
-        )
-        toggle_layout.addWidget(self.dtc_toggle_checkbox)
+        if wtype == "path_dir":
+            row = QHBoxLayout()
+            row.setContentsMargins(0, 0, 0, 0)
+            edit = QLineEdit()
+            edit.setPlaceholderText(desc.widget_options.get("placeholder", ""))
+            row.addWidget(edit)
+            btn = QPushButton("Browse\u2026")
+            btn.setFixedWidth(80)
+            btn.clicked.connect(lambda _=False, e=edit: self._browse_directory(e))
+            row.addWidget(btn)
+            lo.addLayout(row)
+            self._widgets[desc.key] = edit
 
-        toggle_help = QLabel(
-            "When enabled, DTC Activation Flag tables show an ON/OFF toggle\n"
-            "instead of a numeric cell (0 = OFF, non-zero = ON)"
-        )
-        toggle_help.setStyleSheet("color: gray; font-size: 10px;")
-        toggle_layout.addWidget(toggle_help)
+        elif wtype == "path_file":
+            row = QHBoxLayout()
+            row.setContentsMargins(0, 0, 0, 0)
+            edit = QLineEdit()
+            edit.setPlaceholderText(desc.widget_options.get("placeholder", ""))
+            row.addWidget(edit)
+            filt = desc.widget_options.get("filter", "All Files (*)")
+            btn = QPushButton("Browse\u2026")
+            btn.setFixedWidth(80)
+            btn.clicked.connect(lambda _=False, e=edit, f=filt: self._browse_file(e, f))
+            row.addWidget(btn)
+            lo.addLayout(row)
+            self._widgets[desc.key] = edit
 
-        layout.addWidget(toggle_group)
-
-        # Rounding group
-        rounding_group = QGroupBox("Rounding")
-        rounding_layout = QVBoxLayout()
-        rounding_group.setLayout(rounding_layout)
-
-        self.auto_round_checkbox = QCheckBox(
-            "Auto-round after interpolation and smoothing"
-        )
-        rounding_layout.addWidget(self.auto_round_checkbox)
-
-        rounding_help = QLabel(
-            "When enabled, interpolation and smoothing results are\n"
-            "automatically rounded one decimal level coarser than\n"
-            "the table's display format (e.g. 12.11 \u2192 12.1 for %0.2f)"
-        )
-        rounding_help.setStyleSheet("color: gray; font-size: 10px;")
-        rounding_layout.addWidget(rounding_help)
-
-        layout.addWidget(rounding_group)
-
-        layout.addStretch()
-
-        self.tabs.addTab(tab, "Editor")
-
-    def create_tools_tab(self):
-        """Create the Tools settings tab"""
-        tab = QWidget()
-        layout = QVBoxLayout()
-        tab.setLayout(layout)
-
-        # ROM Definitions group
-        rom_def_group = QGroupBox("ROM Definitions")
-        rom_def_layout = QFormLayout()
-        rom_def_group.setLayout(rom_def_layout)
-
-        metadata_layout = QHBoxLayout()
-        self.metadata_path_edit = QLineEdit()
-        self.metadata_path_edit.setPlaceholderText("Path to ROM metadata XML files")
-        metadata_layout.addWidget(self.metadata_path_edit)
-
-        browse_metadata_button = QPushButton("Browse...")
-        browse_metadata_button.clicked.connect(self.browse_metadata_directory)
-        metadata_layout.addWidget(browse_metadata_button)
-
-        rom_def_layout.addRow("Metadata Directory:", metadata_layout)
-
-        metadata_help = QLabel("Location of ROM metadata XML files (e.g., lf9veb.xml)")
-        metadata_help.setStyleSheet("color: gray; font-size: 10px;")
-        rom_def_layout.addRow("", metadata_help)
-
-        layout.addWidget(rom_def_group)
-
-        # MCP Server group
-        mcp_group = QGroupBox("MCP Server (AI Assistant Access)")
-        mcp_layout = QVBoxLayout()
-        mcp_group.setLayout(mcp_layout)
-
-        self.mcp_auto_start_checkbox = QCheckBox(
-            "Start MCP server automatically on app launch"
-        )
-        mcp_layout.addWidget(self.mcp_auto_start_checkbox)
-
-        mcp_help = QLabel(
-            "Enables AI assistants (Claude, ChatGPT, etc.) to read your open ROMs via the Model Context Protocol"
-        )
-        mcp_help.setStyleSheet("color: gray; font-size: 10px;")
-        mcp_help.setWordWrap(True)
-        mcp_layout.addWidget(mcp_help)
-
-        layout.addWidget(mcp_group)
-        layout.addStretch()
-
-        self.tabs.addTab(tab, "Tools")
-
-    def create_ecu_tab(self):
-        """Create the ECU settings tab"""
-        # Import early so the tab is skipped entirely if the module is missing
-        from src.ecu.flash_manager import SECURE_MODULE_AVAILABLE
-
-        tab = QWidget()
-        layout = QVBoxLayout()
-        tab.setLayout(layout)
-
-        # J2534 group
-        j2534_group = QGroupBox("J2534 PassThru Interface")
-        j2534_layout = QFormLayout()
-        j2534_group.setLayout(j2534_layout)
-
-        # J2534 DLL path
-        dll_path_layout = QHBoxLayout()
-        self.j2534_dll_edit = QLineEdit()
-        self.j2534_dll_edit.setPlaceholderText("op20pt32.dll (auto-detected)")
-        dll_path_layout.addWidget(self.j2534_dll_edit)
-
-        browse_dll_button = QPushButton("Browse...")
-        browse_dll_button.clicked.connect(self.browse_j2534_dll)
-        dll_path_layout.addWidget(browse_dll_button)
-
-        j2534_layout.addRow("J2534 DLL override:", dll_path_layout)
-
-        dll_help = QLabel(
-            "Leave empty for Tactrix OpenPort 2.0 (op20pt32.dll is found automatically). "
-            "Only set this if you use a different J2534 adapter."
-        )
-        dll_help.setStyleSheet("color: gray; font-size: 10px;")
-        dll_help.setWordWrap(True)
-        j2534_layout.addRow("", dll_help)
-
-        # Test connection button
-        self.test_j2534_button = QPushButton("Test Connection")
-        self.test_j2534_button.clicked.connect(self._test_j2534_connection)
-        j2534_layout.addRow("", self.test_j2534_button)
-
-        layout.addWidget(j2534_group)
-
-        # Security module status
-        status_group = QGroupBox("Flash Security Module")
-        status_layout = QVBoxLayout()
-        status_group.setLayout(status_layout)
-
-        if SECURE_MODULE_AVAILABLE:
-            status_label = QLabel("Installed — flash operations are available")
-            status_label.setStyleSheet("color: green; font-weight: bold;")
-        else:
-            status_label = QLabel(
-                "Not installed — flash operations are disabled.\n"
-                "Contact the project maintainer for access to the security module."
+        elif wtype == "spinbox":
+            spin = QSpinBox()
+            spin.setRange(
+                desc.widget_options.get("min", 0),
+                desc.widget_options.get("max", 100),
             )
-            status_label.setStyleSheet("color: red;")
-            status_label.setWordWrap(True)
+            if "suffix" in desc.widget_options:
+                spin.setSuffix(desc.widget_options["suffix"])
+            spin.setFixedWidth(120)
+            lo.addWidget(spin)
+            self._widgets[desc.key] = spin
 
-        status_layout.addWidget(status_label)
-        layout.addWidget(status_group)
+        elif wtype == "combobox":
+            combo = QComboBox()
+            for display_text, data_value in desc.widget_options.get("items", []):
+                combo.addItem(display_text, data_value)
+            combo.setFixedWidth(250)
+            lo.addWidget(combo)
+            self._widgets[desc.key] = combo
 
-        layout.addStretch()
-        self.tabs.addTab(tab, "ECU")
+        elif wtype == "checkbox":
+            cb = QCheckBox(desc.label)
+            lo.addWidget(cb)
+            self._widgets[desc.key] = cb
 
-    def browse_j2534_dll(self):
-        """Open file browser for J2534 DLL"""
-        current_path = self.j2534_dll_edit.text()
-        if not current_path:
-            current_path = str(Path.cwd())
+        elif wtype == "button":
+            btn = QPushButton(desc.widget_options.get("text", desc.label))
+            btn.setFixedWidth(160)
+            cb_name = desc.widget_options.get("callback_name")
+            if cb_name and hasattr(self, cb_name):
+                btn.clicked.connect(getattr(self, cb_name))
+            lo.addWidget(btn)
 
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select J2534 DLL",
-            current_path,
-            "DLL Files (*.dll);;All Files (*)",
+        elif wtype == "readonly":
+            lbl = QLabel()
+            lbl.setWordWrap(True)
+            lo.addWidget(lbl)
+            self._widgets[desc.key] = lbl
+
+        # Description text
+        if desc.description and wtype not in ("button",):
+            desc_lbl = QLabel(desc.description)
+            desc_lbl.setWordWrap(True)
+            desc_lbl.setStyleSheet("color: #555; font-size: 11px; padding-top: 2px;")
+            lo.addWidget(desc_lbl)
+
+        return container
+
+    # ------------------------------------------------------------------ #
+    # Tree navigation
+    # ------------------------------------------------------------------ #
+
+    def _select_first_item(self):
+        """Select the first subcategory in the tree."""
+        root = self._tree.topLevelItem(0)
+        if root and root.childCount() > 0:
+            first_child = root.child(0)
+            self._tree.setCurrentItem(first_child)
+
+    def _on_tree_item_changed(self, current, _previous):
+        if current is None:
+            return
+        data = current.data(0, Qt.UserRole)
+        if data is None:
+            # Category header clicked — select its first child
+            if current.childCount() > 0:
+                self._tree.setCurrentItem(current.child(0))
+            return
+        cat, sub = data
+        self._show_page(cat, sub)
+
+    def _show_page(self, category: str, subcategory: str):
+        idx = self._page_indices.get((category, subcategory))
+        if idx is not None:
+            self._stack.setCurrentIndex(idx)
+            self._page_title.setText(f"{category}  \u203a  {subcategory}")
+
+    def _select_tree_item(self, category: str, subcategory: str):
+        """Programmatically select a tree item by category/subcategory."""
+        item = self._tree_sub_items.get((category, subcategory))
+        if item:
+            self._tree.setCurrentItem(item)
+
+    # ------------------------------------------------------------------ #
+    # Search
+    # ------------------------------------------------------------------ #
+
+    def _on_search_changed(self, text: str):
+        query = text.strip().lower()
+        if not query:
+            self._show_normal_mode()
+            return
+        self._show_search_results(query)
+
+    def _show_normal_mode(self):
+        """Restore tree navigation mode."""
+        # Show all tree items
+        for i in range(self._tree.topLevelItemCount()):
+            cat_item = self._tree.topLevelItem(i)
+            cat_item.setHidden(False)
+            for j in range(cat_item.childCount()):
+                cat_item.child(j).setHidden(False)
+        # Restore selected page
+        current = self._tree.currentItem()
+        if current:
+            data = current.data(0, Qt.UserRole)
+            if data:
+                self._show_page(*data)
+
+    def _show_search_results(self, query: str):
+        """Filter tree and show search results page."""
+        # Score and collect matches
+        matches = []
+        for desc in self._active_registry:
+            score = self._match_score(desc, query)
+            if score > 0:
+                matches.append((score, desc))
+        matches.sort(key=lambda x: -x[0])
+
+        # Filter tree using already-scored matches
+        matching_pairs = {(d.category, d.subcategory) for _, d in matches}
+        self._filter_tree(matching_pairs)
+
+        # Build search results page
+        self._populate_search_page(matches, query)
+        self._stack.setCurrentIndex(self._search_page_index)
+        self._page_title.setText(f"Search: \u201c{query}\u201d")
+
+    def _match_score(self, desc: SettingDescriptor, query: str) -> int:
+        score = 0
+        fields = [
+            (desc.label, 10),
+            (desc.description, 5),
+            (desc.category, 3),
+            (desc.subcategory, 3),
+        ]
+        for kw in desc.keywords:
+            fields.append((kw, 7))
+        for text, weight in fields:
+            lower = text.lower()
+            if query in lower:
+                score += weight
+                if lower.startswith(query):
+                    score += weight
+        return score
+
+    def _filter_tree(self, matching_pairs: set):
+        """Hide tree items whose (category, subcategory) is not in matching_pairs."""
+        for i in range(self._tree.topLevelItemCount()):
+            cat_item = self._tree.topLevelItem(i)
+            any_visible = False
+            for j in range(cat_item.childCount()):
+                child = cat_item.child(j)
+                data = child.data(0, Qt.UserRole)
+                visible = data in matching_pairs if data else False
+                child.setHidden(not visible)
+                if visible:
+                    any_visible = True
+            cat_item.setHidden(not any_visible)
+
+    def _populate_search_page(self, matches, query: str):
+        """Rebuild the search results page content."""
+        self._clear_layout(self._search_layout)
+
+        if not matches:
+            no_results = QLabel(f"No settings matching \u201c{query}\u201d")
+            no_results.setStyleSheet("color: #888; font-size: 13px; padding: 20px;")
+            no_results.setAlignment(Qt.AlignCenter)
+            self._search_layout.addWidget(no_results)
+            self._search_layout.addStretch()
+            return
+
+        count_lbl = QLabel(
+            f"{len(matches)} setting{'s' if len(matches) != 1 else ''} found"
+        )
+        count_lbl.setStyleSheet("color: #555; font-size: 11px; padding-bottom: 6px;")
+        self._search_layout.addWidget(count_lbl)
+
+        current_section = None
+        for _score, desc in matches:
+            section = f"{desc.category} \u203a {desc.subcategory}"
+            if section != current_section:
+                current_section = section
+                sec_lbl = QLabel(section)
+                sec_lbl.setStyleSheet(
+                    "font-size: 11px; font-weight: 600; color: #888; "
+                    "padding-top: 10px; padding-bottom: 3px; "
+                    "border-bottom: 1px solid #e8e8e8;"
+                )
+                self._search_layout.addWidget(sec_lbl)
+
+            card = self._make_search_card(desc, query)
+            self._search_layout.addWidget(card)
+
+        self._search_layout.addStretch()
+
+    def _make_search_card(self, desc: SettingDescriptor, query: str) -> QWidget:
+        """Create a clickable search result card."""
+        card = QWidget()
+        card.setCursor(Qt.PointingHandCursor)
+        lo = QVBoxLayout(card)
+        lo.setContentsMargins(8, 6, 8, 6)
+        lo.setSpacing(2)
+
+        name_html = self._highlight_text(desc.label, query)
+        name_lbl = QLabel(name_html)
+        name_lbl.setStyleSheet("font-weight: 600; font-size: 12px;")
+        lo.addWidget(name_lbl)
+
+        desc_html = self._highlight_text(desc.description, query)
+        desc_lbl = QLabel(desc_html)
+        desc_lbl.setWordWrap(True)
+        desc_lbl.setStyleSheet("color: #555; font-size: 11px;")
+        lo.addWidget(desc_lbl)
+
+        path_lbl = QLabel(f"{desc.category} \u203a {desc.subcategory}")
+        path_lbl.setStyleSheet("color: #999; font-size: 10px;")
+        lo.addWidget(path_lbl)
+
+        card.setStyleSheet(
+            "QWidget { border-radius: 4px; }"
+            "QWidget:hover { background: rgba(128,128,128,0.08); }"
         )
 
+        # Clicking navigates to the setting's page
+        cat, sub = desc.category, desc.subcategory
+        card.mousePressEvent = lambda _e, c=cat, s=sub: self._navigate_to(c, s)
+
+        return card
+
+    def _navigate_to(self, category: str, subcategory: str):
+        """Clear search and navigate to a specific settings page."""
+        self._search_edit.clear()
+        self._select_tree_item(category, subcategory)
+
+    @staticmethod
+    def _highlight_text(text: str, query: str) -> str:
+        """Return HTML with the query highlighted in the text."""
+        if not query:
+            return text
+        escaped_query = re.escape(query)
+        pattern = re.compile(f"({escaped_query})", re.IGNORECASE)
+        return pattern.sub(
+            r'<span style="background:#fff3cd; padding:0 1px;">\1</span>', text
+        )
+
+    @staticmethod
+    def _clear_layout(layout):
+        """Remove all widgets and sub-layouts from a layout."""
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.hide()
+                widget.deleteLater()
+            elif item.layout():
+                SettingsDialog._clear_layout(item.layout())
+
+    # ------------------------------------------------------------------ #
+    # Keyboard shortcuts
+    # ------------------------------------------------------------------ #
+
+    def _setup_shortcuts(self):
+        shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
+        shortcut.activated.connect(self._search_edit.setFocus)
+        self._search_edit.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if obj == self._search_edit and event.type() == event.Type.KeyPress:
+            if event.key() == Qt.Key_Escape:
+                if self._search_edit.text():
+                    self._search_edit.clear()
+                    return True
+        return super().eventFilter(obj, event)
+
+    # ------------------------------------------------------------------ #
+    # Browse helpers
+    # ------------------------------------------------------------------ #
+
+    def _browse_directory(self, line_edit: QLineEdit):
+        current = line_edit.text() or str(Path.cwd())
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Select Directory",
+            current,
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
+        )
+        if directory:
+            line_edit.setText(directory)
+
+    def _browse_file(self, line_edit: QLineEdit, file_filter: str):
+        current = line_edit.text() or str(Path.cwd())
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Select File", current, file_filter
+        )
         if file_path:
-            self.j2534_dll_edit.setText(file_path)
+            line_edit.setText(file_path)
+
+    # ------------------------------------------------------------------ #
+    # ECU-specific
+    # ------------------------------------------------------------------ #
 
     def _test_j2534_connection(self):
-        """Test J2534 device connection"""
         from PySide6.QtWidgets import QMessageBox
         from src.ecu.constants import DEFAULT_J2534_DLL
 
-        dll_path = self.j2534_dll_edit.text().strip() or DEFAULT_J2534_DLL
+        edit = self._widgets.get("ecu.j2534.dll_path")
+        dll_path = (edit.text().strip() if edit else "") or DEFAULT_J2534_DLL
 
         try:
             from src.ecu.j2534 import J2534Device
@@ -391,179 +879,94 @@ class SettingsDialog(QDialog):
             )
         except Exception as e:
             QMessageBox.warning(
-                self, "Connection Failed", f"Could not connect to J2534 device:\n{e}"
+                self,
+                "Connection Failed",
+                f"Could not connect to J2534 device:\n{e}",
             )
 
+    # ------------------------------------------------------------------ #
+    # Load / Apply settings
+    # ------------------------------------------------------------------ #
+
     def load_settings(self):
-        """Load current settings into the UI"""
-        # Load projects directory
-        projects_dir = self.settings.get_projects_directory()
-        self.projects_path_edit.setText(projects_dir)
+        """Load current settings from AppSettings into all widgets."""
+        s = self.settings
 
-        # Load metadata directory
-        metadata_dir = self.settings.get_metadata_directory()
-        self.metadata_path_edit.setText(metadata_dir)
+        for desc in self._active_registry:
+            if desc.key not in self._widgets or not desc.getter:
+                continue
 
-        # Load gradient mode
-        gradient_mode = self.settings.get_gradient_mode()
-        index = self.gradient_mode_combo.findData(gradient_mode)
-        if index >= 0:
-            self.gradient_mode_combo.setCurrentIndex(index)
+            widget = self._widgets[desc.key]
+            getter = getattr(s, desc.getter, None)
+            if getter is None:
+                continue
+            value = getter()
 
-        # Load font size
-        font_size = self.settings.get_table_font_size()
-        self.font_size_spin.setValue(font_size)
+            if desc.widget_type in ("path_dir", "path_file"):
+                widget.setText(value)
+            elif desc.widget_type == "spinbox":
+                widget.setValue(int(value))
+            elif desc.widget_type == "combobox":
+                idx = widget.findData(value)
+                if idx >= 0:
+                    widget.setCurrentIndex(idx)
+            elif desc.widget_type == "checkbox":
+                if desc.key == "editor.toggle.dtc_flags":
+                    widget.setChecked("DTC - Activation Flags" in value)
+                else:
+                    widget.setChecked(bool(value))
 
-        # Load colormap path
-        colormap_path = self.settings.get_colormap_path()
-        self.colormap_path_edit.setText(colormap_path)
+        # ECU readonly status
+        self._load_ecu_status()
 
-        # Load export directory
-        export_dir = self.settings.get_export_directory()
-        self.export_path_edit.setText(export_dir)
-
-        # Load toggle categories setting
-        toggle_cats = self.settings.get_toggle_categories()
-        self.dtc_toggle_checkbox.setChecked("DTC - Activation Flags" in toggle_cats)
-
-        # Load MCP auto-start setting
-        self.mcp_auto_start_checkbox.setChecked(self.settings.get_mcp_auto_start())
-
-        # Load auto-round setting
-        self.auto_round_checkbox.setChecked(self.settings.get_auto_round())
-
-        # Load table browser column visibility
-        self.show_type_column_checkbox.setChecked(self.settings.get_show_type_column())
-        self.show_address_column_checkbox.setChecked(
-            self.settings.get_show_address_column()
-        )
-
-        # Load J2534 DLL path (only if ECU tab was created)
-        if hasattr(self, "j2534_dll_edit"):
-            j2534_path = self.settings.get_j2534_dll_path()
-            self.j2534_dll_edit.setText(j2534_path)
-
-    def browse_projects_directory(self):
-        """Open directory browser for projects directory"""
-        current_path = self.projects_path_edit.text()
-        if not current_path:
-            current_path = str(Path.cwd())
-
-        directory = QFileDialog.getExistingDirectory(
-            self,
-            "Select Projects Directory",
-            current_path,
-            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
-        )
-
-        if directory:
-            self.projects_path_edit.setText(directory)
-
-    def browse_metadata_directory(self):
-        """Open directory browser for metadata directory"""
-        current_path = self.metadata_path_edit.text()
-        if not current_path:
-            current_path = str(Path.cwd())
-
-        directory = QFileDialog.getExistingDirectory(
-            self,
-            "Select Metadata Directory",
-            current_path,
-            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
-        )
-
-        if directory:
-            self.metadata_path_edit.setText(directory)
-
-    def browse_colormap_file(self):
-        """Open file browser for color map file"""
-        current_path = self.colormap_path_edit.text()
-        if not current_path:
-            # Default to colormaps directory in project
-            current_path = str(Path(__file__).parent.parent.parent / "colormaps")
-
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select Color Map File",
-            current_path,
-            "Color Map Files (*.map);;All Files (*)",
-        )
-
-        if file_path:
-            self.colormap_path_edit.setText(file_path)
-
-    def browse_export_directory(self):
-        """Open directory browser for export directory"""
-        current_path = self.export_path_edit.text()
-        if not current_path:
-            current_path = str(Path.cwd())
-
-        directory = QFileDialog.getExistingDirectory(
-            self,
-            "Select Export Directory",
-            current_path,
-            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
-        )
-
-        if directory:
-            self.export_path_edit.setText(directory)
+    def _load_ecu_status(self):
+        lbl = self._widgets.get("ecu.security.status")
+        if lbl is None:
+            return
+        if self._secure_module_available:
+            lbl.setText("Installed \u2014 flash operations are available")
+            lbl.setStyleSheet("color: green; font-weight: bold;")
+        else:
+            lbl.setText(
+                "Not installed \u2014 flash operations are disabled.\n"
+                "Contact the project maintainer for access to the security module."
+            )
+            lbl.setStyleSheet("color: red;")
 
     def apply_settings(self):
-        """Apply settings without closing the dialog"""
-        # Save projects directory
-        projects_dir = self.projects_path_edit.text().strip()
-        if projects_dir:
-            self.settings.set_projects_directory(projects_dir)
+        """Save all widget values back to AppSettings."""
+        s = self.settings
 
-        # Save metadata directory
-        metadata_dir = self.metadata_path_edit.text().strip()
-        if metadata_dir:
-            self.settings.set_metadata_directory(metadata_dir)
+        for desc in self._active_registry:
+            if desc.key not in self._widgets or not desc.setter:
+                continue
 
-        # Save gradient mode
-        gradient_mode = self.gradient_mode_combo.currentData()
-        self.settings.set_gradient_mode(gradient_mode)
+            widget = self._widgets[desc.key]
+            setter = getattr(s, desc.setter, None)
+            if setter is None:
+                continue
 
-        # Save font size
-        font_size = self.font_size_spin.value()
-        self.settings.set_table_font_size(font_size)
+            if desc.widget_type in ("path_dir", "path_file"):
+                val = widget.text().strip()
+                if val:
+                    setter(val)
+            elif desc.widget_type == "spinbox":
+                setter(widget.value())
+            elif desc.widget_type == "combobox":
+                setter(widget.currentData())
+            elif desc.widget_type == "checkbox":
+                if desc.key == "editor.toggle.dtc_flags":
+                    cats = ["DTC - Activation Flags"] if widget.isChecked() else []
+                    setter(cats)
+                else:
+                    setter(widget.isChecked())
 
-        # Save colormap path and reload
-        colormap_path = self.colormap_path_edit.text().strip()
-        self.settings.set_colormap_path(colormap_path)
+        # Reload colormap in case path changed
         reload_colormap()
 
-        # Save export directory
-        export_dir = self.export_path_edit.text().strip()
-        self.settings.set_export_directory(export_dir)
-
-        # Save toggle categories
-        toggle_cats = []
-        if self.dtc_toggle_checkbox.isChecked():
-            toggle_cats.append("DTC - Activation Flags")
-        self.settings.set_toggle_categories(toggle_cats)
-
-        # Save MCP auto-start setting
-        self.settings.set_mcp_auto_start(self.mcp_auto_start_checkbox.isChecked())
-
-        # Save auto-round setting
-        self.settings.set_auto_round(self.auto_round_checkbox.isChecked())
-
-        # Save table browser column visibility
-        self.settings.set_show_type_column(self.show_type_column_checkbox.isChecked())
-        self.settings.set_show_address_column(
-            self.show_address_column_checkbox.isChecked()
-        )
-
-        # Save J2534 DLL path (only if ECU tab was created)
-        if hasattr(self, "j2534_dll_edit"):
-            j2534_path = self.j2534_dll_edit.text().strip()
-            self.settings.set_j2534_dll_path(j2534_path)
-
-        # Emit signal that settings changed
         self.settings_changed.emit()
 
     def accept(self):
-        """OK button clicked - apply and close"""
+        """OK button — apply and close."""
         self.apply_settings()
         super().accept()

@@ -1,5 +1,35 @@
 # Session Notes
 
+## Recent Completed Work (Apr 4, 2026) - Full Code Audit & Cleanup
+
+**Code audit session** — loaded entire ~42K line codebase into 1M context, identified and fixed:
+- 4 bugs (select_all off-by-one, scaling `^` conversion, interleaved duplicate read, compare window cleanup)
+- Removed ~500 lines of dead code (GraphViewer, dead flash mixin methods, dead CSS, stale refs)
+- Deduplicated error handler, toolbar wrappers, auto-save helpers
+- 70 new UI tests (compare_window, table_browser, graph_viewer, table_viewer_window)
+- Fixed test_runner.py set_level_filter bug
+- Cleaned up debug scripts, updated README, made pytest coverage opt-in
+
+**Audit document:** `docs/internal/CODE_AUDIT.md` — full findings
+**Design plan (saved, not yet executed):** `.claude/plans/sparkling-meandering-token.md`
+**Open GitHub issues:** #65 (test dead flash mixin removal with hardware), #66 (test auto-save dedup with hardware)
+**Pending branches:** `fix/remove-dead-flash-mixin`, `fix/dedup-auto-save` (need Tactrix dongle validation)
+
+**Key architectural issues identified (not yet addressed):**
+- MainWindow is a god object (2,200 lines + 5 mixins)
+- Cell edit signal chain is 4 hops across 5 files
+- Shared mutable dicts as pseudo-global state
+- Compare window reimplements 290 lines of table display logic
+- MCP has 3 communication layers
+
+## Recent Completed Work (Apr 4, 2026) - Copy All, Workspace, Settings Redesign
+- **Comparison Copy All** — Two new toolbar buttons ("Copy All A→B" / "Copy All B→A") in CompareWindow. Copies all eligible differing tables in one operation with progress dialog, cancellation support, and partial failure handling. Sidebar labels update to show "(identical)" after copy.
+- **Workspace directory** — New `paths/workspace_directory` setting provides a single root for all user content. All path settings (projects, exports, metadata, colormaps, roms, screenshots, reads) now derive defaults from the workspace root. Individual path overrides still work. Migration copies bundled metadata/colormaps on first run. File dialogs now default to workspace subdirectories.
+- **Settings dialog redesign** — Replaced QTabWidget with tree sidebar + stacked pages + search bar. Data-driven `SettingDescriptor` registry makes adding settings a one-line change. Search scores settings by label, keywords, description with highlighted results. Ctrl+F focuses search, Escape clears. Click search result to navigate to setting page.
+- **New settings**: `get/set_workspace_directory()`, `get/set_roms_directory()`, `get/set_screenshots_directory()`, `get/set_reads_directory()` in AppSettings
+- **New file**: `src/utils/workspace.py` — workspace directory creation and migration logic
+- **Branch**: `feature/copy-all-workspace-settings` (not yet committed)
+
 ## Recent Completed Work (Apr 3, 2026) - Table Browser Columns & Splitter Persistence
 - **Table browser columns auto-sized** — Type column: Fixed 40px, Address column: Fixed 75px, Name column: Stretch (fills remaining space). Removed `TABLE_BROWSER_COLUMN_WIDTH` constant.
 - **Column visibility settings** — New `show_type_column` / `show_address_column` boolean settings in AppSettings, with checkboxes in Settings > Appearance > Table Browser group. Changes apply immediately to all open tabs.

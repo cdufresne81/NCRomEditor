@@ -484,7 +484,8 @@ class MainWindow(
         tb.setMovable(False)
         tb.setFloatable(False)
         tb.setIconSize(QSize(20, 20))
-        tb.setStyleSheet("""
+        tb.setStyleSheet(
+            """
             QToolBar {
                 spacing: 1px;
                 padding: 1px 4px;
@@ -502,7 +503,8 @@ class MainWindow(
             QToolButton:pressed {
                 background: rgba(128, 128, 128, 0.3);
             }
-        """)
+        """
+        )
 
         act = tb.addAction(make_icon(self, "open"), "")
         act.setToolTip("Open  (Ctrl+O)")
@@ -556,10 +558,13 @@ class MainWindow(
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         default_name = f"{stem}_{timestamp}.png"
 
+        screenshots_dir = get_settings().get_screenshots_directory()
+        default_path = str(Path(screenshots_dir) / default_name)
+
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Screenshot",
-            default_name,
+            default_path,
             "PNG Images (*.png);;All Files (*)",
         )
         if not file_path:
@@ -796,8 +801,9 @@ class MainWindow(
 
     def open_file(self):
         """Open a ROM file or project via file dialog."""
+        roms_dir = get_settings().get_roms_directory()
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Open ROM File", "", "ROM Files (*.bin *.rom);;All Files (*)"
+            self, "Open ROM File", roms_dir, "ROM Files (*.bin *.rom);;All Files (*)"
         )
         if not file_path:
             return
@@ -1144,8 +1150,9 @@ class MainWindow(
             QMessageBox.warning(self, "No ROM", "No ROM file is currently loaded.")
             return
 
+        roms_dir = get_settings().get_roms_directory()
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "Save ROM File As", "", "ROM Files (*.bin);;All Files (*)"
+            self, "Save ROM File As", roms_dir, "ROM Files (*.bin);;All Files (*)"
         )
 
         if file_path:
@@ -2163,6 +2170,11 @@ def main():
     if file_arg and _try_send_to_running_instance(file_arg):
         logger.info(f"Handed off file to running instance: {file_arg}")
         sys.exit(0)
+
+    # Ensure workspace directories exist and run one-time migrations
+    from src.utils.workspace import ensure_workspace_directories
+
+    ensure_workspace_directories()
 
     window = MainWindow()
     window.start_ipc_server()

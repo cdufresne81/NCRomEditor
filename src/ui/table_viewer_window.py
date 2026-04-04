@@ -349,7 +349,8 @@ class TableViewerWindow(QMainWindow):
         tb.setMovable(False)
         tb.setFloatable(False)
         tb.setIconSize(QSize(20, 20))
-        tb.setStyleSheet("""
+        tb.setStyleSheet(
+            """
             QToolBar {
                 spacing: 1px;
                 padding: 1px 4px;
@@ -371,7 +372,8 @@ class TableViewerWindow(QMainWindow):
                 background: rgba(0, 120, 215, 0.15);
                 border: 1px solid rgba(0, 120, 215, 0.4);
             }
-        """)
+        """
+        )
         self._toolbar = tb
 
         # --- File actions ---
@@ -512,10 +514,15 @@ class TableViewerWindow(QMainWindow):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         default_name = f"{rom_stem}_{table_name}_{timestamp}.png"
 
+        from src.utils.settings import get_settings
+
+        screenshots_dir = get_settings().get_screenshots_directory()
+        default_path = str(Path(screenshots_dir) / default_name)
+
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Screenshot",
-            default_name,
+            default_path,
             "PNG Images (*.png);;All Files (*)",
         )
         if not file_path:

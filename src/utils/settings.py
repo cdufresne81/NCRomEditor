@@ -5,6 +5,7 @@ Handles loading, saving, and accessing application settings using QSettings.
 """
 
 import os
+from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QSettings
 
@@ -19,27 +20,86 @@ class AppSettings:
         """Initialize settings manager"""
         self.settings = QSettings("NCFlash", "NCFlash")
 
-    def get_metadata_directory(self) -> str:
-        """
-        Get the configured ROM metadata directory path
+    # ------------------------------------------------------------------ #
+    # Workspace directory (root for all user content)
+    # ------------------------------------------------------------------ #
 
-        Returns:
-            str: Path to metadata directory (defaults to ./examples/metadata relative to app)
-        """
-        # Default to 'examples/metadata' directory in the application root
-        default_path = str(get_app_root() / "examples" / "metadata")
+    def get_workspace_directory(self) -> str:
+        """Get the workspace root directory (defaults to user data dir)."""
+        default_path = str(get_user_data_dir())
         return os.path.normpath(
-            self.settings.value("paths/metadata_directory", default_path)
+            self.settings.value("paths/workspace_directory", default_path)
         )
 
-    def set_metadata_directory(self, path: str):
-        """
-        Set the ROM metadata directory path
+    def set_workspace_directory(self, path: str):
+        """Set the workspace root directory."""
+        self.settings.setValue("paths/workspace_directory", path)
 
-        Args:
-            path: Path to metadata directory
-        """
-        self.settings.setValue("paths/metadata_directory", path)
+    # ------------------------------------------------------------------ #
+    # Workspace-derived path settings
+    # ------------------------------------------------------------------ #
+
+    def _get_workspace_path(self, key: str, subdir: str) -> str:
+        """Get a path setting that defaults to a workspace subdirectory."""
+        default = str(Path(self.get_workspace_directory()) / subdir)
+        return os.path.normpath(self.settings.value(key, default))
+
+    def _set_path(self, key: str, path: str):
+        """Set a path setting."""
+        self.settings.setValue(key, path)
+
+    def get_metadata_directory(self) -> str:
+        """Get the ROM metadata directory (defaults to {workspace}/metadata)."""
+        return self._get_workspace_path("paths/metadata_directory", "metadata")
+
+    def set_metadata_directory(self, path: str):
+        self._set_path("paths/metadata_directory", path)
+
+    def get_colormap_directory(self) -> str:
+        """Get the color map directory (defaults to {workspace}/colormaps)."""
+        return self._get_workspace_path("paths/colormap_directory", "colormaps")
+
+    def set_colormap_directory(self, path: str):
+        self._set_path("paths/colormap_directory", path)
+
+    def get_export_directory(self) -> str:
+        """Get the CSV export directory (defaults to {workspace}/exports)."""
+        return self._get_workspace_path("paths/export_directory", "exports")
+
+    def set_export_directory(self, path: str):
+        self._set_path("paths/export_directory", path)
+
+    def get_projects_directory(self) -> str:
+        """Get the projects directory (defaults to {workspace}/projects)."""
+        return self._get_workspace_path("paths/projects_directory", "projects")
+
+    def set_projects_directory(self, path: str):
+        self._set_path("paths/projects_directory", path)
+
+    def get_roms_directory(self) -> str:
+        """Get the default ROM files directory (defaults to {workspace}/roms)."""
+        return self._get_workspace_path("paths/roms_directory", "roms")
+
+    def set_roms_directory(self, path: str):
+        self._set_path("paths/roms_directory", path)
+
+    def get_screenshots_directory(self) -> str:
+        """Get the screenshots directory (defaults to {workspace}/screenshots)."""
+        return self._get_workspace_path("paths/screenshots_directory", "screenshots")
+
+    def set_screenshots_directory(self, path: str):
+        self._set_path("paths/screenshots_directory", path)
+
+    def get_reads_directory(self) -> str:
+        """Get the ECU reads directory (defaults to {workspace}/reads)."""
+        return self._get_workspace_path("paths/reads_directory", "reads")
+
+    def set_reads_directory(self, path: str):
+        self._set_path("paths/reads_directory", path)
+
+    # ------------------------------------------------------------------ #
+    # Window state
+    # ------------------------------------------------------------------ #
 
     def get_window_geometry(self):
         """Get saved window geometry"""
@@ -63,41 +123,26 @@ class AppSettings:
         """Save splitter state"""
         self.settings.setValue("window/splitter_state", state)
 
-    def get_recent_files(self) -> list:
-        """
-        Get list of recently opened ROM files
+    # ------------------------------------------------------------------ #
+    # Recent files & session
+    # ------------------------------------------------------------------ #
 
-        Returns:
-            list: List of file paths
-        """
+    def get_recent_files(self) -> list:
+        """Get list of recently opened ROM files."""
         files = self.settings.value("recent_files", [])
         if files is None:
             return []
-        # Ensure it's always a list
         if isinstance(files, str):
             return [files] if files else []
         return files
 
     def add_recent_file(self, file_path: str, max_recent: int = MAX_RECENT_FILES):
-        """
-        Add a file to the recent files list
-
-        Args:
-            file_path: Path to ROM file
-            max_recent: Maximum number of recent files to keep
-        """
+        """Add a file to the recent files list."""
         recent = self.get_recent_files()
-
-        # Remove if already in list
         if file_path in recent:
             recent.remove(file_path)
-
-        # Add to front of list
         recent.insert(0, file_path)
-
-        # Limit to max_recent
         recent = recent[:max_recent]
-
         self.settings.setValue("recent_files", recent)
 
     def clear_recent_files(self):
@@ -105,12 +150,7 @@ class AppSettings:
         self.settings.setValue("recent_files", [])
 
     def get_session_files(self) -> list:
-        """
-        Get list of files from last session
-
-        Returns:
-            list: List of file paths that were open when app last closed
-        """
+        """Get list of files from last session."""
         files = self.settings.value("session/open_files", [])
         if files is None:
             return []
@@ -119,144 +159,59 @@ class AppSettings:
         return files
 
     def set_session_files(self, file_paths: list):
-        """
-        Save list of currently open files for session restore
-
-        Args:
-            file_paths: List of ROM file paths currently open
-        """
+        """Save list of currently open files for session restore."""
         self.settings.setValue("session/open_files", file_paths)
 
-    def get_gradient_mode(self) -> str:
-        """
-        Get gradient coloring mode for table cells
+    # ------------------------------------------------------------------ #
+    # Display settings
+    # ------------------------------------------------------------------ #
 
-        Returns:
-            str: 'minmax' (default) or 'neighbors'
-        """
+    def get_gradient_mode(self) -> str:
+        """Get gradient coloring mode ('minmax' or 'neighbors')."""
         return self.settings.value("display/gradient_mode", "minmax")
 
     def set_gradient_mode(self, mode: str):
-        """
-        Set gradient coloring mode for table cells
-
-        Args:
-            mode: 'minmax' or 'neighbors'
-        """
         self.settings.setValue("display/gradient_mode", mode)
 
     def get_table_font_size(self) -> int:
-        """
-        Get font size for table cells
-
-        Returns:
-            int: Font size in pixels (default 11)
-        """
+        """Get font size for table cells in pixels (default 11)."""
         return int(self.settings.value("display/table_font_size", 11))
 
     def set_table_font_size(self, size: int):
-        """
-        Set font size for table cells
-
-        Args:
-            size: Font size in pixels
-        """
         self.settings.setValue("display/table_font_size", size)
 
     def get_colormap_path(self) -> str:
-        """
-        Get the configured color map file path
-
-        Returns:
-            str: Path to .map file, or empty string for built-in gradient
-        """
-        # Default to the built-in default.map in the colormaps directory
+        """Get the color map file path."""
         default_path = str(get_app_root() / "colormaps" / "default.map")
         return os.path.normpath(
             self.settings.value("display/colormap_path", default_path)
         )
 
     def set_colormap_path(self, path: str):
-        """
-        Set the color map file path
-
-        Args:
-            path: Path to .map file, or empty string for built-in gradient
-        """
         self.settings.setValue("display/colormap_path", path)
 
-    def get_colormap_directory(self) -> str:
-        """
-        Get the configured color map directory path
+    def get_show_type_column(self) -> bool:
+        """Get whether the Type column is visible in the table browser."""
+        return self.settings.value("display/show_type_column", True, type=bool)
 
-        Returns:
-            str: Path to directory containing .map files
-        """
-        default_path = str(get_app_root() / "colormaps")
-        return os.path.normpath(
-            self.settings.value("paths/colormap_directory", default_path)
-        )
+    def set_show_type_column(self, enabled: bool):
+        self.settings.setValue("display/show_type_column", enabled)
 
-    def set_colormap_directory(self, path: str):
-        """
-        Set the color map directory path
+    def get_show_address_column(self) -> bool:
+        """Get whether the Address column is visible in the table browser."""
+        return self.settings.value("display/show_address_column", True, type=bool)
 
-        Args:
-            path: Path to directory containing .map files
-        """
-        self.settings.setValue("paths/colormap_directory", path)
+    def set_show_address_column(self, enabled: bool):
+        self.settings.setValue("display/show_address_column", enabled)
 
-    def get_export_directory(self) -> str:
-        """
-        Get the configured CSV export directory path
-
-        Returns:
-            str: Path to export directory
-        """
-        default_path = str(get_user_data_dir() / "exports")
-        return os.path.normpath(
-            self.settings.value("paths/export_directory", default_path)
-        )
-
-    def set_export_directory(self, path: str):
-        """
-        Set the CSV export directory path
-
-        Args:
-            path: Path to export directory, or empty string for default
-        """
-        self.settings.setValue("paths/export_directory", path)
-
-    def get_projects_directory(self) -> str:
-        """
-        Get the configured projects directory path
-
-        Returns:
-            str: Path to directory where projects are stored
-        """
-        default_path = str(get_user_data_dir() / "projects")
-        return os.path.normpath(
-            self.settings.value("paths/projects_directory", default_path)
-        )
-
-    def set_projects_directory(self, path: str):
-        """
-        Set the projects directory path
-
-        Args:
-            path: Path to directory where projects are stored
-        """
-        self.settings.setValue("paths/projects_directory", path)
+    # ------------------------------------------------------------------ #
+    # Editor / toggle settings
+    # ------------------------------------------------------------------ #
 
     _DEFAULT_TOGGLE_CATEGORIES = ["DTC - Activation Flags"]
 
     def get_toggle_categories(self) -> list:
-        """
-        Get list of category names that display as toggle switches.
-
-        Returns:
-            list: Category names where 1D tables use toggle ON/OFF display
-        """
+        """Get category names that display as toggle switches."""
         value = self.settings.value(
             "display/toggle_categories", self._DEFAULT_TOGGLE_CATEGORIES
         )
@@ -267,64 +222,37 @@ class AppSettings:
         return list(value)
 
     def set_toggle_categories(self, categories: list):
-        """
-        Set list of category names that display as toggle switches.
-
-        Args:
-            categories: List of category name strings
-        """
         self.settings.setValue("display/toggle_categories", categories)
 
-    def get_j2534_dll_path(self) -> str:
-        """
-        Get the configured J2534 DLL path for ECU communication.
+    def get_auto_round(self) -> bool:
+        """Get whether interpolation/smoothing results are auto-rounded."""
+        return self.settings.value("editor/auto_round", False, type=bool)
 
-        Returns:
-            str: Path to J2534 DLL, or empty string if not configured
-        """
-        path = self.settings.value("ecu/j2534_dll_path", "")
-        return os.path.normpath(path) if path else ""
+    def set_auto_round(self, enabled: bool):
+        self.settings.setValue("editor/auto_round", enabled)
 
-    def set_j2534_dll_path(self, path: str):
-        """
-        Set the J2534 DLL path for ECU communication.
-
-        Args:
-            path: Path to J2534 DLL (e.g., op20pt32.dll)
-        """
-        self.settings.setValue("ecu/j2534_dll_path", path)
+    # ------------------------------------------------------------------ #
+    # Tools settings
+    # ------------------------------------------------------------------ #
 
     def get_mcp_auto_start(self) -> bool:
         """Get whether the MCP server should start automatically on app launch."""
         return self.settings.value("tools/mcp_auto_start", False, type=bool)
 
     def set_mcp_auto_start(self, enabled: bool):
-        """Set whether the MCP server should start automatically on app launch."""
         self.settings.setValue("tools/mcp_auto_start", enabled)
 
-    def get_auto_round(self) -> bool:
-        """Get whether interpolation/smoothing results are auto-rounded one decimal coarser."""
-        return self.settings.value("editor/auto_round", False, type=bool)
+    # ------------------------------------------------------------------ #
+    # ECU settings
+    # ------------------------------------------------------------------ #
 
-    def set_auto_round(self, enabled: bool):
-        """Set whether interpolation/smoothing results are auto-rounded one decimal coarser."""
-        self.settings.setValue("editor/auto_round", enabled)
+    def get_j2534_dll_path(self) -> str:
+        """Get the J2534 DLL path for ECU communication."""
+        path = self.settings.value("ecu/j2534_dll_path", "")
+        return os.path.normpath(path) if path else ""
 
-    def get_show_type_column(self) -> bool:
-        """Get whether the Type column is visible in the table browser."""
-        return self.settings.value("display/show_type_column", True, type=bool)
-
-    def set_show_type_column(self, enabled: bool):
-        """Set whether the Type column is visible in the table browser."""
-        self.settings.setValue("display/show_type_column", enabled)
-
-    def get_show_address_column(self) -> bool:
-        """Get whether the Address column is visible in the table browser."""
-        return self.settings.value("display/show_address_column", True, type=bool)
-
-    def set_show_address_column(self, enabled: bool):
-        """Set whether the Address column is visible in the table browser."""
-        self.settings.setValue("display/show_address_column", enabled)
+    def set_j2534_dll_path(self, path: str):
+        self.settings.setValue("ecu/j2534_dll_path", path)
 
 
 # Global settings instance
@@ -332,12 +260,7 @@ _settings = None
 
 
 def get_settings() -> AppSettings:
-    """
-    Get the global settings instance
-
-    Returns:
-        AppSettings: Global settings instance
-    """
+    """Get the global settings instance."""
     global _settings
     if _settings is None:
         _settings = AppSettings()

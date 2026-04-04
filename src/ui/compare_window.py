@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QStyledItemDelegate,
     QMessageBox,
+    QProgressDialog,
 )
 from PySide6.QtCore import Qt, QSettings, QSize
 from PySide6.QtGui import (
@@ -377,7 +378,8 @@ class CompareWindow(QMainWindow):
         tb.setMovable(False)
         tb.setFloatable(False)
         tb.setIconSize(QSize(20, 20))
-        tb.setStyleSheet("""
+        tb.setStyleSheet(
+            """
             QToolBar {
                 spacing: 1px;
                 padding: 1px 4px;
@@ -395,7 +397,8 @@ class CompareWindow(QMainWindow):
             QToolButton:pressed {
                 background: rgba(128, 128, 128, 0.3);
             }
-        """)
+        """
+        )
 
         # ROM labels with color swatches
         rom_label_a = self._make_rom_label(self._name_a, self._color_a)
@@ -407,6 +410,8 @@ class CompareWindow(QMainWindow):
 
         rom_label_b = self._make_rom_label(self._name_b, self._color_b)
         tb.addWidget(rom_label_b)
+
+        # Copy All buttons live in the table panel headers (see _build_table_panels)
 
         # Spacer
         spacer = QWidget()
@@ -445,8 +450,6 @@ class CompareWindow(QMainWindow):
         self._toggle.setChecked(False)
         self._toggle.toggled.connect(self._on_toggle_changed)
         tb.addWidget(self._toggle)
-
-        # Copy actions are in the center column between table panels (see _build_table_panels)
 
     def _make_rom_label(self, name: str, color: QColor) -> QWidget:
         """Create a ROM label widget with color swatch."""
@@ -507,6 +510,25 @@ class CompareWindow(QMainWindow):
             p.setPen(QPen(c, 2.0, Qt.SolidLine, Qt.RoundCap))
             p.drawLine(3, 5, 3, 15)
 
+        elif direction == "copy_all_right":
+            # Double right arrow with bar: ->>|
+            p.drawLine(2, 10, 10, 10)
+            p.drawLine(5, 7, 8, 10)
+            p.drawLine(5, 13, 8, 10)
+            p.drawLine(9, 7, 12, 10)
+            p.drawLine(9, 13, 12, 10)
+            p.setPen(QPen(c, 2.0, Qt.SolidLine, Qt.RoundCap))
+            p.drawLine(15, 5, 15, 15)
+        elif direction == "copy_all_left":
+            # Double left arrow with bar: |<<-
+            p.drawLine(18, 10, 10, 10)
+            p.drawLine(15, 7, 12, 10)
+            p.drawLine(15, 13, 12, 10)
+            p.drawLine(11, 7, 8, 10)
+            p.drawLine(11, 13, 8, 10)
+            p.setPen(QPen(c, 2.0, Qt.SolidLine, Qt.RoundCap))
+            p.drawLine(5, 5, 5, 15)
+
         p.end()
         return QIcon(pm)
 
@@ -531,7 +553,8 @@ class CompareWindow(QMainWindow):
         self._tree.setHeaderHidden(True)
         self._tree.setRootIsDecorated(True)
         self._tree.setIndentation(14)
-        self._tree.setStyleSheet("""
+        self._tree.setStyleSheet(
+            """
             QTreeWidget {
                 border: none;
                 outline: none;
@@ -547,7 +570,8 @@ class CompareWindow(QMainWindow):
             QTreeWidget::item:hover:!selected {
                 background: #f0f4fa;
             }
-        """)
+        """
+        )
 
         # Group tables by category
         self._tree_items = {}  # diff index -> QTreeWidgetItem
@@ -565,17 +589,7 @@ class CompareWindow(QMainWindow):
             self._tree.addTopLevelItem(cat_item)
 
             for idx, entry in entries:
-                name = entry["name"]
-                count = entry["change_count"]
-                suffix = "cell" if count == 1 else "cells"
-                label = f"{name}  ({count} {suffix})"
-                if entry["a_only"]:
-                    label += "  \u25c0"  # ◀ ROM A only
-                elif entry["b_only"]:
-                    label += "  \u25b6"  # ▶ ROM B only
-                elif entry["shape_mismatch"]:
-                    label += "  \u2260"  # ≠ shape mismatch
-                item = QTreeWidgetItem([label])
+                item = QTreeWidgetItem([self._format_entry_label(entry)])
                 item.setData(0, Qt.UserRole, idx)
                 cat_item.addChild(item)
                 self._tree_items[idx] = item
@@ -603,14 +617,43 @@ class CompareWindow(QMainWindow):
         row_height = font_size + 2
         label_css = "font-size: 11px; color: #888; padding: 2px 4px; border-bottom: 1px solid #d0d0d0;"
 
-        # Left panel: ROM A name label + table
+        copy_all_btn_style = (
+            "QToolButton { padding: 2px; border: 1px solid transparent; "
+            "border-radius: 3px; }"
+            "QToolButton:hover { background: rgba(128,128,128,0.15); "
+            "border: 1px solid rgba(128,128,128,0.25); }"
+            "QToolButton:pressed { background: rgba(128,128,128,0.3); }"
+        )
+        self._copy_all_a_to_b_btn = None
+        self._copy_all_b_to_a_btn = None
+
+        # Left panel: ROM A header (name + Copy All →→|) + table
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(0)
-        left_label = QLabel(f"  {self._name_a}")
-        left_label.setStyleSheet(label_css)
-        left_layout.addWidget(left_label)
+
+        left_header = QWidget()
+        left_header.setStyleSheet(label_css)
+        left_hdr_layout = QHBoxLayout(left_header)
+        left_hdr_layout.setContentsMargins(4, 0, 2, 0)
+        left_hdr_layout.setSpacing(0)
+        left_hdr_layout.addStretch()
+        left_hdr_layout.addWidget(QLabel(self._name_a))
+        left_hdr_layout.addStretch()
+        if not self._readonly:
+            self._copy_all_a_to_b_btn = QToolButton()
+            self._copy_all_a_to_b_btn.setIcon(self._make_nav_icon("copy_all_right"))
+            self._copy_all_a_to_b_btn.setIconSize(QSize(16, 16))
+            self._copy_all_a_to_b_btn.setToolTip(
+                f"Copy ALL tables from {self._name_a} \u2192 {self._name_b}"
+            )
+            self._copy_all_a_to_b_btn.setStyleSheet(copy_all_btn_style)
+            self._copy_all_a_to_b_btn.clicked.connect(
+                lambda: self._copy_all_tables("a_to_b")
+            )
+            left_hdr_layout.addWidget(self._copy_all_a_to_b_btn)
+        left_layout.addWidget(left_header)
 
         self._table_left = QTableWidget()
         self._table_left.setStyleSheet(table_css)
@@ -622,14 +665,33 @@ class CompareWindow(QMainWindow):
         self._table_left.setItemDelegate(_CompareCellDelegate(self._table_left))
         left_layout.addWidget(self._table_left)
 
-        # Right panel: ROM B name label + table
+        # Right panel: ROM B header (|←← Copy All + name) + table
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
-        right_label = QLabel(f"  {self._name_b}")
-        right_label.setStyleSheet(label_css)
-        right_layout.addWidget(right_label)
+
+        right_header = QWidget()
+        right_header.setStyleSheet(label_css)
+        right_hdr_layout = QHBoxLayout(right_header)
+        right_hdr_layout.setContentsMargins(2, 0, 4, 0)
+        right_hdr_layout.setSpacing(0)
+        if not self._readonly:
+            self._copy_all_b_to_a_btn = QToolButton()
+            self._copy_all_b_to_a_btn.setIcon(self._make_nav_icon("copy_all_left"))
+            self._copy_all_b_to_a_btn.setIconSize(QSize(16, 16))
+            self._copy_all_b_to_a_btn.setToolTip(
+                f"Copy ALL tables from {self._name_b} \u2192 {self._name_a}"
+            )
+            self._copy_all_b_to_a_btn.setStyleSheet(copy_all_btn_style)
+            self._copy_all_b_to_a_btn.clicked.connect(
+                lambda: self._copy_all_tables("b_to_a")
+            )
+            right_hdr_layout.addWidget(self._copy_all_b_to_a_btn)
+        right_hdr_layout.addStretch()
+        right_hdr_layout.addWidget(QLabel(self._name_b))
+        right_hdr_layout.addStretch()
+        right_layout.addWidget(right_header)
 
         self._table_right = QTableWidget()
         self._table_right.setStyleSheet(table_css)
@@ -641,40 +703,43 @@ class CompareWindow(QMainWindow):
         self._table_right.setItemDelegate(_CompareCellDelegate(self._table_right))
         right_layout.addWidget(self._table_right)
 
+        self._update_copy_all_buttons()
+
         # Center column with copy buttons (hidden in readonly mode)
         center_col = QWidget()
         center_layout = QVBoxLayout(center_col)
         center_layout.setContentsMargins(2, 0, 2, 0)
         center_layout.setSpacing(4)
+
+        copy_btn_style = (
+            "QToolButton { padding: 4px; border: 1px solid transparent; "
+            "border-radius: 3px; }"
+            "QToolButton:hover { background: rgba(128,128,128,0.15); "
+            "border: 1px solid rgba(128,128,128,0.25); }"
+            "QToolButton:pressed { background: rgba(128,128,128,0.3); }"
+        )
+
+        # Per-table copy buttons centered vertically
         center_layout.addStretch()
 
         self._copy_a_to_b_btn = QToolButton()
         self._copy_a_to_b_btn.setIcon(self._make_nav_icon("copy_right"))
         self._copy_a_to_b_btn.setIconSize(QSize(20, 20))
         self._copy_a_to_b_btn.setToolTip(
-            f"Copy table from {self._name_a} \u2192 {self._name_b}"
+            f"Copy this table from {self._name_a} \u2192 {self._name_b}"
         )
         self._copy_a_to_b_btn.clicked.connect(lambda: self._copy_table("a_to_b"))
-        self._copy_a_to_b_btn.setStyleSheet("""
-            QToolButton {
-                padding: 4px; border: 1px solid transparent; border-radius: 3px;
-            }
-            QToolButton:hover {
-                background: rgba(128, 128, 128, 0.15);
-                border: 1px solid rgba(128, 128, 128, 0.25);
-            }
-            QToolButton:pressed { background: rgba(128, 128, 128, 0.3); }
-        """)
+        self._copy_a_to_b_btn.setStyleSheet(copy_btn_style)
         center_layout.addWidget(self._copy_a_to_b_btn)
 
         self._copy_b_to_a_btn = QToolButton()
         self._copy_b_to_a_btn.setIcon(self._make_nav_icon("copy_left"))
         self._copy_b_to_a_btn.setIconSize(QSize(20, 20))
         self._copy_b_to_a_btn.setToolTip(
-            f"Copy table from {self._name_b} \u2192 {self._name_a}"
+            f"Copy this table from {self._name_b} \u2192 {self._name_a}"
         )
         self._copy_b_to_a_btn.clicked.connect(lambda: self._copy_table("b_to_a"))
-        self._copy_b_to_a_btn.setStyleSheet(self._copy_a_to_b_btn.styleSheet())
+        self._copy_b_to_a_btn.setStyleSheet(copy_btn_style)
         center_layout.addWidget(self._copy_b_to_a_btn)
 
         center_layout.addStretch()
@@ -924,6 +989,8 @@ class CompareWindow(QMainWindow):
             # Recompute changed cells for this entry
             self._recompute_entry_diff(entry)
             self._select_table(self._current_index)
+            self._update_sidebar_labels()
+            self._update_copy_all_buttons()
 
             self.statusBar().showMessage(
                 f'Copied "{name}" from {src_name} to {dst_name}'
@@ -933,6 +1000,174 @@ class CompareWindow(QMainWindow):
             QMessageBox.warning(
                 self, "Copy Failed", f"Failed to copy table:\n{type(e).__name__}: {e}"
             )
+
+    # ========== Copy All Tables ==========
+
+    def _get_eligible_entries(self, direction: str) -> list:
+        """Return list of (index, entry) tuples eligible for bulk copy."""
+        eligible = []
+        for i, entry in enumerate(self._modified_tables):
+            if entry["shape_mismatch"] or entry["a_only"] or entry["b_only"]:
+                continue
+            if entry["table_a"] is None or entry["table_b"] is None:
+                continue
+            if direction == "a_to_b" and entry["data_a"] is None:
+                continue
+            if direction == "b_to_a" and entry["data_b"] is None:
+                continue
+            # Skip entries that are already identical
+            if entry["change_count"] == 0:
+                continue
+            eligible.append((i, entry))
+        return eligible
+
+    def _update_copy_all_buttons(self):
+        """Enable/disable Copy All buttons based on eligible entry count."""
+        if self._copy_all_a_to_b_btn is None:
+            return
+        self._copy_all_a_to_b_btn.setEnabled(
+            len(self._get_eligible_entries("a_to_b")) > 0
+        )
+        self._copy_all_b_to_a_btn.setEnabled(
+            len(self._get_eligible_entries("b_to_a")) > 0
+        )
+
+    def _copy_all_tables(self, direction: str):
+        """Copy all eligible tables from one ROM to the other."""
+        if self._readonly:
+            return
+
+        eligible = self._get_eligible_entries(direction)
+        if not eligible:
+            return
+
+        if direction == "a_to_b":
+            src_name, dst_name = self._name_a, self._name_b
+        else:
+            src_name, dst_name = self._name_b, self._name_a
+
+        count = len(eligible)
+        reply = QMessageBox.question(
+            self,
+            "Copy All Tables",
+            f"Copy {count} table{'s' if count != 1 else ''} "
+            f"from {src_name} to {dst_name}?\n\n"
+            f"This will overwrite the destination values for all "
+            f"eligible differing tables.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        main_window = self.parent()
+        if not main_window or not hasattr(main_window, "apply_compare_copy"):
+            logger.error("No main window with apply_compare_copy available")
+            return
+
+        progress = QProgressDialog(
+            f"Copying tables from {src_name} to {dst_name}\u2026",
+            "Cancel",
+            0,
+            count,
+            self,
+        )
+        progress.setWindowTitle("Copy All Tables")
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+
+        failures = []
+        copied = 0
+
+        for step, (idx, entry) in enumerate(eligible):
+            if progress.wasCanceled():
+                break
+
+            name = entry["name"]
+            progress.setLabelText(f"Copying: {name}  ({step + 1}/{count})")
+
+            if direction == "a_to_b":
+                src_data = entry["data_a"]
+                dst_table, dst_reader, dst_def = (
+                    entry["table_b"],
+                    self._reader_b,
+                    self._definition_b,
+                )
+            else:
+                src_data = entry["data_b"]
+                dst_table, dst_reader, dst_def = (
+                    entry["table_a"],
+                    self._reader_a,
+                    self._definition_a,
+                )
+
+            try:
+                main_window.apply_compare_copy(dst_reader, dst_table, dst_def, src_data)
+
+                # Re-read destination data
+                if direction == "a_to_b":
+                    entry["data_b"] = dst_reader.read_table_data(dst_table)
+                else:
+                    entry["data_a"] = dst_reader.read_table_data(dst_table)
+
+                self._recompute_entry_diff(entry)
+                copied += 1
+            except Exception as e:
+                logger.error(f"Failed to copy table {name}: {e}")
+                failures.append((name, str(e)))
+
+            progress.setValue(step + 1)
+            QApplication.processEvents()
+
+        progress.close()
+
+        # Refresh UI
+        self._update_sidebar_labels()
+        if self._current_index >= 0:
+            self._select_table(self._current_index)
+        self._update_copy_all_buttons()
+
+        # Summary
+        if failures:
+            fail_list = "\n".join(f"  \u2022 {n}: {err}" for n, err in failures)
+            QMessageBox.warning(
+                self,
+                "Copy All Tables",
+                f"Copied {copied} of {count} tables. "
+                f"{len(failures)} failed:\n\n{fail_list}",
+            )
+        elif progress.wasCanceled():
+            self.statusBar().showMessage(
+                f"Cancelled after copying {copied} of {count} tables "
+                f"from {src_name} to {dst_name}"
+            )
+        else:
+            self.statusBar().showMessage(
+                f"Copied {copied} tables from {src_name} to {dst_name}"
+            )
+
+    @staticmethod
+    def _format_entry_label(entry: dict) -> str:
+        """Format a sidebar tree label for a diff entry."""
+        name = entry["name"]
+        count = entry["change_count"]
+        if count == 0:
+            return f"{name}  (identical)"
+        suffix = "cell" if count == 1 else "cells"
+        label = f"{name}  ({count} {suffix})"
+        if entry["a_only"]:
+            label += "  \u25c0"
+        elif entry["b_only"]:
+            label += "  \u25b6"
+        elif entry["shape_mismatch"]:
+            label += "  \u2260"
+        return label
+
+    def _update_sidebar_labels(self):
+        """Update all sidebar tree item labels to reflect current change counts."""
+        for idx, item in self._tree_items.items():
+            item.setText(0, self._format_entry_label(self._modified_tables[idx]))
 
     def _recompute_entry_diff(self, entry: dict):
         """Recompute changed_cells/changed_axes for an entry after a copy."""

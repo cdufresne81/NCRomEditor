@@ -934,7 +934,9 @@ class ECUProgrammingWindow(QMainWindow):
         if rom_id.upper().endswith(".HEX"):
             rom_id = rom_id[:-4]
 
-        auto_save_dir = Path.home() / ".nc-flash" / "reads"
+        from src.utils.settings import get_settings
+
+        auto_save_dir = Path(get_settings().get_reads_directory())
         auto_save_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_name = f"{rom_id}_{timestamp}.bin"
@@ -957,7 +959,9 @@ class ECUProgrammingWindow(QMainWindow):
         if rom_id.upper().endswith(".HEX"):
             rom_id = rom_id[:-4]
 
-        auto_save_dir = Path.home() / ".nc-flash" / "reads"
+        from src.utils.settings import get_settings
+
+        auto_save_dir = Path(get_settings().get_reads_directory())
         auto_save_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_name = f"{rom_id}_RAM_{timestamp}.bin"

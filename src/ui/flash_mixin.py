@@ -370,10 +370,13 @@ class FlashMixin:
 
         dialog.on_finished(True, f"ROM read complete ({len(rom_data)} bytes)")
 
+        from src.utils.settings import get_settings
+
+        roms_dir = get_settings().get_roms_directory()
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Save ROM",
-            "",
+            roms_dir,
             "ROM Files (*.bin);;All Files (*)",
         )
         if file_path:

@@ -127,8 +127,11 @@ class RomSelectionPage(QWizardPage):
 
     def _browse(self):
         """Open file dialog to select ROM"""
+        from src.utils.settings import get_settings
+
+        roms_dir = get_settings().get_roms_directory()
         path, _ = QFileDialog.getOpenFileName(
-            self, "Select ROM File", "", "ROM Files (*.bin *.rom);;All Files (*)"
+            self, "Select ROM File", roms_dir, "ROM Files (*.bin *.rom);;All Files (*)"
         )
         if path:
             self.path_edit.setText(path)

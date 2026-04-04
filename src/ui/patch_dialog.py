@@ -124,8 +124,11 @@ class PatchRomDialog(QDialog):
         self._patch_path = None
 
     def _browse_stock(self):
+        from src.utils.settings import get_settings
+
+        roms_dir = get_settings().get_roms_directory()
         path, _ = QFileDialog.getOpenFileName(
-            self, "Select Stock ROM", "", "ROM Files (*.bin);;All Files (*)"
+            self, "Select Stock ROM", roms_dir, "ROM Files (*.bin);;All Files (*)"
         )
         if path:
             self._stock_path = path
