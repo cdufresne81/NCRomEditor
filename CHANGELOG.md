@@ -7,6 +7,9 @@ All notable changes to NC Flash are documented here.
 ### Changed
 - **CI: upgrade GitHub Actions to Node.js 24** — Bumped `actions/checkout` v4→v5 and `actions/setup-python` v5→v6 in CI and release workflows to resolve Node.js 20 deprecation warnings
 
+### Fixed
+- **CI: fix hanging IPC server tests** — `TestMainWindowIpcServer` created a full `MainWindow` that triggered modal dialogs in CI, hanging the pipeline at 83%. Replaced with lightweight `_IpcTestWidget` that tests only IPC logic
+
 ### Added
 - **MCP STDIO launcher for compiled builds** — `packaging/run-mcp.bat` enables Claude Desktop integration with installed NCFlash via STDIO transport; included in the Windows installer
 
