@@ -4,6 +4,9 @@ All notable changes to NC Flash are documented here.
 
 ## [Unreleased]
 
+### Changed
+- **`.gitignore` cleanup** — Added `tests/gui/debug_*.txt` pattern and lowercase `thinking-pad.md` to `.gitignore`; removed 6 one-off debug GUI test scripts
+
 ### Fixed
 - **Stale README version and project structure** — Updated version from v2.3.0 to v2.6.1, added missing `src/ecu/` module tree (13 files) and new UI files (`ecu_window.py`, `flash_mixin.py`, `flash_setup_dialog.py`, `patch_dialog.py`), and refreshed the development status description
 
