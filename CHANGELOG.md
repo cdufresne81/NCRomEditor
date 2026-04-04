@@ -4,6 +4,12 @@ All notable changes to NC Flash are documented here.
 
 ## [Unreleased]
 
+### Added
+- **UI test coverage** — 70 new tests covering compare_window diff computation, table_browser filtering/search/selection, graph_viewer color calculations, and table_viewer_window signal forwarding and coordinate extraction
+
+### Fixed
+- **test_runner set_level_filter bug** — `set_level_filter()` accessed non-existent `self.main_window.table_browser`; now correctly retrieves the table browser from the current ROM document via `get_current_document()`
+
 ## [v2.6.1] - 2026-04-03
 
 ### Added

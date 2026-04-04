@@ -869,8 +869,12 @@ class TestRunner:
             return False
 
         try:
-            # Access the table browser's level combo
-            table_browser = self.main_window.table_browser
+            # Access the table browser from the current document
+            document = self.main_window.get_current_document()
+            if not document or not hasattr(document, "table_browser"):
+                self._log("ERROR: No document with table browser")
+                return False
+            table_browser = document.table_browser
 
             # Find the index for this level value
             index = table_browser.level_combo.findData(level)
@@ -1123,44 +1127,59 @@ class TestRunner:
         if cls._COMMANDS is not None:
             return cls._COMMANDS
         cls._COMMANDS = {
-            "start":          (lambda s, a: s.start_app(), 0),
-            "load_rom":       (lambda s, a: s.load_rom(a[0]), 1),
-            "list_tables":    (lambda s, a: s._cmd_list_tables(), 0),
-            "open_table":     (lambda s, a: s.open_table(a[0]), 1),
-            "open_table_by_category": (lambda s, a: s.open_table_by_category(a[0], a[1]), 2),
+            "start": (lambda s, a: s.start_app(), 0),
+            "load_rom": (lambda s, a: s.load_rom(a[0]), 1),
+            "list_tables": (lambda s, a: s._cmd_list_tables(), 0),
+            "open_table": (lambda s, a: s.open_table(a[0]), 1),
+            "open_table_by_category": (
+                lambda s, a: s.open_table_by_category(a[0], a[1]),
+                2,
+            ),
             "expand_category": (lambda s, a: s.expand_category(a[0]), 1),
-            "select":         (lambda s, a: s.select_cells(
-                                  int(a[0]), int(a[1]),
-                                  int(a[2]) if len(a) > 2 else None,
-                                  int(a[3]) if len(a) > 3 else None), 2),
-            "click":          (lambda s, a: s.click_cell(int(a[0]), int(a[1])), 2),
-            "select_all":     (lambda s, a: s.select_all_data(), 0),
-            "interpolate_v":  (lambda s, a: s.interpolate_vertical(), 0),
-            "interpolate_h":  (lambda s, a: s.interpolate_horizontal(), 0),
+            "select": (
+                lambda s, a: s.select_cells(
+                    int(a[0]),
+                    int(a[1]),
+                    int(a[2]) if len(a) > 2 else None,
+                    int(a[3]) if len(a) > 3 else None,
+                ),
+                2,
+            ),
+            "click": (lambda s, a: s.click_cell(int(a[0]), int(a[1])), 2),
+            "select_all": (lambda s, a: s.select_all_data(), 0),
+            "interpolate_v": (lambda s, a: s.interpolate_vertical(), 0),
+            "interpolate_h": (lambda s, a: s.interpolate_horizontal(), 0),
             "interpolate_2d": (lambda s, a: s.interpolate_2d(), 0),
-            "increment":      (lambda s, a: s.increment_selection(), 0),
-            "decrement":      (lambda s, a: s.decrement_selection(), 0),
-            "set":            (lambda s, a: s.set_value(float(a[0])), 1),
-            "multiply":       (lambda s, a: s.multiply_selection(float(a[0])), 1),
-            "add":            (lambda s, a: s.add_to_selection(float(a[0])), 1),
-            "open_graph":     (lambda s, a: s.open_graph(), 0),
-            "close_graph":    (lambda s, a: s.close_graph(), 0),
-            "rotate_graph":   (lambda s, a: s.rotate_graph(
-                                  float(a[0]) if len(a) > 0 else None,
-                                  float(a[1]) if len(a) > 1 else None), 0),
-            "close_table":    (lambda s, a: s.close_table(), 0),
-            "focus_table":    (lambda s, a: s._cmd_focus_table(a), 0),
-            "screenshot":     (lambda s, a: bool(s.screenshot(
-                                  a[0] if a else None,
-                                  a[1] if len(a) > 1 else "table")), 0),
-            "undo":           (lambda s, a: s.undo(), 0),
-            "redo":           (lambda s, a: s.redo(), 0),
-            "wait":           (lambda s, a: s._cmd_wait(a), 1),
-            "cleanup":        (lambda s, a: s._cmd_cleanup(a), 0),
+            "increment": (lambda s, a: s.increment_selection(), 0),
+            "decrement": (lambda s, a: s.decrement_selection(), 0),
+            "set": (lambda s, a: s.set_value(float(a[0])), 1),
+            "multiply": (lambda s, a: s.multiply_selection(float(a[0])), 1),
+            "add": (lambda s, a: s.add_to_selection(float(a[0])), 1),
+            "open_graph": (lambda s, a: s.open_graph(), 0),
+            "close_graph": (lambda s, a: s.close_graph(), 0),
+            "rotate_graph": (
+                lambda s, a: s.rotate_graph(
+                    float(a[0]) if len(a) > 0 else None,
+                    float(a[1]) if len(a) > 1 else None,
+                ),
+                0,
+            ),
+            "close_table": (lambda s, a: s.close_table(), 0),
+            "focus_table": (lambda s, a: s._cmd_focus_table(a), 0),
+            "screenshot": (
+                lambda s, a: bool(
+                    s.screenshot(a[0] if a else None, a[1] if len(a) > 1 else "table")
+                ),
+                0,
+            ),
+            "undo": (lambda s, a: s.undo(), 0),
+            "redo": (lambda s, a: s.redo(), 0),
+            "wait": (lambda s, a: s._cmd_wait(a), 1),
+            "cleanup": (lambda s, a: s._cmd_cleanup(a), 0),
             "list_screenshots": (lambda s, a: s._cmd_list_screenshots(), 0),
-            "set_level":      (lambda s, a: s.set_level_filter(int(a[0])), 1),
-            "store_width":    (lambda s, a: s._cmd_store_width(), 0),
-            "assert_width":   (lambda s, a: s._cmd_assert_width(a), 1),
+            "set_level": (lambda s, a: s.set_level_filter(int(a[0])), 1),
+            "store_width": (lambda s, a: s._cmd_store_width(), 0),
+            "assert_width": (lambda s, a: s._cmd_assert_width(a), 1),
             "assert_width_restored": (lambda s, a: s._cmd_assert_width_restored(a), 0),
         }
         return cls._COMMANDS
