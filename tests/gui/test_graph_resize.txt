@@ -1,0 +1,9 @@
+# Test script to capture graph resize issue
+load_rom examples/lf9veb.bin
+open_table "TP Commanded Limit - Max"
+open_graph
+wait 500
+screenshot graph_resize_04_graph_open table
+select 5 1
+wait 500
+screenshot graph_resize_05_after_value_click table

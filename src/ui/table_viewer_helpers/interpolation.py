@@ -256,7 +256,7 @@ class TableInterpolationHelper:
                     )
 
             if all_changes:
-                logger.info(
+                logger.debug(
                     f"{direction_label} interpolation: updated {len(all_changes)} data cells"
                 )
                 self.ctx.viewer.bulk_changes.emit(all_changes)
@@ -482,7 +482,7 @@ class TableInterpolationHelper:
                             )
 
                 if all_changes:
-                    logger.info(
+                    logger.debug(
                         f"2D bilinear interpolation: updated {len(all_changes)} cells"
                     )
                     self.ctx.viewer.bulk_changes.emit(all_changes)

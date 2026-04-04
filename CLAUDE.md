@@ -26,6 +26,7 @@ Reference these before modifying related functionality:
 - `docs/internal/LOGGING.md` - Logging configuration and exception hierarchy
 - `docs/internal/ROM_DEFINITION_FORMAT.md` - XML format for ROM definitions
 - `docs/internal/UI_TESTING.md` - GUI test runner, screenshots, and test scripts
+- `docs/internal/CODE_AUDIT.md` - Full codebase audit findings (bugs, dead code, duplication, test gaps)
 
 **Rule:** When creating new documentation in `docs/`, add it to this list with a brief description of when to reference it.
 

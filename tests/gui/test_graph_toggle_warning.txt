@@ -1,0 +1,28 @@
+# Test script to reproduce "posx and posy should be finite values" warning
+# Open a 3D table, toggle graph visibility multiple times
+
+load_rom examples/lf9veb.bin
+open_table "EGR Target "
+wait 200
+
+# First toggle
+open_graph
+wait 300
+close_graph
+wait 200
+
+# Second toggle
+open_graph
+wait 300
+close_graph
+wait 200
+
+# Third toggle
+open_graph
+wait 300
+close_graph
+wait 200
+
+# Fourth toggle
+open_graph
+wait 300

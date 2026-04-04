@@ -62,13 +62,15 @@ python main.py
 - Automatic ROM ID detection and XML definition matching
 - Read NC Miata ECU ROM binary files
 - View 1D, 2D, and 3D tables with proper axis labels
+- Interleaved 3D table support for TCM-style ROMs
 - Save modified ROM files
 - ROM ID verification
 
 ### Table Browser
 - Browse tables organized by category
-- Search tables by category, name or address 
-- Show only modified tables.
+- Search tables by category, name or address
+- Show only modified tables
+- Configurable column visibility (Type, Address)
 
 ### Table Editing
 - Direct cell value editing with validation
@@ -77,6 +79,7 @@ python main.py
 - Multiply selected cells by a factor
 - Set all selected cells to a specific value
 - Increment/Decrement values (`+`/`-` keys)
+- Round selection to coarser precision (`R` key)
 - Smoothing filter for selected cells (`S` key)
 - Vertical interpolation (`V` key)
 - Horizontal interpolation (`H` key)
@@ -96,9 +99,11 @@ python main.py
 - Configurable color maps
 
 ### ECU Flashing
+- Dedicated ECU Programming window (Tools > ECU Programming)
 - Native J2534/UDS flash — read and write ECU ROMs directly via Tactrix OpenPort 2.0
 - Flash ROM to ECU with progress tracking and abort support (`Ctrl+Shift+F`)
 - Read ROM from ECU — dump the current calibration
+- Scan RAM — dump ECU RAM for diagnostics
 - Read and clear Diagnostic Trouble Codes (DTCs)
 - Seed-key security access authentication
 - SBL (Secondary Boot Loader) upload for programming session
@@ -127,11 +132,16 @@ python main.py
 
 ### User Interface
 - Main window toolbar and per-table viewer toolbar with quick-access buttons
+- Screenshot capture (`F12`) from main window or table viewer
 - Multi-ROM support with tabs
 - Per-ROM color swatches on tabs to easily identify which ROM is which when multiple files are open
+- Single-instance support — opening a `.bin` file reuses the running window
+- Drag-and-drop ROM files onto the main window
+- Command-line file argument (`NCFlash.exe file.bin`)
 - Multi-window table viewers
 - Recent files list
 - Session restoration (automatically reopen last ROM)
+- Per-session log files saved to `~/.nc-flash/logs/`
 - First-run setup wizard for metadata configuration
 - Configurable settings (font size, color maps, export paths)
 - Scaling property editor for table definitions
@@ -159,11 +169,13 @@ python main.py
 | `Ctrl+E` | Export to CSV |
 | `+` | Increment selected cells |
 | `-` | Decrement selected cells |
+| `R` | Round selection |
 | `V` | Vertical interpolation |
 | `H` | Horizontal interpolation |
 | `B` | Bilinear interpolation |
 | `S` | Smooth selection |
 | `G` | Toggle graph panel |
+| `F12` | Screenshot |
 | `Ctrl+O` | Open ROM file |
 | `Ctrl+Shift+D` | Compare open ROMs |
 | `Ctrl+Shift+F` | Flash ROM to ECU |

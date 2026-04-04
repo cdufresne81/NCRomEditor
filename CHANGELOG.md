@@ -7,11 +7,16 @@ All notable changes to NC Flash are documented here.
 ### Changed
 - **`.gitignore` cleanup** — Added `tests/gui/debug_*.txt` pattern and lowercase `thinking-pad.md` to `.gitignore`; removed 6 one-off debug GUI test scripts
 - **Coverage is now opt-in** — Removed `--cov` flags from `pytest.ini` addopts so test runs are faster by default. Run `pytest --cov=src --cov-report=term-missing` when coverage is needed
+- **Interpolation log level reduced** — Interpolation success messages (horizontal, vertical, 2D bilinear) downgraded from `info` to `debug` to reduce log noise during normal editing
+- **README feature list updated** — Added interleaved 3D tables, column visibility, round key, ECU Programming window, and other v2.6.1 features to the README
 
 ### Removed
 - **Dead `GraphViewer` class** — Standalone graph window class in `graph_viewer.py` was never imported; removed along with its `matplotlib.pyplot` import and `APP_NAME` constant
 - **Dead `_apply_table_style` method** — Unused delegation method in `table_viewer.py` that was superseded by `_apply_table_style_internal`
 - **Trivial `_make_icon`/`_make_toolbar_icon` wrappers** — Removed pass-through methods in `MainWindow` and `TableViewerWindow` that simply delegated to `make_icon()`; callers now invoke `make_icon()` directly
+
+### Added
+- **Code audit documentation** — `docs/internal/CODE_AUDIT.md` captures full codebase audit findings (bugs, dead code, duplication, test gaps) from the v2.6.1 audit pass
 
 ### Fixed
 - **Stale README version and project structure** — Updated version from v2.3.0 to v2.6.1, added missing `src/ecu/` module tree (13 files) and new UI files (`ecu_window.py`, `flash_mixin.py`, `flash_setup_dialog.py`, `patch_dialog.py`), and refreshed the development status description
