@@ -13,6 +13,7 @@ All notable changes to NC Flash are documented here.
 - **display_to_raw bypasses `^` to `**` expression conversion** — `display_to_raw` and `_axis_display_to_raw` called `simple_eval` directly on scaling `frexpr` without converting calculator-style `^` exponentiation to Python `**`. Now delegates to `ScalingConverter.from_display()` which handles the conversion
 - **Compare window cleanup for version comparisons** — CompareWindow `closeEvent` now clears both `compare_window` and `_compare_window` attributes on the parent, fixing a leak where history-viewer comparisons were never cleaned up due to an attribute name mismatch
 - **Redundant x-axis read in interleaved 3D tables** — `_read_interleaved_3d()` read x-axis data twice; removed the duplicate read inside the scaling branch since the unconditional read above already populated `x_raw`
+- **Deduplicate `handle_rom_operation_error`** — Extracted the duplicated error handler from `main.py` and `project_mixin.py` into a shared `src/ui/error_helpers.py` module, eliminating code duplication
 - **Orange selection CSS inconsistency** — `display.py` helper had an orange selection style that was never applied; replaced with the blue selection style used by the actual code path
 - **Inline `Path` re-import in `main.py`** — `_find_document_by_rom_path` redundantly imported `Path as _Path`; now uses the module-level `Path` import
 - **Stale `run-mcp.bat` reference** — MCP connection info dialog referenced a non-existent batch file; now shows the actual `python -m src.mcp.server` command

@@ -35,15 +35,9 @@ from src.ui.project_wizard import ProjectWizard
 from src.ui.commit_dialog import CommitDialog
 from src.ui.compare_window import CompareWindow
 from src.ui.history_viewer import HistoryViewer
+from src.ui.error_helpers import handle_rom_operation_error
 
 logger = get_logger(__name__)
-
-
-def _handle_rom_operation_error(parent, operation: str, exception: Exception):
-    """Handle common ROM operation errors with consistent logging and user feedback"""
-    error_msg = f"Failed to {operation}:\n{str(exception)}"
-    logger.error(error_msg.replace("\n", " "))
-    QMessageBox.critical(parent, "Error", error_msg)
 
 
 class ProjectMixin:
@@ -74,7 +68,7 @@ class ProjectMixin:
                 )
 
             except RomEditorError as e:
-                _handle_rom_operation_error(self, "create project", e)
+                handle_rom_operation_error(self, "create project", e)
             except Exception as e:
                 logger.exception(
                     f"Unexpected error creating project: {type(e).__name__}: {e}"
@@ -149,7 +143,7 @@ class ProjectMixin:
                 )
 
         except RomEditorError as e:
-            _handle_rom_operation_error(self, "open project", e)
+            handle_rom_operation_error(self, "open project", e)
         except Exception as e:
             logger.exception(
                 f"Unexpected error opening project: {type(e).__name__}: {e}"
@@ -220,7 +214,7 @@ class ProjectMixin:
                 self.statusBar().showMessage(f"Saved version {commit.version}")
 
             except RomEditorError as e:
-                _handle_rom_operation_error(self, "commit changes", e)
+                handle_rom_operation_error(self, "commit changes", e)
             except Exception as e:
                 logger.exception(
                     f"Unexpected error committing changes: {type(e).__name__}: {e}"
@@ -425,7 +419,7 @@ class ProjectMixin:
                 self.statusBar().showMessage(f"Reverted to {restored}")
 
             except RomEditorError as e:
-                _handle_rom_operation_error(self, "revert version", e)
+                handle_rom_operation_error(self, "revert version", e)
             except Exception as e:
                 logger.exception(f"Unexpected error reverting: {type(e).__name__}: {e}")
                 QMessageBox.critical(
@@ -456,7 +450,7 @@ class ProjectMixin:
                 self.statusBar().showMessage(f"Deleted v{version}")
 
             except RomEditorError as e:
-                _handle_rom_operation_error(self, "delete version", e)
+                handle_rom_operation_error(self, "delete version", e)
             except Exception as e:
                 logger.exception(
                     f"Unexpected error deleting version: {type(e).__name__}: {e}"

@@ -77,21 +77,9 @@ from src.ui.session_mixin import SessionMixin
 from src.ui.mcp_mixin import McpMixin
 from src.ui.flash_mixin import FlashMixin
 
+from src.ui.error_helpers import handle_rom_operation_error
+
 logger = get_logger(__name__)
-
-
-def handle_rom_operation_error(parent, operation: str, exception: Exception):
-    """
-    Handle common ROM operation errors with consistent logging and user feedback
-
-    Args:
-        parent: Parent widget for message box
-        operation: Description of operation that failed (e.g., "open ROM file")
-        exception: The exception that was raised
-    """
-    error_msg = f"Failed to {operation}:\n{str(exception)}"
-    logger.error(error_msg.replace("\n", " "))
-    QMessageBox.critical(parent, "Error", error_msg)
 
 
 class _DropOverlayWidget(QWidget):
