@@ -17,8 +17,6 @@ This is a mixin class — it has no __init__ and relies on MainWindow providing:
 - self.statusBar() method
 """
 
-import tempfile
-import os
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -268,47 +266,28 @@ class ProjectMixin:
                 dialog._compare_window = None
 
         try:
-            # Load base version data (previous version)
             base_version = commit.version - 1 if commit.version > 0 else 0
-            base_rom_data = self.project_manager.load_version_data(base_version)
-            commit_rom_data = self.project_manager.load_version_data(commit.version)
+            base_path = self.project_manager.get_snapshot_path(base_version)
+            commit_path = self.project_manager.get_snapshot_path(commit.version)
 
-            if base_rom_data is None:
+            if base_path is None:
                 QMessageBox.warning(
                     self,
                     "Version Not Found",
-                    f"Could not load base version {base_version} data.",
+                    f"Snapshot not found for version {base_version}.",
                 )
                 return
 
-            if commit_rom_data is None:
+            if commit_path is None:
                 QMessageBox.warning(
                     self,
                     "Version Not Found",
-                    f"Could not load version {commit.version} data.",
+                    f"Snapshot not found for version {commit.version}.",
                 )
                 return
 
-            # Write both versions to temp files for RomReader
-            base_tmp = tempfile.NamedTemporaryFile(
-                delete=False, suffix=".bin", prefix="base_"
-            )
-            base_tmp.write(base_rom_data)
-            base_tmp.close()
-
-            commit_tmp = tempfile.NamedTemporaryFile(
-                delete=False, suffix=".bin", prefix="commit_"
-            )
-            commit_tmp.write(commit_rom_data)
-            commit_tmp.close()
-
-            try:
-                base_reader = RomReader(base_tmp.name, document.rom_definition)
-                commit_reader = RomReader(commit_tmp.name, document.rom_definition)
-            except Exception:
-                os.unlink(base_tmp.name)
-                os.unlink(commit_tmp.name)
-                raise
+            base_reader = RomReader(str(base_path), document.rom_definition)
+            commit_reader = RomReader(str(commit_path), document.rom_definition)
 
             # Build version labels
             base_commit = self.project_manager.get_commit_by_version(base_version)
@@ -346,22 +325,7 @@ class ProjectMixin:
                     "No Differences",
                     f"No table differences found between v{base_version} and v{commit.version}.",
                 )
-                os.unlink(base_tmp.name)
-                os.unlink(commit_tmp.name)
                 return
-
-            # Clean up temp files when the window closes
-            def _cleanup():
-                try:
-                    os.unlink(base_tmp.name)
-                except OSError:
-                    pass
-                try:
-                    os.unlink(commit_tmp.name)
-                except OSError:
-                    pass
-
-            window.destroyed.connect(_cleanup)
 
             # Track single instance on the dialog
             if dialog:

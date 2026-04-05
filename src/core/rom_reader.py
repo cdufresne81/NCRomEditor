@@ -271,7 +271,7 @@ class RomReader:
         self.definition = definition
         self.rom_data = None
 
-        logger.info(f"Initializing ROM reader for {rom_path}")
+        logger.debug(f"Initializing ROM reader for {rom_path}")
         # Load entire ROM into memory (they're < 1MB)
         self._load_rom()
 
@@ -285,7 +285,7 @@ class RomReader:
         try:
             with open(self.rom_path, "rb") as f:
                 self.rom_data = bytearray(f.read())
-            logger.info(f"Loaded {len(self.rom_data)} bytes from ROM file")
+            logger.debug(f"Loaded {len(self.rom_data)} bytes from ROM file")
         except IOError as e:
             logger.error(f"Failed to read ROM file {self.rom_path}: {e}")
             raise RomReadError(f"Failed to read ROM file: {e}")
