@@ -32,7 +32,7 @@ from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from src.ui.icons import make_icon
 
 from src.utils.logging_config import setup_logging, get_logger
-from src.utils.paths import get_app_root
+from src.utils.paths import get_app_root, get_workspace_path
 from src.utils.settings import get_settings
 from src.utils.constants import (
     APP_NAME,
@@ -484,7 +484,8 @@ class MainWindow(
         tb.setMovable(False)
         tb.setFloatable(False)
         tb.setIconSize(QSize(20, 20))
-        tb.setStyleSheet("""
+        tb.setStyleSheet(
+            """
             QToolBar {
                 spacing: 1px;
                 padding: 1px 4px;
@@ -502,7 +503,8 @@ class MainWindow(
             QToolButton:pressed {
                 background: rgba(128, 128, 128, 0.3);
             }
-        """)
+        """
+        )
 
         act = tb.addAction(make_icon(self, "open"), "")
         act.setToolTip("Open  (Ctrl+O)")
@@ -916,7 +918,8 @@ class MainWindow(
         convenience file and must not crash the app.
         """
         try:
-            workspace_path = get_app_root() / "workspace.json"
+            workspace_path = get_workspace_path()
+            workspace_path.parent.mkdir(parents=True, exist_ok=True)
             if self.tab_bar.count() == 0:
                 workspace_path.unlink(missing_ok=True)
                 return
@@ -962,7 +965,7 @@ class MainWindow(
     def _delete_workspace_state(self):
         """Delete workspace.json (called on app exit)."""
         try:
-            (get_app_root() / "workspace.json").unlink(missing_ok=True)
+            get_workspace_path().unlink(missing_ok=True)
         except Exception:
             logger.debug("Failed to delete workspace.json", exc_info=True)
 

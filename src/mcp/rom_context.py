@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..core.exceptions import RomEditorError
-from ..utils.paths import get_app_root
+from ..utils.paths import get_workspace_path
 
 
 class RomContext:
@@ -82,7 +82,7 @@ class RomContext:
         Returns the file contents (open ROMs, active ROM) if the file
         exists, or a message indicating no ROMs are open.
         """
-        workspace_path = get_app_root() / "workspace.json"
+        workspace_path = get_workspace_path()
         if not workspace_path.exists():
             return {
                 "open_roms": [],

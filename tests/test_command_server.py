@@ -229,14 +229,20 @@ class TestRomContextLiveBridge:
 
     def test_post_to_app_no_workspace(self, ctx, tmp_path, monkeypatch):
         """When workspace.json has no command_api_url, returns error."""
-        monkeypatch.setattr("src.mcp.rom_context.get_app_root", lambda: tmp_path)
+        monkeypatch.setattr(
+            "src.mcp.rom_context.get_workspace_path",
+            lambda: tmp_path / "workspace.json",
+        )
         result = ctx._post_to_app({"endpoint": "/api/modified", "rom_path": "x"})
         assert result["success"] is False
         assert "not available" in result["error"]
 
     def test_post_to_app_connection_refused(self, ctx, tmp_path, monkeypatch):
         """When the app is not running, returns connection error."""
-        monkeypatch.setattr("src.mcp.rom_context.get_app_root", lambda: tmp_path)
+        monkeypatch.setattr(
+            "src.mcp.rom_context.get_workspace_path",
+            lambda: tmp_path / "workspace.json",
+        )
         # Write workspace.json with a URL that won't connect
         workspace = {"command_api_url": "http://127.0.0.1:19999"}
         (tmp_path / "workspace.json").write_text(json.dumps(workspace))

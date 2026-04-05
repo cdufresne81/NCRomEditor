@@ -15,6 +15,7 @@ All notable changes to NC Flash are documented here.
 - **4 new MCP command API endpoints** — `/api/rom-info`, `/api/list-tables`, `/api/table-statistics`, `/api/compare-tables` — all served by the app, enabling MCP tools to work with any ROM the app can open
 - **Code audit documentation** — `docs/internal/CODE_AUDIT.md` captures full codebase audit findings (bugs, dead code, duplication, test gaps) from the v2.6.1 audit pass
 - **UI test coverage** — 70 new tests covering compare_window diff computation, table_browser filtering/search/selection, graph_viewer color calculations, and table_viewer_window signal forwarding and coordinate extraction
+- **Interpolation regression tests** — 24 new tests for extracted pure functions `compute_interpolated_1d_values()` and `compute_interpolated_2d_values()`, including dedicated auto-round regression tests that catch the `round_one_level_coarser` bug
 
 ### Changed
 - **Settings dialog height** — Reduced default height from 700 to 640 pixels
@@ -50,6 +51,8 @@ All notable changes to NC Flash are documented here.
 - **Inline `Path` re-import in `main.py`** — `_find_document_by_rom_path` redundantly imported `Path as _Path`; now uses the module-level `Path` import
 - **Stale `run-mcp.bat` reference** — MCP connection info dialog referenced a non-existent batch file; now shows the actual `python -m src.mcp.server` command
 - **test_runner set_level_filter bug** — `set_level_filter()` accessed non-existent `self.main_window.table_browser`; now correctly retrieves the table browser from the current ROM document via `get_current_document()`
+- **Interpolation auto-round destroys precision** — Vertical, horizontal, and 2D interpolation used `round_one_level_coarser()` (the "Round Selection" function) when auto-round was enabled, coarsening values by one decimal level (e.g., 2.04 → 2.0, 0.01 → 0.0). Now uses `round(val, precision)` to preserve the format's full decimal precision, matching smoothing's correct behavior
+- **MCP workspace.json invisible to compiled builds** — App wrote `workspace.json` to `get_app_root()` which resolves to a per-process `_MEIPASS` temp directory in PyInstaller builds. The MCP server subprocess got a different temp dir and could never find the file. Moved to `get_user_data_dir()` (`%APPDATA%/NCFlash`) via new `get_workspace_path()` helper in `paths.py`
 
 ### Removed
 - **Dead `GraphViewer` class** — Standalone graph window class in `graph_viewer.py` was never imported; removed along with its `matplotlib.pyplot` import and `APP_NAME` constant

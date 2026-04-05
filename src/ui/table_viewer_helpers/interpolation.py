@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QMessageBox
 from ...core.rom_definition import TableType, AxisType
 from ...core.rom_reader import ScalingConverter
 from ...utils.formatting import (
-    round_one_level_coarser,
+    _get_format_precision,
     get_scaling_format,
     get_axis_format,
 )
@@ -25,6 +25,87 @@ if TYPE_CHECKING:
     from .display import TableDisplayHelper
 
 logger = logging.getLogger(__name__)
+
+
+def compute_interpolated_1d_values(
+    first_pos,
+    first_val,
+    last_pos,
+    last_val,
+    auto_round=False,
+    precision=2,
+):
+    """Compute linearly interpolated values for all integer positions between anchors.
+
+    Args:
+        first_pos: position of the first anchor.
+        first_val: value at the first anchor.
+        last_pos: position of the last anchor.
+        last_val: value at the last anchor.
+        auto_round: whether to round results to ``precision`` decimals.
+        precision: number of decimal places for rounding.
+
+    Returns:
+        dict mapping position to interpolated value (excludes anchors).
+    """
+    if last_pos <= first_pos + 1:
+        return {}
+
+    result = {}
+    for pos in range(first_pos + 1, last_pos):
+        t = (pos - first_pos) / (last_pos - first_pos)
+        new_val = first_val + t * (last_val - first_val)
+        if auto_round:
+            new_val = round(new_val, precision)
+        result[pos] = new_val
+
+    return result
+
+
+def compute_interpolated_2d_values(
+    v00,
+    v10,
+    v01,
+    v11,
+    rows,
+    cols,
+    auto_round=False,
+    precision=2,
+):
+    """Compute bilinearly interpolated values over a grid from four corners.
+
+    Args:
+        v00: top-left corner value.
+        v10: top-right corner value.
+        v01: bottom-left corner value.
+        v11: bottom-right corner value.
+        rows: number of rows in the grid.
+        cols: number of columns in the grid.
+        auto_round: whether to round results to ``precision`` decimals.
+        precision: number of decimal places for rounding.
+
+    Returns:
+        dict mapping (row, col) to interpolated value.
+    """
+    result = {}
+    for row in range(rows):
+        for col in range(cols):
+            ty = row / (rows - 1) if rows > 1 else 0.0
+            tx = col / (cols - 1) if cols > 1 else 0.0
+
+            new_val = (
+                (1 - tx) * (1 - ty) * v00
+                + tx * (1 - ty) * v10
+                + (1 - tx) * ty * v01
+                + tx * ty * v11
+            )
+
+            if auto_round:
+                new_val = round(new_val, precision)
+
+            result[(row, col)] = new_val
+
+    return result
 
 
 class TableInterpolationHelper:
@@ -104,7 +185,7 @@ class TableInterpolationHelper:
         all_changes = []
         axis_changes = []
 
-        # Pre-compute formats for auto-round
+        # Pre-compute formats and precisions for auto-round
         auto_round = get_settings().get_auto_round()
         if auto_round:
             data_fmt = get_scaling_format(
@@ -113,6 +194,8 @@ class TableInterpolationHelper:
             axis_fmt_str = get_axis_format(
                 self.ctx.rom_definition, self.ctx.current_table, axis_type
             )
+            data_precision = _get_format_precision(data_fmt)
+            axis_precision = _get_format_precision(axis_fmt_str)
 
         with frozen_table_updates(self.ctx.table_widget):
             for sel_range in selected_ranges:
@@ -199,9 +282,24 @@ class TableInterpolationHelper:
                         )
                         continue
 
-                    # Interpolate all cells between first and last
+                    # Pre-compute all interpolated values
+                    interp_precision = (
+                        (axis_precision if is_axis_line == axis_key else data_precision)
+                        if auto_round
+                        else 2
+                    )
+                    interp_values = compute_interpolated_1d_values(
+                        first_pos,
+                        first_val,
+                        last_pos,
+                        last_val,
+                        auto_round=auto_round,
+                        precision=interp_precision,
+                    )
+
+                    # Apply interpolated values to widget cells
                     cells_interpolated = 0
-                    for pos in range(first_pos + 1, last_pos):
+                    for pos, new_val in interp_values.items():
                         row = pos if is_vertical else line_idx
                         col = line_idx if is_vertical else pos
                         item = self.ctx.table_widget.item(row, col)
@@ -220,14 +318,6 @@ class TableInterpolationHelper:
                                 f"{line_label} {line_idx}, pos {pos}: skipping (can't parse value)"
                             )
                             continue
-
-                        # Linear interpolation
-                        t = (pos - first_pos) / (last_pos - first_pos)
-                        new_val = first_val + t * (last_val - first_val)
-
-                        if auto_round:
-                            fmt = axis_fmt_str if is_axis_line == axis_key else data_fmt
-                            new_val = round_one_level_coarser(new_val, fmt)
 
                         if abs(new_val - old_val) > 1e-9:
                             if is_axis_line == axis_key:
@@ -391,12 +481,13 @@ class TableInterpolationHelper:
 
         all_changes = []
 
-        # Pre-compute format for auto-round
+        # Pre-compute format and precision for auto-round
         auto_round = get_settings().get_auto_round()
         if auto_round:
             data_fmt = get_scaling_format(
                 self.ctx.rom_definition, self.ctx.current_table.scaling
             )
+            data_precision = _get_format_precision(data_fmt)
 
         with frozen_table_updates(self.ctx.table_widget):
             for sel_range in selected_ranges:
@@ -437,7 +528,21 @@ class TableInterpolationHelper:
                     logger.debug("Missing corner value(s), skipping this selection")
                     continue
 
-                # Apply bilinear interpolation to all cells in the selection
+                # Pre-compute all interpolated values
+                grid_rows = bottom_row - top_row + 1
+                grid_cols = right_col - left_col + 1
+                interp_values = compute_interpolated_2d_values(
+                    v00,
+                    v10,
+                    v01,
+                    v11,
+                    grid_rows,
+                    grid_cols,
+                    auto_round=auto_round,
+                    precision=data_precision if auto_round else 2,
+                )
+
+                # Apply interpolated values to widget cells
                 for row in range(top_row, bottom_row + 1):
                     for col in range(left_col, right_col + 1):
                         item = self.ctx.table_widget.item(row, col)
@@ -445,29 +550,7 @@ class TableInterpolationHelper:
                             continue
 
                         coords = item.data(Qt.UserRole)
-
-                        # Normalize position to [0, 1] range
-                        if bottom_row == top_row:
-                            ty = 0.0
-                        else:
-                            ty = (row - top_row) / (bottom_row - top_row)
-
-                        if right_col == left_col:
-                            tx = 0.0
-                        else:
-                            tx = (col - left_col) / (right_col - left_col)
-
-                        # Bilinear interpolation formula
-                        # f(x,y) = (1-x)(1-y)f00 + x(1-y)f10 + (1-x)yf01 + xyf11
-                        new_val = (
-                            (1 - tx) * (1 - ty) * v00
-                            + tx * (1 - ty) * v10
-                            + (1 - tx) * ty * v01
-                            + tx * ty * v11
-                        )
-
-                        if auto_round:
-                            new_val = round_one_level_coarser(new_val, data_fmt)
+                        new_val = interp_values[(row - top_row, col - left_col)]
 
                         try:
                             old_val = float(item.text())

@@ -55,7 +55,11 @@ class TestGetWorkspace:
         """When workspace.json does not exist, return empty open_roms with message."""
         import src.mcp.rom_context as rc_mod
 
-        monkeypatch.setattr(rc_mod, "get_app_root", lambda: Path("/nonexistent/path"))
+        monkeypatch.setattr(
+            rc_mod,
+            "get_workspace_path",
+            lambda: Path("/nonexistent/path/workspace.json"),
+        )
         result = ctx.get_workspace()
         assert result["open_roms"] == []
         assert "message" in result
@@ -81,7 +85,7 @@ class TestGetWorkspace:
         }
         workspace_file = tmp_path / "workspace.json"
         workspace_file.write_text(json.dumps(workspace_data), encoding="utf-8")
-        monkeypatch.setattr(rc_mod, "get_app_root", lambda: tmp_path)
+        monkeypatch.setattr(rc_mod, "get_workspace_path", lambda: workspace_file)
 
         result = ctx.get_workspace()
         assert result["active_rom"] == "C:/test/rom.bin"
@@ -94,7 +98,7 @@ class TestGetWorkspace:
 
         workspace_file = tmp_path / "workspace.json"
         workspace_file.write_text("not valid json {{{", encoding="utf-8")
-        monkeypatch.setattr(rc_mod, "get_app_root", lambda: tmp_path)
+        monkeypatch.setattr(rc_mod, "get_workspace_path", lambda: workspace_file)
 
         result = ctx.get_workspace()
         assert result["open_roms"] == []
@@ -380,14 +384,20 @@ class TestGetTableStatistics:
 class TestRomContextLiveBridge:
     def test_post_to_app_no_workspace(self, ctx, tmp_path, monkeypatch):
         """When workspace.json has no command_api_url, returns error."""
-        monkeypatch.setattr("src.mcp.rom_context.get_app_root", lambda: tmp_path)
+        monkeypatch.setattr(
+            "src.mcp.rom_context.get_workspace_path",
+            lambda: tmp_path / "workspace.json",
+        )
         result = ctx._post_to_app({"endpoint": "/api/modified", "rom_path": "x"})
         assert result["success"] is False
         assert "not available" in result["error"]
 
     def test_post_to_app_connection_refused(self, ctx, tmp_path, monkeypatch):
         """When the app is not running, returns connection error."""
-        monkeypatch.setattr("src.mcp.rom_context.get_app_root", lambda: tmp_path)
+        monkeypatch.setattr(
+            "src.mcp.rom_context.get_workspace_path",
+            lambda: tmp_path / "workspace.json",
+        )
         workspace = {"command_api_url": "http://127.0.0.1:19999"}
         (tmp_path / "workspace.json").write_text(json.dumps(workspace))
 

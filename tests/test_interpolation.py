@@ -2,7 +2,8 @@
 Tests for interpolation logic and ScalingConverter integration.
 
 These tests exercise actual production code: ScalingConverter round-trips
-through interpolated values, and _convert_expr_to_python expression conversion.
+through interpolated values, _convert_expr_to_python expression conversion,
+and the pure interpolation computation functions.
 """
 
 import numpy as np
@@ -10,6 +11,10 @@ import pytest
 
 from src.core.rom_reader import ScalingConverter, _convert_expr_to_python
 from src.core.rom_definition import Scaling
+from src.ui.table_viewer_helpers.interpolation import (
+    compute_interpolated_1d_values,
+    compute_interpolated_2d_values,
+)
 
 
 class TestConvertExprToPython:
@@ -223,3 +228,227 @@ class TestScalingConverterEdgeCases:
         raw_back = converter.from_display(display)
         assert isinstance(raw_back, float)
         assert raw_back == pytest.approx(3500.0)
+
+
+# ------------------------------------------------------------------
+# Linear (1D) interpolation computation tests
+# ------------------------------------------------------------------
+
+
+class TestLinearInterpolation1D:
+    """Test compute_interpolated_1d_values pure function."""
+
+    def test_linear_3_points(self):
+        """Midpoint between 1.0 and 3.0 should be 2.0."""
+        result = compute_interpolated_1d_values(0, 1.0, 2, 3.0)
+        assert result[1] == pytest.approx(2.0)
+
+    def test_linear_5_points(self):
+        """Endpoints 0.0 and 4.0 should produce evenly spaced intermediates."""
+        result = compute_interpolated_1d_values(0, 0.0, 4, 4.0)
+        assert result[1] == pytest.approx(1.0)
+        assert result[2] == pytest.approx(2.0)
+        assert result[3] == pytest.approx(3.0)
+
+    def test_same_endpoints(self):
+        """When both endpoints are equal, all intermediates should match."""
+        result = compute_interpolated_1d_values(0, 5.0, 4, 5.0)
+        for pos in [1, 2, 3]:
+            assert result[pos] == pytest.approx(5.0)
+
+    def test_2_adjacent_no_gap(self):
+        """Only 2 adjacent cells (nothing between) returns empty."""
+        result = compute_interpolated_1d_values(0, 1.0, 1, 3.0)
+        assert result == {}
+
+    def test_non_integer_values(self):
+        """Interpolation with fractional endpoint values."""
+        result = compute_interpolated_1d_values(0, 1.5, 2, 3.5)
+        assert result[1] == pytest.approx(2.5)
+
+    def test_negative_values(self):
+        """Negative endpoint values interpolate correctly."""
+        result = compute_interpolated_1d_values(0, -10.0, 4, 10.0)
+        assert result[1] == pytest.approx(-5.0)
+        assert result[2] == pytest.approx(0.0)
+        assert result[3] == pytest.approx(5.0)
+
+    def test_descending_values(self):
+        """Interpolation works when last value is smaller than first."""
+        result = compute_interpolated_1d_values(0, 10.0, 2, 4.0)
+        assert result[1] == pytest.approx(7.0)
+
+
+class TestLinearInterpolation1DAutoRound:
+    """Regression tests: auto_round must use round(val, precision), not round_one_level_coarser."""
+
+    def test_auto_round_preserves_2_decimal_places(self):
+        """With precision=2, interpolated values should keep 2 decimal places."""
+        # Endpoints chosen to produce a value with 2 meaningful decimals
+        result = compute_interpolated_1d_values(
+            0, 1.00, 4, 1.20, auto_round=True, precision=2
+        )
+        # Intermediate at pos 1: 1.00 + 0.25 * 0.20 = 1.05
+        assert result[1] == pytest.approx(1.05)
+        # Intermediate at pos 2: 1.00 + 0.50 * 0.20 = 1.10
+        assert result[2] == pytest.approx(1.10)
+
+    def test_auto_round_does_not_snap_to_tenths(self):
+        """THE BUG REGRESSION: values like 2.04 must NOT snap to 2.0.
+
+        round_one_level_coarser would detect 2 effective decimals in 2.04
+        and round to 1 decimal → 2.0.  This test catches that regression.
+        """
+        # Endpoints that produce 2.04 at the midpoint
+        result = compute_interpolated_1d_values(
+            0, 2.00, 2, 2.08, auto_round=True, precision=2
+        )
+        midpoint = result[1]
+        # Must be 2.04, NOT 2.0
+        assert midpoint != 2.0, "Value was incorrectly snapped to 2.0"
+        assert midpoint == pytest.approx(2.04)
+
+    def test_auto_round_small_values_not_zeroed(self):
+        """Small values like 0.01 must NOT be rounded to 0.0.
+
+        round_one_level_coarser(0.01, '.2f') → effective=2 → round to 1 → 0.0.
+        """
+        result = compute_interpolated_1d_values(
+            0, 0.00, 2, 0.02, auto_round=True, precision=2
+        )
+        midpoint = result[1]
+        assert midpoint != 0.0, "Small value was incorrectly zeroed"
+        assert midpoint == pytest.approx(0.01)
+
+    def test_auto_round_0_decimal_places(self):
+        """Integer format should round to whole numbers."""
+        result = compute_interpolated_1d_values(
+            0, 10.0, 2, 20.0, auto_round=True, precision=0
+        )
+        assert result[1] == pytest.approx(15.0)
+
+    def test_auto_round_3_decimal_places(self):
+        """Higher precision format preserves 3 decimals."""
+        result = compute_interpolated_1d_values(
+            0, 1.000, 3, 1.003, auto_round=True, precision=3
+        )
+        assert result[1] == pytest.approx(1.001)
+        assert result[2] == pytest.approx(1.002)
+
+    def test_no_auto_round_preserves_full_precision(self):
+        """Without auto_round, full floating-point precision is kept."""
+        result = compute_interpolated_1d_values(0, 0.0, 3, 1.0, auto_round=False)
+        # 1/3 = 0.333...
+        assert result[1] == pytest.approx(1 / 3)
+
+
+# ------------------------------------------------------------------
+# Bilinear (2D) interpolation computation tests
+# ------------------------------------------------------------------
+
+
+class TestBilinearInterpolation2D:
+    """Test compute_interpolated_2d_values pure function."""
+
+    def test_uniform_corners(self):
+        """All corners same value → all cells get that value."""
+        result = compute_interpolated_2d_values(5.0, 5.0, 5.0, 5.0, 3, 3)
+        for (r, c), val in result.items():
+            assert val == pytest.approx(5.0)
+
+    def test_linear_gradient_horizontal(self):
+        """TL=0, TR=10, BL=0, BR=10 → horizontal gradient."""
+        result = compute_interpolated_2d_values(0.0, 10.0, 0.0, 10.0, 3, 3)
+        # Column 0: all 0.0
+        assert result[(0, 0)] == pytest.approx(0.0)
+        assert result[(1, 0)] == pytest.approx(0.0)
+        # Column 1 (middle): all 5.0
+        assert result[(0, 1)] == pytest.approx(5.0)
+        assert result[(1, 1)] == pytest.approx(5.0)
+        # Column 2: all 10.0
+        assert result[(0, 2)] == pytest.approx(10.0)
+
+    def test_linear_gradient_vertical(self):
+        """TL=0, TR=0, BL=10, BR=10 → vertical gradient."""
+        result = compute_interpolated_2d_values(0.0, 0.0, 10.0, 10.0, 3, 3)
+        # Row 0: all 0.0
+        assert result[(0, 0)] == pytest.approx(0.0)
+        assert result[(0, 1)] == pytest.approx(0.0)
+        # Row 1 (middle): all 5.0
+        assert result[(1, 0)] == pytest.approx(5.0)
+        assert result[(1, 1)] == pytest.approx(5.0)
+        # Row 2: all 10.0
+        assert result[(2, 0)] == pytest.approx(10.0)
+
+    def test_bilinear_center(self):
+        """Center of 4 different corners = average of all four."""
+        result = compute_interpolated_2d_values(1.0, 2.0, 3.0, 4.0, 3, 3)
+        center = result[(1, 1)]
+        assert center == pytest.approx(2.5)
+
+    def test_corners_preserved(self):
+        """Corner positions must get exact corner values."""
+        v00, v10, v01, v11 = 1.0, 2.0, 3.0, 4.0
+        result = compute_interpolated_2d_values(v00, v10, v01, v11, 3, 3)
+        assert result[(0, 0)] == pytest.approx(v00)
+        assert result[(0, 2)] == pytest.approx(v10)
+        assert result[(2, 0)] == pytest.approx(v01)
+        assert result[(2, 2)] == pytest.approx(v11)
+
+    def test_single_row(self):
+        """1-row grid: ty=0 everywhere, only horizontal interpolation."""
+        result = compute_interpolated_2d_values(0.0, 10.0, 0.0, 10.0, 1, 3)
+        assert result[(0, 0)] == pytest.approx(0.0)
+        assert result[(0, 1)] == pytest.approx(5.0)
+        assert result[(0, 2)] == pytest.approx(10.0)
+
+
+class TestBilinearInterpolation2DAutoRound:
+    """Regression tests: auto_round must use round(val, precision), not round_one_level_coarser."""
+
+    def test_auto_round_preserves_2_decimal_places(self):
+        """With precision=2, bilinear result keeps format precision."""
+        result = compute_interpolated_2d_values(
+            2.00, 2.10, 2.00, 2.10, 3, 3, auto_round=True, precision=2
+        )
+        center = result[(1, 1)]
+        assert center == pytest.approx(2.05)
+
+    def test_auto_round_does_not_snap_to_tenths(self):
+        """THE BUG REGRESSION: VE-like values must not snap to 0.1 increments.
+
+        round_one_level_coarser with '.2f' would take 2.04 → 2.0 (detects
+        2 effective decimals, rounds to 1 decimal).
+        """
+        # Corners that produce ~2.04 at center
+        result = compute_interpolated_2d_values(
+            1.97, 2.07, 2.02, 2.06, 3, 3, auto_round=True, precision=2
+        )
+        center = result[(1, 1)]
+        assert center != 2.0, "Value was incorrectly snapped to 2.0"
+        # Expected: (1.97 + 2.07 + 2.02 + 2.06) / 4 = 2.03
+        assert center == pytest.approx(2.03)
+
+    def test_auto_round_small_values_not_zeroed(self):
+        """Small values like 0.01 must NOT be zeroed."""
+        result = compute_interpolated_2d_values(
+            0.00, 0.02, 0.00, 0.02, 3, 3, auto_round=True, precision=2
+        )
+        center = result[(1, 1)]
+        assert center != 0.0, "Small value was incorrectly zeroed"
+        assert center == pytest.approx(0.01)
+
+    def test_auto_round_0_decimal_places(self):
+        """Integer format rounds to whole numbers."""
+        result = compute_interpolated_2d_values(
+            0.0, 100.0, 0.0, 100.0, 3, 3, auto_round=True, precision=0
+        )
+        center = result[(1, 1)]
+        assert center == pytest.approx(50.0)
+
+    def test_no_auto_round_preserves_full_precision(self):
+        """Without auto_round, full floating-point precision is kept."""
+        result = compute_interpolated_2d_values(0.0, 1.0, 1.0, 2.0, 3, 3)
+        center = result[(1, 1)]
+        # (0+1+1+2)/4 = 1.0
+        assert center == pytest.approx(1.0)

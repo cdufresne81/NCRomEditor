@@ -27,7 +27,7 @@ def compute_smoothed_values(
     selected_indices,
     blend_factor=0.15,
     auto_round=False,
-    fmt_precision=2,
+    precision=2,
 ):
     """Compute smoothed values using weighted neighbor averaging.
 
@@ -35,8 +35,8 @@ def compute_smoothed_values(
         values: numpy array of current values (1D or 2D).
         selected_indices: list of (data_row, data_col) tuples to smooth.
         blend_factor: how much to blend toward neighbor average (0-1).
-        auto_round: whether to round results to fmt_precision decimals.
-        fmt_precision: number of decimal places for rounding.
+        auto_round: whether to round results to ``precision`` decimals.
+        precision: number of decimal places for rounding.
 
     Returns:
         dict mapping (data_row, data_col) to smoothed value.
@@ -56,7 +56,7 @@ def compute_smoothed_values(
                 neighbor_avg = sum(neighbors) / len(neighbors)
                 result = current + blend_factor * (neighbor_avg - current)
                 if auto_round:
-                    result = round(result, fmt_precision)
+                    result = round(result, precision)
                 smoothed[(data_row, data_col)] = result
         else:
             neighbors = []
@@ -75,7 +75,7 @@ def compute_smoothed_values(
                 neighbor_avg = sum(neighbors) / len(neighbors)
                 result = current + blend_factor * (neighbor_avg - current)
                 if auto_round:
-                    result = round(result, fmt_precision)
+                    result = round(result, precision)
                 smoothed[(data_row, data_col)] = result
 
     return smoothed
@@ -601,7 +601,7 @@ class TableOperationsHelper:
             selected_data_indices,
             blend_factor=blend_factor,
             auto_round=auto_round,
-            fmt_precision=fmt_precision if auto_round else 2,
+            precision=fmt_precision if auto_round else 2,
         )
 
         if not smoothed_values:

@@ -165,7 +165,7 @@ class TestSmoothingAutoRound:
             [(1, 1)],
             blend_factor=BLEND_FACTOR,
             auto_round=True,
-            fmt_precision=2,
+            precision=2,
         )
 
         # Value should stay at 2.03 (neighbors average to 2.03)
@@ -187,7 +187,7 @@ class TestSmoothingAutoRound:
             [(2, 2)],
             blend_factor=BLEND_FACTOR,
             auto_round=True,
-            fmt_precision=2,
+            precision=2,
         )
 
         smoothed = result[(2, 2)]
@@ -204,7 +204,7 @@ class TestSmoothingAutoRound:
             [(1, 0)],
             blend_factor=BLEND_FACTOR,
             auto_round=True,
-            fmt_precision=0,
+            precision=0,
         )
 
         # neighbors [10.0, 12.0], avg = 11.0
@@ -220,7 +220,7 @@ class TestSmoothingAutoRound:
             [(1, 0)],
             blend_factor=BLEND_FACTOR,
             auto_round=True,
-            fmt_precision=3,
+            precision=3,
         )
 
         # neighbors [1.000, 1.010], avg = 1.005

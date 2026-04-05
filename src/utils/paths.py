@@ -45,3 +45,12 @@ def get_user_data_dir() -> Path:
     else:
         base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
     return base / "NCFlash"
+
+
+def get_workspace_path() -> Path:
+    """Get the path to workspace.json for MCP server discovery.
+
+    Both the app (writer) and MCP server subprocess (reader) use this
+    to agree on a shared, stable location that survives across processes.
+    """
+    return get_user_data_dir() / "workspace.json"
