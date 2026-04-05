@@ -328,7 +328,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMinimumSize(720, 560)
-        self.resize(820, 700)
+        self.resize(820, 640)
 
         self.settings = get_settings()
         self._widgets = {}  # key -> input widget

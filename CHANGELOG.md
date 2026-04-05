@@ -5,6 +5,7 @@ All notable changes to NC Flash are documented here.
 ## [Unreleased]
 
 ### Changed
+- **Settings dialog height** — Reduced default height from 700 to 640 pixels
 - **CI: upgrade GitHub Actions to Node.js 24** — Bumped `actions/checkout` v4→v5 and `actions/setup-python` v5→v6 in CI and release workflows to resolve Node.js 20 deprecation warnings
 - **Version diff reads snapshots directly** — Eliminated unnecessary temp file round-trip when comparing ROM versions in History Viewer; snapshot `.bin` files are now passed directly to `RomReader`
 - **ROM reader log level** — Downgraded ROM initialization log messages from INFO to DEBUG to reduce log noise
