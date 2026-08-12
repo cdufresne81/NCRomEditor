@@ -6,11 +6,51 @@ scaling range lookup, and color helpers used across UI, MCP, and
 comparison modules.
 """
 
+import math
 import re
+from typing import Optional
 
 import numpy as np
 
 _PRINTF_PATTERN = re.compile(r"%[-+0 #]*(\d*)\.?(\d*)([diouxXeEfFgGaAcspn%])")
+
+# What a table cell editor accepts keystroke by keystroke: digits, a single
+# decimal separator ('.' or ',' — comma is the decimal mark on many keyboard
+# layouts) and a leading sign. No letter is typeable at all, so 'nan', 'inf'
+# and friends cannot be entered. Sign and decimal separator are required
+# alongside the digits: without them negative and fractional table values
+# would be impossible to enter.
+NUMERIC_INPUT_PATTERN = r"[+-]?\d*[.,]?\d*"
+
+# What counts as a numeric value once committed. Same as the typed form plus
+# scientific notation, which arrives via clipboard paste from spreadsheets.
+# Deliberately excludes the alphabetic spellings Python's float() accepts
+# ('nan', 'inf', 'infinity') and the underscore separator ('1_0').
+NUMERIC_TEXT_PATTERN = r"[+-]?(\d+[.,]?\d*|[.,]\d+)([eE][+-]?\d+)?"
+
+_NUMERIC_TEXT_RE = re.compile(rf"^{NUMERIC_TEXT_PATTERN}$")
+
+
+def parse_numeric_text(text: str) -> Optional[float]:
+    """Parse user-entered text into a finite float, or None if not numeric.
+
+    This is the single gate for text entering table data (cell edits, axis
+    edits, clipboard paste). It rejects anything float() would accept but a
+    ROM cannot hold: 'nan', 'inf', '-infinity', '1_0'. A comma is accepted as
+    the decimal separator and normalized to a point.
+    """
+    if text is None:
+        return None
+    stripped = text.strip()
+    if not _NUMERIC_TEXT_RE.match(stripped):
+        return None
+    try:
+        value = float(stripped.replace(",", "."))
+    except ValueError:
+        return None
+    if not math.isfinite(value):
+        return None
+    return value
 
 
 def printf_to_python_format(printf_format: str) -> str:

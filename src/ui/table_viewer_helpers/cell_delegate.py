@@ -3,13 +3,15 @@ Cell Delegate for Modified Cell Borders and Diff Highlighting
 
 Renders a thin gray border around cells that have been modified during the session.
 Also highlights cells that differ from a base version in diff mode.
+Also restricts the cell editor to numeric input.
 """
 
-from PySide6.QtWidgets import QStyledItemDelegate
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QPen, QColor
+from PySide6.QtWidgets import QLineEdit, QStyledItemDelegate
+from PySide6.QtCore import QRegularExpression, Qt
+from PySide6.QtGui import QPen, QColor, QRegularExpressionValidator
 
 from ...core.rom_definition import TableType
+from ...utils.formatting import NUMERIC_INPUT_PATTERN
 
 
 class ModifiedCellDelegate(QStyledItemDelegate):
@@ -21,6 +23,22 @@ class ModifiedCellDelegate(QStyledItemDelegate):
     def __init__(self, viewer, parent=None):
         super().__init__(parent)
         self.viewer = viewer
+
+    def createEditor(self, parent, option, index):
+        """Return a line edit that only accepts numeric keystrokes.
+
+        Digits, one decimal separator and a leading sign; no letter can be
+        typed at all, so 'nan'/'inf' can never reach the ROM. The
+        parse-and-revert path in TableEditHelper remains the second line of
+        defence for values arriving by other routes (paste, scripting).
+        """
+        editor = QLineEdit(parent)
+        editor.setValidator(
+            QRegularExpressionValidator(
+                QRegularExpression(NUMERIC_INPUT_PATTERN), editor
+            )
+        )
+        return editor
 
     def paint(self, painter, option, index):
         """Paint cell with modified border, diff highlight, and/or axis separator"""

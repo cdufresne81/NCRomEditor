@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Optional, Tuple
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush
 from ...core.rom_definition import TableType, AxisType
+from ...utils.formatting import parse_numeric_text
 from .context import TableViewerContext
 
 if TYPE_CHECKING:
@@ -51,14 +52,13 @@ class TableEditHelper:
 
         data_row, data_col = data_indices
 
-        # Get the new text value
-        new_text = item.text().strip()
-
-        # Try to parse the new value
-        try:
-            new_value = float(new_text)
-        except ValueError:
+        # Parse the new value - non-numeric text is rejected outright
+        new_value = parse_numeric_text(item.text())
+        if new_value is None:
             # Invalid input - revert to old value
+            logger.debug(
+                f"Rejected non-numeric cell entry {item.text()!r} at [{row},{col}]"
+            )
             self._revert_cell(row, col, data_row, data_col)
             return
 
@@ -238,14 +238,13 @@ class TableEditHelper:
         if not axis_table:
             return
 
-        # Get the new text value
-        new_text = item.text().strip()
-
-        # Try to parse the new value
-        try:
-            new_value = float(new_text)
-        except ValueError:
+        # Parse the new value - non-numeric text is rejected outright
+        new_value = parse_numeric_text(item.text())
+        if new_value is None:
             # Invalid input - revert to old value
+            logger.debug(
+                f"Rejected non-numeric axis entry {item.text()!r} at [{row},{col}]"
+            )
             self._revert_axis_cell(row, col, axis_type, data_idx)
             return
 

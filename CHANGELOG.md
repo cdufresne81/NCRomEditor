@@ -2,6 +2,11 @@
 
 All notable changes to NC Flash are documented here.
 
+## [Unreleased]
+
+### Fixed
+- **Table cells accept numbers only (#92)** — letters could be typed into any table cell, and two of them stuck: `nan` and `inf` are spellings `float()` accepts, so they passed the editor's parse check and landed in the table data (and from there into the flashed ROM image) as non-finite values. Enforcement is now in two places. The cell editor installs a validator that only lets digits, one decimal separator (`.` or `,`) and a leading sign through — no a-Z keystroke is typeable at all, so `nan`/`inf` can no longer be spelled. Behind it, every route text can take into table data (cell edit, axis edit, clipboard paste) goes through one shared gate, `utils.formatting.parse_numeric_text`, which rejects the alphabetic float spellings, the underscore separator (`1_0`), and anything non-finite; a rejected entry reverts the cell to its previous value as before. A comma typed as the decimal mark is accepted and normalized to a point, so European/AZERTY keyboard entry works. Tests: `tests/test_numeric_cell_validation.py`.
+
 ## [v2.12.0] - 2026-07-18
 
 ### Added

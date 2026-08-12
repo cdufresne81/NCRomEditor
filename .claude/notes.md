@@ -1,5 +1,30 @@
 # Session Notes
 
+## 🔢 claude/numeric-values-tables-of1s5u — #92 numeric-only table cells (Aug 11, 2026)
+
+**Root cause (confirmed by repro, not inspection):** `on_cell_changed` /
+`_on_axis_cell_changed` / paste all used bare `float(text)`. Plain letters
+reverted fine, but `nan` and `inf` ARE valid `float()` spellings — they were
+committed into `current_data["values"]` and would flow into the flashed image.
+Repro before the fix: typing `nan` in a cell → cell reads `nan`, data = nan.
+
+**Fix, two layers:**
+1. `ModifiedCellDelegate.createEditor` (new) returns a `QLineEdit` with a
+   `QRegularExpressionValidator` over `utils.formatting.NUMERIC_INPUT_PATTERN`
+   (`[+-]?\d*[.,]?\d*`) — no a-Z keystroke is typeable, per user request.
+   Sign and decimal separator ARE allowed (without them negative/fractional
+   table values could not be entered); `,` is accepted as decimal mark and
+   normalized to `.` (AZERTY/European keyboards).
+2. `utils.formatting.parse_numeric_text` is THE single gate for text entering
+   table data — used by cell edits, axis edits and clipboard paste (one
+   pipeline, per the architecture rules). Rejects `nan`/`inf`/`infinity`,
+   `1_0`, `0x10`, non-finite; accepts exponent form (paste from spreadsheets).
+   Rejected input still reverts the cell to its previous value.
+
+Tests: `tests/test_numeric_cell_validation.py` (64) — parse gate, validator
+states (incl. mid-typing `-`/`+` must stay typeable), committed cell/axis
+edits, paste. Full suite green (1718 passed).
+
 ## ✅ feature/trip-logs-window — Trip Logs window, MERGED + RELEASED v2.12.0 (Jul 18, 2026)
 
 Fresh branch off master @ 191ce1f (post-#89 merge). Goal: move the trip-log /

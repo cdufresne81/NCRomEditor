@@ -13,6 +13,7 @@ from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QBrush, QDesktopServices
 from PySide6.QtWidgets import QApplication
 
+from ...utils.formatting import parse_numeric_text
 from .context import TableViewerContext, frozen_table_updates
 
 if TYPE_CHECKING:
@@ -116,11 +117,10 @@ class TableClipboardHelper:
                     if data_indices is None:
                         continue  # Skip axis cells
 
-                    # Try to parse value
-                    try:
-                        new_value = float(value_text.strip())
-                    except ValueError:
-                        continue  # Skip non-numeric values
+                    # Parse value - skip anything that is not a finite number
+                    new_value = parse_numeric_text(value_text)
+                    if new_value is None:
+                        continue
 
                     data_row, data_col = data_indices
 
