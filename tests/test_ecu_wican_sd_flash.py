@@ -284,7 +284,13 @@ def _recovery_in_tmp(tmp_path, monkeypatch):
     """Isolate the datalog crash-recovery breadcrumb in a per-test temp dir."""
     import src.ecu.wican_config as mod
 
-    monkeypatch.setattr(mod.tempfile, "gettempdir", lambda: str(tmp_path))
+    # The sidecars now live under ~/.nc-flash (a temp clean must not destroy the
+    # only record of a stranded device). Redirect BOTH the new home and the
+    # legacy OS-temp location so a test can never touch either real directory.
+    legacy = tmp_path / "legacy_temp"
+    legacy.mkdir(exist_ok=True)
+    monkeypatch.setattr(mod, "_sidecar_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(mod.tempfile, "gettempdir", lambda: str(legacy))
     return tmp_path
 
 

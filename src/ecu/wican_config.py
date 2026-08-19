@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import atexit
 import contextlib
+import glob
 import json
 import logging
 import os
@@ -98,17 +99,56 @@ def get_top_level_protocol(raw: str) -> str:
     return matches[0]
 
 
-def _host_keyed_temp_path(host: object, prefix: str) -> str:
-    """Path of a host-keyed JSON sidecar in the OS temp dir.
+#: Sidecar home, under the user profile rather than the OS temp dir. A temp
+#: clean would otherwise silently destroy the only record of a stranded device's
+#: real mode (#92). The app already creates this directory for its logs.
+_SIDECAR_DIRNAME = ".nc-flash"
 
-    Keyed by ``host`` (sanitized to a filesystem-safe token) so concurrent runs
-    against different devices never clobber each other, and stable across runs so
-    a NEXT run can detect and recover a stranded device. ``prefix`` namespaces the
-    file (``wican_recovery`` for the protocol sidecar vs ``wican_datalog`` for the
-    datalog-pause breadcrumb) so the two never collide.
+
+def _sidecar_dir() -> str:
+    """Directory holding the host-keyed sidecars, created on demand.
+
+    Degrades to the OS temp dir if the home directory cannot be used, so a
+    locked-down machine behaves as it did before rather than failing outright.
     """
-    safe_host = re.sub(r"[^A-Za-z0-9]", "_", str(host))
-    return os.path.join(tempfile.gettempdir(), f"{prefix}_{safe_host}.json")
+    try:
+        path = os.path.join(os.path.expanduser("~"), _SIDECAR_DIRNAME)
+        os.makedirs(path, exist_ok=True)
+        return path
+    except OSError:  # pragma: no cover - unwritable home
+        return tempfile.gettempdir()
+
+
+def _sanitize_host(host: object) -> str:
+    """Host reduced to a filesystem-safe token (``192.168.1.9`` -> ``192_168_1_9``)."""
+    return re.sub(r"[^A-Za-z0-9]", "_", str(host))
+
+
+def _host_keyed_temp_path(host: object, prefix: str) -> str:
+    """Path of a host-keyed JSON sidecar.
+
+    Keyed by ``host`` so concurrent runs against different devices never clobber
+    each other, and stable across runs so a NEXT run can detect and recover a
+    stranded device. ``prefix`` namespaces the file (``wican_recovery`` for the
+    protocol sidecar vs ``wican_datalog`` for the datalog-pause breadcrumb) so
+    the two never collide.
+    """
+    return os.path.join(_sidecar_dir(), f"{prefix}_{_sanitize_host(host)}.json")
+
+
+def _legacy_host_keyed_temp_path(host: object, prefix: str) -> str:
+    """The pre-#92 OS-temp location, still read once so upgrades keep working."""
+    return os.path.join(tempfile.gettempdir(), f"{prefix}_{_sanitize_host(host)}.json")
+
+
+def _read_sidecar_json(path: str):
+    """Load a sidecar, or ``None`` if missing/unreadable/not JSON. Never raises."""
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.loads(fh.read())
+    except (OSError, ValueError, TypeError):
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def set_top_level_protocol(raw: str, value: str) -> str:
@@ -193,25 +233,54 @@ class WiCANConfigurator:
         file whose ``host`` matches ours, so a stale sidecar from a different
         device is never applied here.
         """
-        path = self.recovery_path
-        try:
-            with open(path, "r", encoding="utf-8") as fh:
-                data = json.loads(fh.read())
-        except (OSError, ValueError, TypeError):
-            return None
-        if not isinstance(data, dict):
+        data = _read_sidecar_json(self.recovery_path)
+        if data is None:
+            data = self._migrate_legacy_recovery()
+        if data is None:
             return None
         if data.get("host") != self.host:
             return None
         prev = data.get("previous_protocol")
         return prev if isinstance(prev, str) else None
 
+    def _migrate_legacy_recovery(self):
+        """Adopt a sidecar left in the OS temp dir by a pre-#92 build.
+
+        Read once, rewritten to the new home, and the old copy removed. Without
+        this an upgrade would look like "no breadcrumb" and a device stranded by
+        the previous version could never be recovered automatically.
+        """
+        legacy = _legacy_host_keyed_temp_path(self.host, "wican_recovery")
+        if legacy == self.recovery_path:
+            return None
+        data = _read_sidecar_json(legacy)
+        if data is None:
+            return None
+        prev = data.get("previous_protocol")
+        if data.get("host") == self.host and isinstance(prev, str):
+            try:
+                self._write_recovery(prev)
+                os.unlink(legacy)
+                logger.info("migrated WiCAN recovery sidecar from %s", legacy)
+            except OSError:  # keep the legacy copy if the move failed
+                pass
+        return data
+
     def clear_recovery(self) -> None:
-        """Best-effort delete of the recovery sidecar (ignore if missing)."""
-        try:
-            os.unlink(self.recovery_path)
-        except OSError:
-            pass
+        """Best-effort delete of the recovery sidecar (ignore if missing).
+
+        Also clears any pre-#92 copy in the OS temp dir, so a restore performed
+        by this build cannot leave a stale breadcrumb that a later sweep would
+        act on.
+        """
+        for path in (
+            self.recovery_path,
+            _legacy_host_keyed_temp_path(self.host, "wican_recovery"),
+        ):
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
 
     def write_recovery(self, protocol: str) -> None:
         """Public: persist the TRUE original protocol to the recovery sidecar.
@@ -254,6 +323,41 @@ class WiCANConfigurator:
                 f"GET /load_config returned HTTP {status} from {self.host}"
             )
         return body.decode("utf-8", errors="replace")
+
+    def host_caps(self, timeout_s: Optional[float] = None) -> Optional[dict]:
+        """``GET /host_caps`` -> ``{"ncfr_rev": int, "protocol": str}``, or ``None``.
+
+        A small, constant, secret-free reply that tells a host tool what this
+        boot is and can do. Preferred over ``/load_config`` for capability and
+        "is this device stranded?" checks, because the config blob carries the
+        user's WiFi passwords in cleartext and is expensive for the device to
+        assemble while it is busy.
+
+        Returns ``None`` — never raises — when the endpoint is absent (every
+        build in the field before it shipped answers 404), unreachable, or
+        unparseable. Callers MUST treat ``None`` as "unknown, fall back", never
+        as evidence of old firmware.
+
+        Note ``protocol`` is the STORED mode, not the running one: a restore
+        targets what was written, and under SmartConnect the two differ.
+        """
+        try:
+            with urllib.request.urlopen(
+                self._url("/host_caps"),
+                timeout=self.timeout_s if timeout_s is None else timeout_s,
+            ) as resp:
+                status = getattr(resp, "status", None) or resp.getcode()
+                body = resp.read()
+        except Exception as exc:
+            logger.debug("GET /host_caps on %s unavailable: %s", self.host, exc)
+            return None
+        if status != 200:
+            return None
+        try:
+            data = json.loads(body.decode("utf-8", errors="replace"))
+        except ValueError:
+            return None
+        return data if isinstance(data, dict) else None
 
     def read_config(self) -> dict:
         """Return the parsed config dict (``json.loads`` of the raw blob).
@@ -334,10 +438,14 @@ class WiCANConfigurator:
             yield true_prev
         finally:
             if true_prev != SLCAN:
-                try:
-                    self.restore(true_prev)
-                finally:
-                    self.clear_recovery()
+                # Clear the sidecar ONLY after the restore actually returned. If
+                # the restore raises, the device is still in slcan and this file
+                # is the only record of the user's real mode -- deleting it here
+                # is what turns a recoverable failure into a PERMANENT strand
+                # (#92; bench-proven: with no sidecar even a clean reconnect
+                # leaves the device in slcan and the tool exits 0).
+                self.restore(true_prev)
+                self.clear_recovery()
 
     def set_protocol(self, protocol: str) -> None:
         """Set the device's top-level protocol to ``protocol`` and verify.
@@ -864,3 +972,148 @@ class WiCANDatalogClient:
             "datalog reconcile: resuming a datalogger left paused by a prior run"
         )
         self.resume()
+
+
+# ---------------------------------------------------------------------------
+# Start-up recovery sweep (#92).
+#
+# Before this, a device left in slcan was only ever un-stranded inside a LATER
+# successful connect to that same host. That is the one thing a user whose
+# logger just stopped working is least likely to do. Bench-proven: with the
+# sidecar gone, even a clean reconnect leaves the device in slcan and the tool
+# exits 0. The sweep runs at app start-up instead, needs no connect, and asks
+# before it reboots anything.
+# ---------------------------------------------------------------------------
+
+
+def _stored_protocol(cfg: "WiCANConfigurator") -> Optional[str]:
+    """The device's STORED protocol, or ``None`` if it cannot be reached.
+
+    Prefers ``/host_caps`` — small, constant, and free of the cleartext WiFi
+    passwords that ``/load_config`` carries — and falls back to the config blob
+    for firmware that predates that endpoint.
+    """
+    caps = cfg.host_caps()
+    if caps is not None:
+        proto = caps.get("protocol")
+        if isinstance(proto, str):
+            return proto
+    try:
+        return cfg.current_protocol()
+    except WiCANConfigError as exc:
+        logger.info("sweep: %s is unreachable (%s)", cfg.host, exc)
+        return None
+
+
+def _sweep_sidecar_paths() -> list:
+    """Every protocol sidecar on this machine, new home first then the old one."""
+    seen, paths = set(), []
+    for directory in (_sidecar_dir(), tempfile.gettempdir()):
+        for path in sorted(glob.glob(os.path.join(directory, "wican_recovery_*.json"))):
+            key = os.path.normcase(os.path.abspath(path))
+            if key not in seen:
+                seen.add(key)
+                paths.append(path)
+    return paths
+
+
+def recover_stranded_protocols(
+    confirm=None,
+    http_port: int = 80,
+    should_skip=None,
+    timeout_s: float = 4.0,
+) -> list:
+    """Find devices this machine left in ``slcan`` and put them back.
+
+    Headless and never raises, so it is safe to call from app start-up. It walks
+    the protocol sidecars, and for each one decides:
+
+      * device unreachable -> keep the sidecar, try again next launch
+      * stored mode is not ``slcan`` -> nothing to undo; drop the stale sidecar
+        WITHOUT touching the device
+      * a flash or a host bus-claim is live -> **leave it alone**. Rebooting a
+        device mid-flash can leave the car's ECU half-written, and the owner of
+        that session (possibly on another machine) will restore it. This mirrors
+        :meth:`WiCANDatalogClient.reconcile`'s refusal and is the brick guard.
+      * otherwise ask ``confirm(host, previous_protocol)`` if given, then restore
+
+    :param confirm: optional ``(host, previous_protocol) -> bool``. Returning
+        ``False`` keeps the sidecar and leaves the device alone. Omit it for a
+        fully automatic sweep (tests, headless use).
+    :param should_skip: optional ``(host) -> bool`` so a GUI can exclude a host
+        it already holds a live session to.
+    :param http_port: device HTTP port; tests point this at a loopback mock.
+    :returns: one record per sidecar — ``{"host", "previous_protocol", "action"}``
+        where action is one of ``restored``, ``stale``, ``unreachable``,
+        ``busy``, ``declined``, ``failed``, ``skipped``, ``invalid``.
+    """
+    records = []
+    for path in _sweep_sidecar_paths():
+        data = _read_sidecar_json(path)
+        host = (data or {}).get("host")
+        previous = (data or {}).get("previous_protocol")
+        if not isinstance(host, str) or not isinstance(previous, str):
+            # Unusable sidecar: it names no host or no mode, so it can never
+            # drive a restore. Drop it rather than re-reading it every launch.
+            logger.info("sweep: discarding unusable sidecar %s", path)
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+            records.append({"host": host, "previous_protocol": previous,
+                            "action": "invalid"})
+            continue
+
+        record = {"host": host, "previous_protocol": previous, "action": None}
+        records.append(record)
+
+        if should_skip is not None and should_skip(host):
+            logger.info("sweep: %s has a live session; skipping", host)
+            record["action"] = "skipped"
+            continue
+
+        cfg = WiCANConfigurator(host, http_port=http_port, timeout_s=timeout_s)
+        current = _stored_protocol(cfg)
+        if current is None:
+            record["action"] = "unreachable"
+            continue
+        if current != SLCAN:
+            logger.info(
+                "sweep: %s is on %r, not stranded; dropping stale sidecar",
+                host, current,
+            )
+            cfg.clear_recovery()
+            record["action"] = "stale"
+            continue
+
+        state = WiCANDatalogClient(host, http_port=http_port).get_state()
+        if state is not None and (
+            state.get("flash_active") or state.get("host_bus_claimed")
+        ):
+            # A programming session owns this device -- this instance or another
+            # machine. Rebooting it now is a brick risk for the car's ECU.
+            logger.warning(
+                "sweep: %s is stranded but a flash/claim is ACTIVE -- leaving it "
+                "alone; its owner or the firmware reaper will release it",
+                host,
+            )
+            record["action"] = "busy"
+            continue
+
+        if confirm is not None and not confirm(host, previous):
+            logger.info("sweep: user declined restoring %s", host)
+            record["action"] = "declined"
+            continue
+
+        try:
+            logger.info("sweep: restoring %s from slcan to %r", host, previous)
+            cfg.restore(previous)
+        except Exception as exc:
+            # Keep the sidecar: the device is still stranded and this file is
+            # the only record of the real mode.
+            logger.warning("sweep: restoring %s failed (%s); sidecar kept", host, exc)
+            record["action"] = "failed"
+            continue
+        cfg.clear_recovery()
+        record["action"] = "restored"
+    return records

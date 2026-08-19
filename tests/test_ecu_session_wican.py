@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.ecu.session import ECUSession, ECUSessionState
+from src.ecu.session import ECUSession, ECUSessionState, ProbeVerdict
 from src.ecu.wican_transport import WiCANError
 
 WICAN_CFG = {
@@ -36,7 +36,11 @@ def _default_no_coexist():
     would otherwise fire against the mocked ``create_ecu_transport`` and skew the
     open/switch assertions. The coexist-path tests below re-patch this to return
     a transport, which overrides this default for their duration."""
-    with patch.object(ECUSession, "_try_open_coexist_port", return_value=None):
+    with patch.object(
+        ECUSession,
+        "_try_open_coexist_port",
+        return_value=(None, ProbeVerdict.OLD_FIRMWARE),
+    ):
         yield
 
 
@@ -141,7 +145,9 @@ class TestWiCANCoexistConnect:
             patch("src.ecu.transport.create_ecu_transport") as mock_create,
             patch("src.ecu.protocol.UDSConnection") as MockUDS,
             patch.object(
-                ECUSession, "_try_open_coexist_port", return_value=coexist_transport
+                ECUSession,
+                "_try_open_coexist_port",
+                return_value=(coexist_transport, ProbeVerdict.COEXIST),
             ),
         ):
             session = _make_session(_qapp)
@@ -164,7 +170,9 @@ class TestWiCANCoexistConnect:
             patch("src.ecu.transport.create_ecu_transport"),
             patch("src.ecu.protocol.UDSConnection"),
             patch.object(
-                ECUSession, "_try_open_coexist_port", return_value=coexist_transport
+                ECUSession,
+                "_try_open_coexist_port",
+                return_value=(coexist_transport, ProbeVerdict.COEXIST),
             ),
         ):
             session = _make_session(_qapp)
@@ -190,7 +198,9 @@ class TestWiCANCoexistConnect:
             patch("src.ecu.transport.create_ecu_transport"),
             patch("src.ecu.protocol.UDSConnection") as MockUDS,
             patch.object(
-                ECUSession, "_try_open_coexist_port", return_value=coexist_transport
+                ECUSession,
+                "_try_open_coexist_port",
+                return_value=(coexist_transport, ProbeVerdict.COEXIST),
             ),
         ):
             datalog = MockDatalog.return_value
@@ -228,7 +238,9 @@ class TestWiCANCoexistConnect:
             patch("src.ecu.transport.create_ecu_transport"),
             patch("src.ecu.protocol.UDSConnection") as MockUDS,
             patch.object(
-                ECUSession, "_try_open_coexist_port", return_value=coexist_transport
+                ECUSession,
+                "_try_open_coexist_port",
+                return_value=(coexist_transport, ProbeVerdict.COEXIST),
             ),
         ):
             MockDatalog.return_value.acquire_bus.side_effect = lambda: calls.append(

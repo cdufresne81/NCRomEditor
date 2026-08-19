@@ -1,5 +1,25 @@
 # WiCAN Bench SLCAN strand — open investigation (August 2026)
 
+> **STATUS 2026-08-19: the host-side fix is written and verified — see branch
+> `fix/wican-slcan-strand-92`** (`e6f4fb0` red tests, `e977ed3` bench harness, the fix commit
+> after it). All three defects were reproduced on real hardware and are now fixed and covered.
+> The instruction below not to fix anything before the tests are red has been carried out; it is
+> kept for the record, not as a live instruction.
+>
+> Two claims in the original text below were **disproved** during the work and are corrected here:
+>
+> * *"This app is the only thing that ever writes `protocol: slcan`"* — **wrong.** The device's own
+>   web UI re-sends the field on every settings save from a hidden `display:none` row, and this
+>   app's Settings > Test Connection wrote it too, with no crash-recovery breadcrumb at all.
+> * *"a brief network hiccup"* as the trigger — **unproven.** The probe succeeded 5/5 on the bench
+>   at ~0.45 s of a 1.5 s budget, and across every NC Flash log the fallback fired exactly once,
+>   with zero restore failures. The defects are real and now bench-proven, but the 2026-08-11
+>   incident remains unattributed.
+>
+> What is still open: the firmware-side work (`/host_caps`, the running mode on the boot line, a
+> flash-guarded one-click restore in the web UI, and a host-less auto-revert), which is the only
+> thing that helps against a writer that is not this copy of NC Flash.
+
 Pointer document, so a session that starts in **this** repo finds the work. The full plan,
 evidence and code anchors live in the firmware repo:
 

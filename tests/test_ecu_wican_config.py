@@ -60,6 +60,9 @@ class _MockWiCANServer:
 
     def __init__(self, config: str):
         self.config = config
+        #: Body served at /host_caps. None => 404, i.e. every build in the field
+        #: today, which predates the endpoint.
+        self.host_caps_body = None
         self.posts: list[str] = []
         self.fail_gets_after_post = 0
         self._pending_get_failures = 0
@@ -80,6 +83,12 @@ class _MockWiCANServer:
                 self.wfile.write(payload)
 
             def do_GET(self):
+                if self.path == "/host_caps":
+                    if server.host_caps_body is None:
+                        self._send_text(404, "not found")
+                    else:
+                        self._send_text(200, server.host_caps_body)
+                    return
                 if self.path != "/load_config":
                     self._send_text(404, "not found")
                     return
@@ -334,7 +343,13 @@ def _recovery_in_tmp(tmp_path, monkeypatch):
     """Point the recovery sidecar at an isolated temp dir for the test."""
     import src.ecu.wican_config as mod
 
-    monkeypatch.setattr(mod.tempfile, "gettempdir", lambda: str(tmp_path))
+    # The sidecars now live under ~/.nc-flash (a temp clean must not destroy the
+    # only record of a stranded device). Redirect BOTH the new home and the
+    # legacy OS-temp location so a test can never touch either real directory.
+    legacy = tmp_path / "legacy_temp"
+    legacy.mkdir(exist_ok=True)
+    monkeypatch.setattr(mod, "_sidecar_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(mod.tempfile, "gettempdir", lambda: str(legacy))
     return tmp_path
 
 
@@ -944,3 +959,218 @@ def test_startup_sweep_restores_a_stranded_device(_recovery_in_tmp):
         assert not os.path.exists(stranded.recovery_path)
         assert [r["action"] for r in records] == ["restored"]
         assert records[0]["host"] == "127.0.0.1"
+
+
+def _sweep_with_datalog_state(monkeypatch, state):
+    """Make the sweep see ``state`` from /datalog without a real endpoint."""
+    import src.ecu.wican_config as mod
+
+    class _Stub:
+        def __init__(self, host, http_port=80, **kw):
+            pass
+
+        def get_state(self):
+            return state
+
+    monkeypatch.setattr(mod, "WiCANDatalogClient", _Stub)
+
+
+def test_sweep_refuses_while_a_flash_is_active(_recovery_in_tmp, monkeypatch):
+    """BRICK GUARD: never reboot a device that is mid-flash.
+
+    The stranded device may be stranded *because* another machine is flashing
+    through it right now. Rebooting it there can leave the car's ECU half
+    written, which is unrecoverable from this app.
+    """
+    from src.ecu.wican_config import recover_stranded_protocols
+
+    _sweep_with_datalog_state(monkeypatch, {"flash_active": True})
+    with _MockWiCANServer(_slcan_config()) as server:
+        cfg = WiCANConfigurator("127.0.0.1", http_port=server.port)
+        cfg._write_recovery("poll_log")
+
+        records = recover_stranded_protocols(
+            http_port=server.port, confirm=lambda *a: True
+        )
+
+        assert [r["action"] for r in records] == ["busy"]
+        assert server.posts == [], "wrote to a device that is mid-flash"
+        assert os.path.exists(cfg.recovery_path), "sidecar dropped while busy"
+
+
+def test_sweep_refuses_while_a_host_holds_the_bus(_recovery_in_tmp, monkeypatch):
+    """Same guard for the pre-flash auth window, which no flash flag covers."""
+    from src.ecu.wican_config import recover_stranded_protocols
+
+    _sweep_with_datalog_state(monkeypatch, {"host_bus_claimed": True})
+    with _MockWiCANServer(_slcan_config()) as server:
+        cfg = WiCANConfigurator("127.0.0.1", http_port=server.port)
+        cfg._write_recovery("poll_log")
+
+        records = recover_stranded_protocols(
+            http_port=server.port, confirm=lambda *a: True
+        )
+
+        assert [r["action"] for r in records] == ["busy"]
+        assert server.posts == []
+        assert os.path.exists(cfg.recovery_path)
+
+
+def test_sweep_drops_a_stale_sidecar_without_touching_the_device(_recovery_in_tmp):
+    """Device already back on poll_log: clean up, but never write to it."""
+    from src.ecu.wican_config import recover_stranded_protocols
+
+    with _MockWiCANServer(REALISTIC_CONFIG) as server:  # NOT slcan
+        cfg = WiCANConfigurator("127.0.0.1", http_port=server.port)
+        cfg._write_recovery("poll_log")
+
+        records = recover_stranded_protocols(http_port=server.port)
+
+        assert [r["action"] for r in records] == ["stale"]
+        assert server.posts == []
+        assert not os.path.exists(cfg.recovery_path)
+
+
+def test_sweep_keeps_the_sidecar_when_the_device_is_unreachable(_recovery_in_tmp):
+    """A device that is merely off must stay recoverable on a later launch."""
+    from src.ecu.wican_config import recover_stranded_protocols
+
+    cfg = WiCANConfigurator("127.0.0.1", http_port=9)  # discard port: nothing there
+    cfg._write_recovery("poll_log")
+
+    records = recover_stranded_protocols(http_port=9, timeout_s=0.4)
+
+    assert [r["action"] for r in records] == ["unreachable"]
+    assert os.path.exists(cfg.recovery_path)
+
+
+def test_sweep_honours_a_declined_confirmation(_recovery_in_tmp):
+    """Saying no leaves the device alone AND keeps the sidecar for next time."""
+    from src.ecu.wican_config import recover_stranded_protocols
+
+    with _MockWiCANServer(_slcan_config()) as server:
+        cfg = WiCANConfigurator("127.0.0.1", http_port=server.port)
+        cfg._write_recovery("poll_log")
+
+        records = recover_stranded_protocols(
+            http_port=server.port, confirm=lambda host, prev: False
+        )
+
+        assert [r["action"] for r in records] == ["declined"]
+        assert server.posts == []
+        assert os.path.exists(cfg.recovery_path)
+
+
+def test_sweep_skips_a_host_with_a_live_session(_recovery_in_tmp):
+    """The GUI can exclude a device it is actively using."""
+    from src.ecu.wican_config import recover_stranded_protocols
+
+    with _MockWiCANServer(_slcan_config()) as server:
+        cfg = WiCANConfigurator("127.0.0.1", http_port=server.port)
+        cfg._write_recovery("poll_log")
+
+        records = recover_stranded_protocols(
+            http_port=server.port,
+            confirm=lambda *a: True,
+            should_skip=lambda host: host == "127.0.0.1",
+        )
+
+        assert [r["action"] for r in records] == ["skipped"]
+        assert server.posts == []
+        assert os.path.exists(cfg.recovery_path)
+
+
+# ---------------------------------------------------------------------------
+# /host_caps: the small, secret-free capability reply (#92).
+#
+# It exists so a host tool can settle "does this device support no-reboot
+# flashing?" by reading an integer, instead of inferring it from which socket
+# error arrived first on a marginal link -- an inference that was measured wrong
+# on Windows. Absent on every build in the field today, so "no endpoint" must
+# never be read as evidence about the firmware.
+# ---------------------------------------------------------------------------
+
+
+def test_host_caps_parses_a_good_reply():
+    with _MockWiCANServer(REALISTIC_CONFIG) as server:
+        server.host_caps_body = '{"ncfr_rev": 6, "protocol": "poll_log"}'
+        caps = _make_configurator(server).host_caps()
+    assert caps == {"ncfr_rev": 6, "protocol": "poll_log"}
+
+
+def test_host_caps_returns_none_when_absent():
+    # Today's firmware: 404. Must be None, NOT an exception and NOT a verdict.
+    with _MockWiCANServer(REALISTIC_CONFIG) as server:
+        assert server.host_caps_body is None
+        assert _make_configurator(server).host_caps() is None
+
+
+def test_host_caps_returns_none_on_garbage():
+    with _MockWiCANServer(REALISTIC_CONFIG) as server:
+        server.host_caps_body = "<html>not json</html>"
+        assert _make_configurator(server).host_caps() is None
+
+
+def test_host_caps_returns_none_on_a_json_non_object():
+    with _MockWiCANServer(REALISTIC_CONFIG) as server:
+        server.host_caps_body = "[1, 2, 3]"
+        assert _make_configurator(server).host_caps() is None
+
+
+def test_host_caps_never_raises_when_the_device_is_gone():
+    cfg = WiCANConfigurator("127.0.0.1", http_port=9, timeout_s=0.4)
+    assert cfg.host_caps() is None
+
+
+# ---------------------------------------------------------------------------
+# Upgrading from a pre-#92 build: sidecars used to live in the OS temp dir.
+# An upgrade must adopt them, or a device the OLD build stranded could never be
+# recovered automatically.
+# ---------------------------------------------------------------------------
+
+
+def test_legacy_sidecar_is_adopted_and_moved(_recovery_in_tmp):
+    """read_recovery() finds a crumb the old build left in the OS temp dir."""
+    import src.ecu.wican_config as mod
+
+    cfg = WiCANConfigurator("192.168.0.10", http_port=80)
+    legacy = mod._legacy_host_keyed_temp_path("192.168.0.10", "wican_recovery")
+    assert legacy != cfg.recovery_path, "fixture must give two distinct dirs"
+    with open(legacy, "w", encoding="utf-8") as fh:
+        fh.write('{"host": "192.168.0.10", "previous_protocol": "poll_log"}')
+
+    assert cfg.read_recovery() == "poll_log"
+    # Adopted into the new home, and the old copy cleaned up so it cannot be
+    # picked up twice later.
+    assert os.path.exists(cfg.recovery_path)
+    assert not os.path.exists(legacy)
+
+
+def test_legacy_sidecar_for_another_host_is_ignored(_recovery_in_tmp):
+    """The host check still applies to a migrated file."""
+    import src.ecu.wican_config as mod
+
+    cfg = WiCANConfigurator("192.168.0.10", http_port=80)
+    legacy = mod._legacy_host_keyed_temp_path("192.168.0.10", "wican_recovery")
+    with open(legacy, "w", encoding="utf-8") as fh:
+        fh.write('{"host": "10.9.9.9", "previous_protocol": "poll_log"}')
+
+    assert cfg.read_recovery() is None
+
+
+def test_sweep_finds_a_sidecar_left_in_the_legacy_location(_recovery_in_tmp):
+    """A device stranded by the OLD build is still recovered after upgrading."""
+    import src.ecu.wican_config as mod
+    from src.ecu.wican_config import recover_stranded_protocols
+
+    with _MockWiCANServer(_slcan_config()) as server:
+        legacy = mod._legacy_host_keyed_temp_path("127.0.0.1", "wican_recovery")
+        with open(legacy, "w", encoding="utf-8") as fh:
+            fh.write('{"host": "127.0.0.1", "previous_protocol": "poll_log"}')
+
+        records = recover_stranded_protocols(
+            http_port=server.port, confirm=lambda *a: True
+        )
+
+        assert [r["action"] for r in records] == ["restored"]
+        assert get_top_level_protocol(server.config) == "poll_log"
