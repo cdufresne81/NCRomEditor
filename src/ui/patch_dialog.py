@@ -123,6 +123,11 @@ class PatchRomDialog(QDialog):
         self._stock_path = None
         self._patch_path = None
 
+        # Result handed back to the caller (FlashMixin) after exec():
+        # where the patched ROM landed, and whether the user asked to open it.
+        self.patched_rom_path = None
+        self.open_requested = False
+
     def _browse_stock(self):
         from src.utils.settings import get_settings
 
@@ -183,6 +188,8 @@ class PatchRomDialog(QDialog):
 
         # Apply patch
         self._result_group.setVisible(False)
+        self.patched_rom_path = None
+        self.open_requested = False
         try:
             result = patch_rom(stock_data, patch_data)
         except ROMValidationError as e:
@@ -231,3 +238,33 @@ class PatchRomDialog(QDialog):
         self._result_group.setVisible(True)
 
         logger.info(f"Patch applied: {stock_path} + {patch_path} -> {output_path}")
+
+        self.patched_rom_path = output_path
+        if self._confirm_open(output_path, result):
+            self.open_requested = True
+            self.accept()
+
+    def _confirm_open(self, output_path, result):
+        """
+        Announce the successful patch and ask whether to open the ROM now.
+
+        The console log alone is easy to miss, so success gets its own modal.
+        Returns True when the user wants the patched ROM opened.
+        """
+        box = QMessageBox(self)
+        box.setWindowTitle("Patch Applied")
+        box.setIcon(
+            QMessageBox.Warning if result.crc_warnings else QMessageBox.Information
+        )
+        box.setText("ROM patched successfully.")
+
+        details = f"Saved to:\n{output_path}"
+        if result.crc_warnings:
+            details += "\n\nCRC verification warning:\n" + "\n".join(
+                result.crc_warnings
+            )
+        box.setInformativeText(f"{details}\n\nDo you want to open it now?")
+
+        box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        box.setDefaultButton(QMessageBox.Yes)
+        return box.exec() == QMessageBox.Yes

@@ -2,6 +2,11 @@
 
 All notable changes to NC Flash are documented here.
 
+## [Unreleased]
+
+### Added
+- **Patching a ROM now confirms itself with a dialog, and offers to open the result** — a successful patch reported only to the log console and a quietly-filled Result panel, so it was easy to miss that anything had been written. The Patch ROM dialog now raises a modal ("ROM patched successfully", the full output path, and *Do you want to open it now?* with Yes/No, Yes as the default). Answering Yes closes the Patch dialog and opens the patched ROM in a new tab; No leaves the dialog open with its Result panel so another patch can be applied. When the patch carried CRC verification warnings the dialog uses the warning icon and lists the warnings inline — success is still reported, but not silently over the caveat. Opening stays MainWindow's job (the dialog only reports the user's answer back through `open_requested` / `patched_rom_path`), so no parent-walk is introduced. Tests: `tests/test_patch_dialog.py`.
+
 ## [v2.12.0] - 2026-07-18
 
 ### Added
