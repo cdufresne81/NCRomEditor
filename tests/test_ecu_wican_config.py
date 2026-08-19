@@ -876,3 +876,71 @@ def test_datalog_keepalive_stops_on_close(_recovery_in_tmp):
         client.close()
         assert client._ka_thread is None
         assert client._park_token is None and client._claim_token is None
+
+
+# ---------------------------------------------------------------------------
+# Issue #92 — the breadcrumb is the ONLY record of the user's original mode.
+# If the restore fails, that record must survive so a later run can undo the
+# strand. Today both restore paths delete it in a ``finally``, which turns a
+# recoverable failure into a permanent one.
+# ---------------------------------------------------------------------------
+
+
+def test_failed_restore_keeps_the_breadcrumb(_recovery_in_tmp, monkeypatch):
+    """slcan_session(): a restore that raises must NOT clear the sidecar."""
+    with _MockWiCANServer(REALISTIC_CONFIG) as server:
+        cfg = _make_configurator(server)
+
+        with pytest.raises(WiCANConfigError):
+            with cfg.slcan_session() as prev:
+                assert prev == "poll_log"
+                # The breadcrumb exists while we hold the session.
+                assert cfg.read_recovery() == "poll_log"
+
+                def _boom(_protocol):
+                    raise WiCANConfigError("device went away mid-restore")
+
+                monkeypatch.setattr(cfg, "restore", _boom)
+
+        # The device is still in slcan and the restore failed. The sidecar is now
+        # the only thing that knows the user was on poll_log — losing it here is
+        # what makes a strand permanent.
+        assert os.path.exists(cfg.recovery_path), "sidecar deleted after a FAILED restore"
+        assert cfg.read_recovery() == "poll_log"
+
+
+# ---------------------------------------------------------------------------
+# Issue #92 — recovery must not depend on the user reconnecting.
+#
+# Today a stranded device is only ever un-stranded inside a later successful
+# connect to that same host. If the user gives up on the tool (the natural
+# reaction to "my logger stopped working"), nothing ever restores it. This is a
+# CONTRACT test for a seam that does not exist yet: it fails on ImportError
+# today, so unlike the tests above it cannot disprove anything -- it defines the
+# API the fix must provide.
+# ---------------------------------------------------------------------------
+
+
+def test_startup_sweep_restores_a_stranded_device(_recovery_in_tmp):
+    """A breadcrumb + a device sitting in slcan is enough to recover it.
+
+    No ECUSession, no connect, no GUI -- just the sweep a fresh app launch runs.
+    """
+    from src.ecu.wican_config import recover_stranded_protocols
+
+    with _MockWiCANServer(_slcan_config()) as server:
+        # Exactly what a hard-killed run leaves behind: the device is in slcan
+        # and a sidecar remembers the user was on poll_log.
+        stranded = WiCANConfigurator("127.0.0.1", http_port=server.port)
+        stranded._write_recovery("poll_log")
+
+        records = recover_stranded_protocols(
+            http_port=server.port,
+            confirm=lambda host, previous: True,
+        )
+
+        assert get_top_level_protocol(server.config) == "poll_log"
+        assert len(server.posts) == 1, "the sweep must write exactly once"
+        assert not os.path.exists(stranded.recovery_path)
+        assert [r["action"] for r in records] == ["restored"]
+        assert records[0]["host"] == "127.0.0.1"

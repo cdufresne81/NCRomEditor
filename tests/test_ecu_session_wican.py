@@ -375,3 +375,32 @@ class TestWiCANAcquire:
             assert channel_id is None
             assert filter_id is None
             assert uds is MockUDS.return_value
+
+
+class TestFailedRestoreKeepsBreadcrumb:
+    """#92: when the restore fails, the crash-recovery record must survive.
+
+    ``_restore_wican_protocol`` swallows a failed restore and then clears the
+    breadcrumb in a ``finally``. That combination is what makes a strand
+    permanent: the device is still in slcan, and the only record of the user's
+    real mode has just been deleted, so nothing can ever put it back
+    automatically.
+    """
+
+    def test_failed_restore_does_not_clear_breadcrumb(self, _qapp):
+        from src.ecu.wican_config import WiCANConfigError
+
+        with (
+            patch("src.ecu.wican_config.WiCANConfigurator") as MockCfg,
+            patch("src.ecu.transport.create_ecu_transport"),
+            patch("src.ecu.protocol.UDSConnection"),
+        ):
+            inst = _cfg(MockCfg, prev="realdash")
+            inst.restore.side_effect = WiCANConfigError("device unreachable")
+
+            session = _make_session(_qapp)
+            session.connect_ecu()
+            session.disconnect_ecu()
+
+            inst.restore.assert_called_once_with("realdash")
+            inst.clear_recovery.assert_not_called()
