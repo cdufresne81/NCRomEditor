@@ -88,9 +88,9 @@ def test_real_refused_port_is_conclusive_old_firmware(_qapp):
     # It must also resolve within the budget we actually promise the user: the
     # first attempt, plus the one confirming retry, plus slack for scheduling.
     budget_ms = COEXIST_PROBE_TIMEOUT_MS + _COEXIST_PROBE_RETRY_MS + 2000
-    assert elapsed_ms < budget_ms, (
-        f"probe took {elapsed_ms:.0f} ms, over the {budget_ms} ms budget"
-    )
+    assert (
+        elapsed_ms < budget_ms
+    ), f"probe took {elapsed_ms:.0f} ms, over the {budget_ms} ms budget"
 
 
 def test_real_unreachable_host_is_inconclusive(_qapp):

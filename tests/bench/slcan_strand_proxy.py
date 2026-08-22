@@ -135,7 +135,9 @@ def _serve(port: int, device_host: str, mode: str, stop: threading.Event) -> Non
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--device", required=True, help="real device IP, e.g. 192.168.1.169")
+    ap.add_argument(
+        "--device", required=True, help="real device IP, e.g. 192.168.1.169"
+    )
     ap.add_argument(
         "--mode",
         choices=("stall", "drop", "pass"),

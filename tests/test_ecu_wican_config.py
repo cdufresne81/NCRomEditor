@@ -920,7 +920,9 @@ def test_failed_restore_keeps_the_breadcrumb(_recovery_in_tmp, monkeypatch):
         # The device is still in slcan and the restore failed. The sidecar is now
         # the only thing that knows the user was on poll_log — losing it here is
         # what makes a strand permanent.
-        assert os.path.exists(cfg.recovery_path), "sidecar deleted after a FAILED restore"
+        assert os.path.exists(
+            cfg.recovery_path
+        ), "sidecar deleted after a FAILED restore"
         assert cfg.read_recovery() == "poll_log"
 
 

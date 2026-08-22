@@ -24,7 +24,9 @@ import os
 import sys
 
 # Import from the repo root regardless of where this is invoked from.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(
+    0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 
 #: The proxy's loopback address. Everything the driver touches goes through it,
 #: so the breadcrumb sidecar is keyed to 127_0_0_1 rather than the device IP.
@@ -74,7 +76,9 @@ def main(argv=None) -> int:
             "auto_config": True,
         }
     )
-    session.progress.connect(lambda m: logging.getLogger("driver").info("progress: %s", m))
+    session.progress.connect(
+        lambda m: logging.getLogger("driver").info("progress: %s", m)
+    )
     session.connection_lost.connect(
         lambda m: logging.getLogger("driver").warning("connection_lost: %s", m)
     )

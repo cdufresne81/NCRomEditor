@@ -1060,8 +1060,9 @@ def recover_stranded_protocols(
                 os.unlink(path)
             except OSError:
                 pass
-            records.append({"host": host, "previous_protocol": previous,
-                            "action": "invalid"})
+            records.append(
+                {"host": host, "previous_protocol": previous, "action": "invalid"}
+            )
             continue
 
         record = {"host": host, "previous_protocol": previous, "action": None}
@@ -1080,7 +1081,8 @@ def recover_stranded_protocols(
         if current != SLCAN:
             logger.info(
                 "sweep: %s is on %r, not stranded; dropping stale sidecar",
-                host, current,
+                host,
+                current,
             )
             cfg.clear_recovery()
             record["action"] = "stale"
