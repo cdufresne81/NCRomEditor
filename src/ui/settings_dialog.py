@@ -4,6 +4,7 @@ Settings Dialog
 Configuration window with tree navigation and search.
 """
 
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,6 +38,8 @@ from PySide6.QtWidgets import (
 
 from ..utils.settings import get_settings
 from ..utils.colormap import reload_colormap
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Settings Registry
@@ -1129,7 +1132,19 @@ class SettingsDialog(QDialog):
         try:
             if auto_config:
                 configurator = WiCANConfigurator(host)
-                prev_protocol = configurator.switch_to_slcan()
+                # Write the crash-recovery breadcrumb BEFORE switching, the same
+                # way a real session does. The bare switch_to_slcan() this
+                # replaces left NO record at all, so a crash during the ~6 s
+                # reboot -- or the silently-swallowed restore below -- stranded
+                # the device in bench mode with nothing able to find it, not even
+                # the start-up sweep (#92).
+                recorded = configurator.read_recovery()
+                current = configurator.current_protocol()
+                prev_protocol = recorded if recorded is not None else current
+                if prev_protocol != "slcan":
+                    configurator.write_recovery(prev_protocol)
+                if current != "slcan":
+                    configurator.set_protocol("slcan")
             transport = create_ecu_transport(
                 {"kind": "wican", "host": host, "port": port}
             )
@@ -1170,8 +1185,19 @@ class SettingsDialog(QDialog):
             if configurator is not None and prev_protocol and prev_protocol != "slcan":
                 try:
                     configurator.restore(prev_protocol)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    # KEEP the breadcrumb (#92): the device is still in bench
+                    # mode and this is the only record of the user's real one.
+                    # The next launch's sweep will offer to put it back.
+                    logger.warning(
+                        "WiCAN Test Connection: restoring %s to %r failed (%s); "
+                        "breadcrumb kept so start-up can recover it",
+                        host,
+                        prev_protocol,
+                        exc,
+                    )
+                else:
+                    configurator.clear_recovery()
 
     def _scan_wican_devices(self, host_edit):
         """Discover WiCAN adapters over mDNS (off-thread) and let the user pick one.

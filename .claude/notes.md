@@ -25,6 +25,29 @@ Tests: `tests/test_numeric_cell_validation.py` (64) — parse gate, validator
 states (incl. mid-typing `-`/`+` must stay typeable), committed cell/axis
 edits, paste. Full suite green (1718 passed).
 
+## 🔵 fix/patch-rom-success-dialog — patch success modal + open-now prompt (Jul 25, 2026)
+
+Branch off master @ 654a124. A successful patch announced itself only in the
+log console + the Result group quietly appearing, so users had no explicit
+confirmation the ROM was written.
+
+- `src/ui/patch_dialog.py`: new `_confirm_open(output_path, result)` raises a
+  modal after a successful save — "ROM patched successfully." + `Saved to:
+  <path>` + "Do you want to open it now?" (Yes default). Warning icon +
+  inline warning text when `result.crc_warnings` is non-empty. Two new public
+  attrs the caller reads after `exec()`: `patched_rom_path` / `open_requested`
+  (both RESET at the start of every `_apply_patch`, so a failed retry can't
+  leave a stale path armed). Yes → `accept()`; No → dialog stays open.
+- `src/ui/flash_mixin.py`: `_on_patch_rom` opens the ROM after `exec()` when
+  the dialog reports `open_requested`. Deliberately NOT done inside the dialog
+  — opening is MainWindow's job and a `parent()` walk would break the
+  signals-carry-context rule.
+- Tests: `tests/test_patch_dialog.py` (6) — real end-to-end patch of
+  `examples/lf9veb.bin` + `.patch` for the Yes/No paths, stale-path clearing,
+  CRC-warning message content, and both FlashMixin branches.
+- Visual check done by rendering the box off-screen and screenshotting it
+  (`tools/test_runner.py` has no command for arbitrary dialogs).
+
 ## ✅ feature/trip-logs-window — Trip Logs window, MERGED + RELEASED v2.12.0 (Jul 18, 2026)
 
 Fresh branch off master @ 191ce1f (post-#89 merge). Goal: move the trip-log /
