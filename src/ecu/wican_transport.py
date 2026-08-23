@@ -186,7 +186,19 @@ FAST_WRITE_TIMEOUT_MS = 600000
 
 #: Idle/heartbeat (ms): no bytes for this long means the firmware is dead, not
 #: merely slow. Generous because an ECU erase can sit silent for several seconds.
-_FAST_WRITE_IDLE_MS = 30000
+#:
+#: MUST stay comfortably above the firmware's RESP_ERASE_TIMEOUT_MS
+#: (nc-flash-wican-fw main/ncflash_fastwrite.c), which is how long the device
+#: lawfully waits without sending anything while the ECU erases. This was 30000,
+#: the SAME value the firmware used, and our clock starts at the previous progress
+#: line -- one to three seconds earlier -- so the host ALWAYS gave up first.
+#:
+#: That is not a cosmetic race. Giving up here closes the socket, the firmware's
+#: next progress write fails, its TX task stops draining, and the flash aborts via
+#: host_gone -- abandoning the ECU immediately after the erase, unbootable, while
+#: this side reports "stalled" and invites a key-cycle. 90 s against the firmware's
+#: 60 s leaves 30 s of margin. Change the two together (firmware issue #126).
+_FAST_WRITE_IDLE_MS = 90000
 
 
 class WiCANError(ECUError):
