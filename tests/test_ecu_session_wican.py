@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.ecu.session import ECUSession, ECUSessionState
+from src.ecu.session import ECUSession, ECUSessionState, ProbeVerdict
 from src.ecu.wican_transport import WiCANError
 
 WICAN_CFG = {
@@ -36,7 +36,11 @@ def _default_no_coexist():
     would otherwise fire against the mocked ``create_ecu_transport`` and skew the
     open/switch assertions. The coexist-path tests below re-patch this to return
     a transport, which overrides this default for their duration."""
-    with patch.object(ECUSession, "_try_open_coexist_port", return_value=None):
+    with patch.object(
+        ECUSession,
+        "_try_open_coexist_port",
+        return_value=(None, ProbeVerdict.OLD_FIRMWARE),
+    ):
         yield
 
 
@@ -141,7 +145,9 @@ class TestWiCANCoexistConnect:
             patch("src.ecu.transport.create_ecu_transport") as mock_create,
             patch("src.ecu.protocol.UDSConnection") as MockUDS,
             patch.object(
-                ECUSession, "_try_open_coexist_port", return_value=coexist_transport
+                ECUSession,
+                "_try_open_coexist_port",
+                return_value=(coexist_transport, ProbeVerdict.COEXIST),
             ),
         ):
             session = _make_session(_qapp)
@@ -164,7 +170,9 @@ class TestWiCANCoexistConnect:
             patch("src.ecu.transport.create_ecu_transport"),
             patch("src.ecu.protocol.UDSConnection"),
             patch.object(
-                ECUSession, "_try_open_coexist_port", return_value=coexist_transport
+                ECUSession,
+                "_try_open_coexist_port",
+                return_value=(coexist_transport, ProbeVerdict.COEXIST),
             ),
         ):
             session = _make_session(_qapp)
@@ -190,7 +198,9 @@ class TestWiCANCoexistConnect:
             patch("src.ecu.transport.create_ecu_transport"),
             patch("src.ecu.protocol.UDSConnection") as MockUDS,
             patch.object(
-                ECUSession, "_try_open_coexist_port", return_value=coexist_transport
+                ECUSession,
+                "_try_open_coexist_port",
+                return_value=(coexist_transport, ProbeVerdict.COEXIST),
             ),
         ):
             datalog = MockDatalog.return_value
@@ -228,7 +238,9 @@ class TestWiCANCoexistConnect:
             patch("src.ecu.transport.create_ecu_transport"),
             patch("src.ecu.protocol.UDSConnection") as MockUDS,
             patch.object(
-                ECUSession, "_try_open_coexist_port", return_value=coexist_transport
+                ECUSession,
+                "_try_open_coexist_port",
+                return_value=(coexist_transport, ProbeVerdict.COEXIST),
             ),
         ):
             MockDatalog.return_value.acquire_bus.side_effect = lambda: calls.append(
@@ -375,3 +387,32 @@ class TestWiCANAcquire:
             assert channel_id is None
             assert filter_id is None
             assert uds is MockUDS.return_value
+
+
+class TestFailedRestoreKeepsBreadcrumb:
+    """#92: when the restore fails, the crash-recovery record must survive.
+
+    ``_restore_wican_protocol`` swallows a failed restore and then clears the
+    breadcrumb in a ``finally``. That combination is what makes a strand
+    permanent: the device is still in slcan, and the only record of the user's
+    real mode has just been deleted, so nothing can ever put it back
+    automatically.
+    """
+
+    def test_failed_restore_does_not_clear_breadcrumb(self, _qapp):
+        from src.ecu.wican_config import WiCANConfigError
+
+        with (
+            patch("src.ecu.wican_config.WiCANConfigurator") as MockCfg,
+            patch("src.ecu.transport.create_ecu_transport"),
+            patch("src.ecu.protocol.UDSConnection"),
+        ):
+            inst = _cfg(MockCfg, prev="realdash")
+            inst.restore.side_effect = WiCANConfigError("device unreachable")
+
+            session = _make_session(_qapp)
+            session.connect_ecu()
+            session.disconnect_ecu()
+
+            inst.restore.assert_called_once_with("realdash")
+            inst.clear_recovery.assert_not_called()

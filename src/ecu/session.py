@@ -22,6 +22,7 @@ Two adapters share this one seam (the rest of the app is transport-agnostic):
 """
 
 import logging
+import time
 from enum import Enum
 from typing import Optional
 
@@ -30,6 +31,47 @@ from PySide6.QtCore import QObject, Signal
 from .constants import DEFAULT_J2534_DLL
 
 logger = logging.getLogger(__name__)
+
+#: Longer window for the ONE version-ping retry when the coexistence port
+#: accepted the connection but stayed silent. A busy device or a lossy WiFi link
+#: can eat the first window; a retry is far cheaper than wrongly concluding "old
+#: firmware" and rebooting the adapter out of its datalogging mode (#92).
+_COEXIST_PROBE_RETRY_MS = 3000
+
+
+class ProbeVerdict(Enum):
+    """What the coexistence-port probe actually established.
+
+    The distinction that matters is CONCLUSIVE vs not: only conclusive evidence
+    of pre-coexistence firmware may authorise writing the device's stored mode.
+    """
+
+    #: Coexistence firmware confirmed; use the dedicated port, no reboot.
+    COEXIST = "coexist"
+    #: Conclusively pre-coexistence: the port was refused, or a real NCFRv
+    #: marker came back below the threshold. The legacy mode write is correct.
+    OLD_FIRMWARE = "old_firmware"
+    #: Proved nothing (timeout, reset, silence, unexpected error). Must NOT
+    #: authorise a mode write.
+    INCONCLUSIVE = "inconclusive"
+
+
+def _is_connection_refused(exc: BaseException) -> bool:
+    """True when ``exc`` was ultimately caused by a refused TCP connect.
+
+    The transport wraps socket errors (``raise WiCANError(...) from exc``), so
+    the real cause sits on ``__cause__``/``__context__`` rather than in the
+    message. Matching on the exception type is reliable on both Windows
+    (WSAECONNREFUSED maps to ConnectionRefusedError) and POSIX; matching on the
+    text would not be.
+    """
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        if isinstance(exc, ConnectionRefusedError):
+            return True
+        exc = exc.__cause__ or exc.__context__
+    return False
 
 
 class ECUSessionState(Enum):
@@ -113,6 +155,16 @@ class ECUSession(QObject):
     @property
     def is_connected(self) -> bool:
         return self._state in (ECUSessionState.CONNECTED, ECUSessionState.BUSY)
+
+    @property
+    def wican_host(self):
+        """Address of the WiCAN adapter this session drives (``None`` for J2534).
+
+        Public so callers can tell whether a given adapter is already in use --
+        the start-up strand sweep needs it to avoid rebooting a device this app
+        is talking to.
+        """
+        return self._wican_host if self._adapter_kind == "wican" else None
 
     @property
     def device(self):
@@ -223,7 +275,7 @@ class ECUSession(QObject):
         # port open, so flashing needs neither the protocol-switch reboot nor the
         # WiCANConfigurator. Probe for it first; ANY failure falls back below.
         if self._wican_auto_config and not self._slcan_switched:
-            coexist = self._try_open_coexist_port()
+            coexist, verdict = self._try_open_coexist_port()
             if coexist is not None:
                 self._transport = coexist
                 # Reserve the bus for the WHOLE session BEFORE the first UDS frame.
@@ -250,8 +302,14 @@ class ECUSession(QObject):
                 return
             # Not coexistence firmware — switch the adapter into SLCAN mode ONCE
             # per session (a ~6 s reboot). Restore only on a real disconnect.
-            self.progress.emit("Switching adapter to SLCAN (~6 s reboot)…")
             self._configurator = WiCANConfigurator(self._wican_host)
+            if verdict is ProbeVerdict.INCONCLUSIVE:
+                # The probe proved nothing. Writing the stored mode from here is
+                # what strands devices (#92), so establish the right to do it or
+                # abort — this raises unless the device is demonstrably old, or
+                # is already in slcan (where the legacy path writes nothing).
+                self._guard_inconclusive_probe(self._configurator)
+            self.progress.emit("Switching adapter to SLCAN (~6 s reboot)…")
             self._slcan_prev_protocol = self._enter_slcan_durable(self._configurator)
             self._slcan_switched = True
 
@@ -269,17 +327,28 @@ class ECUSession(QObject):
         )
 
     def _try_open_coexist_port(self):
-        """Probe for no-reboot coexistence firmware; return an OPEN transport on
-        its dedicated SLCAN port, or ``None`` to fall back to the reboot path.
+        """Probe for no-reboot coexistence firmware and report WHY it decided.
 
         A coexistence build (firmware rev ``>= COEXIST_MIN_FW_REV``) keeps an
         always-on dedicated SLCAN TCP port that routes through the
         protocol-agnostic fast-read/write codecs, so the host can flash without
         the ~6 s protocol-switch reboot and without the ``WiCANConfigurator``.
-        Detection is a ``version_ping`` over that port with a short connect
-        timeout. ANY failure — old firmware refusing the port, no ``NCFRv``
-        marker, a network hiccup — returns ``None`` so the caller takes the
-        proven legacy path. Strictly non-breaking: the probe never raises.
+
+        This used to collapse EVERY failure into "old firmware", which is only
+        true for some of them. Writing the device's stored mode is a reboot that
+        stops the datalogger, so it needs real evidence, not a shrug (#92):
+
+          * ``OLD_FIRMWARE`` — the TCP connect was REFUSED (nothing is bound to
+            the port; only coexistence firmware ever binds it), or a genuine
+            ``NCFRv`` marker below the threshold came back. Conclusive.
+          * ``COEXIST`` — a marker at/above the threshold. Transport handed back
+            OPEN.
+          * ``INCONCLUSIVE`` — a timeout, a reset, a silent port, an unexpected
+            error. Proves nothing, so it must NOT authorise a mode write.
+
+        Still never raises: it reports a verdict and lets the caller set policy.
+
+        :returns: ``(open_transport_or_None, ProbeVerdict)``
         """
         from .transport import create_ecu_transport
         from .wican_sd_flash import _parse_fw_rev  # reuse the NCFRv<rev> parser
@@ -289,42 +358,202 @@ class ECUSession(QObject):
             COEXIST_PROBE_TIMEOUT_MS,
         )
 
-        probe = None
-        try:
-            probe = create_ecu_transport(
+        def _open(timeout_ms):
+            transport = create_ecu_transport(
                 {
                     "kind": "wican",
                     "host": self._wican_host,
                     "port": WICAN_DEDICATED_SLCAN_PORT,
-                    "connect_timeout_ms": COEXIST_PROBE_TIMEOUT_MS,
+                    "connect_timeout_ms": timeout_ms,
                 }
             )
-            probe.open()
-            rev = _parse_fw_rev(probe.version_ping(window_ms=COEXIST_PROBE_TIMEOUT_MS))
+            try:
+                transport.open()
+            except Exception:
+                # Close here or the half-open socket leaks: the caller only ever
+                # sees the exception, never this transport, so this is the only
+                # place that can clean it up. Matters doubly now that a failed
+                # connect may be retried.
+                try:
+                    transport.close()
+                except Exception:
+                    pass
+                raise
+            return transport
+
+        probe = None
+        verdict = ProbeVerdict.INCONCLUSIVE
+        t0 = time.monotonic()
+        connected_at = None
+        retry_note = None
+        try:
+            try:
+                probe = _open(COEXIST_PROBE_TIMEOUT_MS)
+            except Exception as first:
+                if _is_connection_refused(first):
+                    raise
+                retry_at = time.monotonic()
+                # A timed-out connect and a REFUSED one are the same event seen
+                # through too short a window: measured on Windows, the RST for a
+                # closed port takes ~2 s to surface, while the probe budget is
+                # 1.5 s -- so a genuinely pre-coexistence device looks like a
+                # network problem and would be wrongly refused. Retry once, long
+                # enough for a refusal to land, purely to tell the two apart.
+                # Only failing paths pay this; a healthy port connects in ~20 ms.
+                try:
+                    probe = _open(_COEXIST_PROBE_RETRY_MS)
+                except Exception as second:
+                    retry_note = (
+                        f"attempt 1 unresolved in {COEXIST_PROBE_TIMEOUT_MS} ms; "
+                        f"confirming retry -> "
+                        f"{'refused' if _is_connection_refused(second) else 'still unresolved'}"
+                        f" in {(time.monotonic() - retry_at) * 1000:.0f} ms"
+                    )
+                    raise
+                retry_note = (
+                    f"attempt 1 unresolved in {COEXIST_PROBE_TIMEOUT_MS} ms; "
+                    f"confirming retry -> connected in "
+                    f"{(time.monotonic() - retry_at) * 1000:.0f} ms"
+                )
+            connected_at = time.monotonic()
+            marker = probe.version_ping(window_ms=COEXIST_PROBE_TIMEOUT_MS)
+            if marker is None:
+                # The port ACCEPTED us and then said nothing. Only the
+                # coexistence listener binds this port, so silence here is far
+                # more likely to be a slow link or a busy device than old
+                # firmware. Give it one longer window before giving up.
+                logger.info(
+                    "WiCAN dedicated port accepted but stayed silent; retrying "
+                    "the version ping with a longer window"
+                )
+                marker = probe.version_ping(window_ms=_COEXIST_PROBE_RETRY_MS)
+            rev = _parse_fw_rev(marker)
             if rev is not None and rev >= COEXIST_MIN_FW_REV:
+                verdict = ProbeVerdict.COEXIST
                 self.progress.emit("No-reboot coexistence firmware detected…")
                 logger.info(
                     "WiCAN coexistence firmware NCFRv%s on dedicated port %s",
                     rev,
                     WICAN_DEDICATED_SLCAN_PORT,
                 )
-                return probe  # hand the OPEN transport to the caller
-            logger.info(
-                "WiCAN dedicated port answered rev=%s (< NCFRv%s); legacy reboot path",
-                rev,
-                COEXIST_MIN_FW_REV,
-            )
+            elif rev is not None:
+                verdict = ProbeVerdict.OLD_FIRMWARE
+                logger.info(
+                    "WiCAN dedicated port answered NCFRv%s (< NCFRv%s); "
+                    "legacy reboot path",
+                    rev,
+                    COEXIST_MIN_FW_REV,
+                )
+            else:
+                logger.warning(
+                    "WiCAN dedicated port %s accepted the connection but never "
+                    "sent its version marker; capability UNKNOWN (refusing to "
+                    "assume old firmware)",
+                    WICAN_DEDICATED_SLCAN_PORT,
+                )
         except Exception as exc:
-            logger.debug(
-                "WiCAN coexist-port probe failed (%s); legacy reboot path", exc
+            if _is_connection_refused(exc):
+                verdict = ProbeVerdict.OLD_FIRMWARE
+                logger.info(
+                    "WiCAN dedicated port %s refused the connection; "
+                    "pre-coexistence firmware, legacy reboot path",
+                    WICAN_DEDICATED_SLCAN_PORT,
+                )
+            else:
+                logger.warning(
+                    "WiCAN coexist-port probe failed inconclusively (%s); "
+                    "capability UNKNOWN",
+                    exc,
+                )
+        finally:
+            now = time.monotonic()
+            # One line per probe carrying the verdict and where the time went, so
+            # a field report is attributable to connect / ping instead of guessed
+            # at. A probe that needed the confirming retry is logged at WARNING
+            # with the measured refusal latency: that number is the only evidence
+            # that would justify re-tuning _COEXIST_PROBE_RETRY_MS, and it varies
+            # with the OS TCP retransmission settings, not machine speed.
+            logger.log(
+                logging.WARNING if retry_note else logging.INFO,
+                "coexist probe: verdict=%s connect=%.2fs ping=%.2fs total=%.2fs%s",
+                verdict.value,
+                (connected_at - t0) if connected_at else (now - t0),
+                (now - connected_at) if connected_at else 0.0,
+                now - t0,
+                f" [{retry_note}]" if retry_note else "",
             )
-        # Not coexistence (or probe failed): close any half-open probe, fall back.
+
+        if verdict is ProbeVerdict.COEXIST:
+            return probe, verdict  # hand the OPEN transport to the caller
         if probe is not None:
             try:
                 probe.close()
             except Exception:
                 pass
-        return None
+        return None, verdict
+
+    def _guard_inconclusive_probe(self, configurator):
+        """Establish the right to write the stored mode, or refuse (#92).
+
+        Reached only when the capability probe proved nothing. Rebooting the
+        adapter into bench mode stops the datalogger, and if the session then
+        dies the device stays that way — so this path needs evidence, not a
+        guess. Order of preference:
+
+          1. ``/host_caps`` — a small, secret-free capability reply. A rev at or
+             above the threshold means coexistence firmware IS present and its
+             port is simply not answering: there is nothing to connect to and no
+             right to write. Below the threshold is conclusive old firmware.
+          2. No ``/host_caps`` (every build in the field before it shipped) —
+             fall back to the stored protocol. Already ``slcan`` means the
+             legacy path performs NO write, so it is safe to continue; that also
+             keeps a device this tool previously stranded reachable.
+
+        :raises CoexistProbeInconclusive: when no evidence justifies the write.
+        """
+        from .exceptions import CoexistProbeInconclusive
+        from .constants import COEXIST_MIN_FW_REV, WICAN_DEDICATED_SLCAN_PORT
+
+        caps = configurator.host_caps()
+        rev = (caps or {}).get("ncfr_rev")
+        if isinstance(rev, int):
+            if rev >= COEXIST_MIN_FW_REV:
+                raise CoexistProbeInconclusive(
+                    f"This adapter reports no-reboot firmware (NCFRv{rev}), but "
+                    f"its port {WICAN_DEDICATED_SLCAN_PORT} did not answer. "
+                    "Refusing to reboot it into bench mode — check the Wi-Fi "
+                    "link and try again."
+                )
+            logger.info(
+                "/host_caps reports NCFRv%s (< NCFRv%s); legacy mode write is "
+                "justified",
+                rev,
+                COEXIST_MIN_FW_REV,
+            )
+            return
+
+        try:
+            current = configurator.current_protocol()
+        except Exception as exc:
+            raise CoexistProbeInconclusive(
+                "Could not confirm whether this adapter supports no-reboot "
+                f"flashing, and it did not answer over HTTP either ({exc}). "
+                "Refusing to change its mode."
+            ) from exc
+
+        if current == "slcan":
+            logger.info(
+                "probe inconclusive but the adapter is already in slcan; "
+                "continuing on the legacy path (no mode write will occur)"
+            )
+            return
+
+        raise CoexistProbeInconclusive(
+            f"Could not confirm whether this adapter supports no-reboot "
+            f"flashing: port {WICAN_DEDICATED_SLCAN_PORT} did not answer, "
+            f"though the device is reachable and reports {current!r}. Refusing "
+            "to reboot it into bench mode — check the Wi-Fi link and try again."
+        )
 
     @staticmethod
     def _enter_slcan_durable(configurator) -> str:
@@ -500,12 +729,24 @@ class ECUSession(QObject):
                 self.progress.emit("Restoring adapter protocol (~6 s reboot)…")
                 self._configurator.restore(prev)
         except Exception as exc:
-            logger.warning("WiCAN protocol restore failed: %s", exc)
-        finally:
-            try:
-                self._configurator.clear_recovery()
-            except Exception:
-                pass
-            self._slcan_switched = False
-            self._slcan_prev_protocol = None
-            self._configurator = None
+            # KEEP the breadcrumb AND the switch state (#92). The device is still
+            # in slcan and the sidecar is the only record of the user's real
+            # mode; clearing it here strands the device permanently. Holding the
+            # state also leaves cleanup() -- which runs at app exit and on
+            # session replacement -- a free second attempt, and a reconnect still
+            # works because the `not _slcan_switched` guard skips the re-switch.
+            # If the restore only failed its verify while the write landed, the
+            # retry's set_protocol no-ops and cleanly clears the sidecar.
+            logger.warning(
+                "WiCAN protocol restore failed: %s -- breadcrumb KEPT so a later "
+                "run can un-strand the device",
+                exc,
+            )
+            return
+        try:
+            self._configurator.clear_recovery()
+        except Exception:
+            pass
+        self._slcan_switched = False
+        self._slcan_prev_protocol = None
+        self._configurator = None
